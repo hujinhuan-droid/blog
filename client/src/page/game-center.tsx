@@ -65,7 +65,7 @@ export function GameCenterPage() {
               ← {t("game.backToGames")}
             </button>
             <h2 className="text-2xl font-bold t-primary mb-4">{t(current.nameKey)}</h2>
-            <GameShell key={current.id} gameId={current.id} title={t(current.nameKey)} Game={current.Game} />
+            <GameShell key={current.id} gameId={current.id} Game={current.Game} />
           </div>
         )}
       </main>

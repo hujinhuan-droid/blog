@@ -15,7 +15,7 @@ function shuffle<T>(a: T[]): T[] {
 
 export function GameMemory({ onGameOver }: GameProps) {
   const { t } = useTranslation();
-  const [cards, setCards] = useState<string[]>(() => shuffle([...EMOJIS, ...EMOJIS]));
+  const [cards] = useState<string[]>(() => shuffle([...EMOJIS, ...EMOJIS]));
   const [flipped, setFlipped] = useState<number[]>([]);
   const [matched, setMatched] = useState<boolean[]>(() => Array(EMOJIS.length * 2).fill(false));
   const [moves, setMoves] = useState(0);

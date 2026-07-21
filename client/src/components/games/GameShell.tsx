@@ -10,11 +10,9 @@ export interface GameProps {
 
 export function GameShell({
   gameId,
-  title,
   Game,
 }: {
   gameId: string;
-  title: string;
   Game: ComponentType<GameProps>;
 }) {
   const { t } = useTranslation();

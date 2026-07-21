@@ -91,7 +91,7 @@ export function Game2048({ onGameOver }: GameProps) {
   const { t } = useTranslation();
   const [board, setBoard] = useState<Board>(() => addRandom(addRandom(emptyBoard())));
   const [score, setScore] = useState(0);
-  const [over, setOver] = useState(false);
+  const [, setOver] = useState(false);
   const scoreRef = useRef(0);
   const overRef = useRef(false);
 
