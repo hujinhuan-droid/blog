@@ -237,6 +237,10 @@
       "draw": "Draw",
       "lose": "You lose",
       "yourTurn": "Your turn"
+    },
+    "legend": {
+      "name": "Legend",
+      "desc": "Top-down hack & slash: slay monsters, level up, loot gear"
     }
   },
   "github_login": "Github Login",
@@ -803,5 +807,15 @@
   "sort_latest": "Latest",
   "sort_popular": "Popular",
   "total_tags": "Total {{count}} tags",
-  "anonymous": "Anonymous"
+  "anonymous": "Anonymous",
+  "traffic": {
+    "title": "Site Statistics",
+    "desc": "Site-wide visit data",
+    "pv": "Total Views",
+    "uv": "Unique Visitors",
+    "today": "Today",
+    "topArticles": "Popular Posts",
+    "views": "views",
+    "untitled": "Untitled"
+  }
 }

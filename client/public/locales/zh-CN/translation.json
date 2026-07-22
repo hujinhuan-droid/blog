@@ -237,6 +237,10 @@
       "draw": "平局",
       "lose": "你输了",
       "yourTurn": "轮到你了"
+    },
+    "legend": {
+      "name": "传奇",
+      "desc": "俯视角砍怪升级，击杀爆装备变强"
     }
   },
   "github_login": "Github 登录",
@@ -803,5 +807,15 @@
   "sort_latest": "最新",
   "sort_popular": "热门",
   "total_tags": "共 {{count}} 个标签",
-  "anonymous": "匿名"
+  "anonymous": "匿名",
+  "traffic": {
+    "title": "站点统计",
+    "desc": "全站访问数据",
+    "pv": "总访问",
+    "uv": "独立访客",
+    "today": "今日访问",
+    "topArticles": "热门文章",
+    "views": "阅读",
+    "untitled": "无标题"
+  }
 }

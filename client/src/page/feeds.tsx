@@ -9,6 +9,8 @@ import { ProfileContext } from "../state/profile"
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { siteName } from "../utils/constants"
 import { tryInt } from "../utils/int"
+import { SiteTraffic } from "../components/site-traffic"
+import type { SiteStatsResponse } from "@rin/api"
 import { useTranslation } from "react-i18next";
 
 type FeedsData = {
@@ -41,6 +43,7 @@ export function FeedsPage() {
     const currentFeeds = feeds[listState] ?? { size: 0, data: [], hasNext: false };
     const currentFeedData = Array.isArray(currentFeeds.data) ? currentFeeds.data : [];
     const ref = useRef("")
+    const [stats, setStats] = useState<SiteStatsResponse | null>(null)
     function fetchFeeds(type: FeedType) {
         client.feed.list({
             page: page,
@@ -67,6 +70,14 @@ export function FeedsPage() {
         fetchFeeds(type)
         ref.current = key
     }, [limit, query.get("page"), query.get("type")])
+
+    useEffect(() => {
+        client.stats.track().catch(() => { })
+        client.stats.get()
+            .then(({ data }) => { if (data) setStats(data) })
+            .catch(() => { })
+    }, [])
+
     return (
         <>
             <Helmet>
@@ -121,6 +132,7 @@ export function FeedsPage() {
                             }
                         </div>
                     </Waiting>
+                    <SiteTraffic stats={stats} />
                 </main>
             </Waiting>
         </>

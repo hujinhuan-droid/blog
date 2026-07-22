@@ -43,6 +43,19 @@ export const visitStats = sqliteTable("visit_stats", {
     updatedAt: updated_at,
 });
 
+export const siteVisits = sqliteTable("site_visits", {
+    id: integer("id").primaryKey(),
+    ip: text("ip").notNull(),
+    createdAt: created_at,
+});
+
+export const siteVisitStats = sqliteTable("site_visit_stats", {
+    id: integer("id").primaryKey(),
+    pv: integer("pv").default(0).notNull(),
+    hllData: text("hll_data").default("").notNull(),
+    updatedAt: updated_at,
+});
+
 export const info = sqliteTable("info", {
     key: text("key").notNull().unique(),
     value: text("value").notNull(),

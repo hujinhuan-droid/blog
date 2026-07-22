@@ -33,6 +33,7 @@ import type {
   AuthStatus,
   LoginRequest,
   LoginResponse,
+  SiteStatsResponse,
 } from "@rin/api";
 
 export interface SettingsConfigResponse {
@@ -155,6 +156,7 @@ export type {
   AuthStatus,
   LoginRequest,
   LoginResponse,
+  SiteStatsResponse,
 } from "@rin/api";
 
 
@@ -645,6 +647,23 @@ class RSSAPI {
   }
 }
 
+/**
+ * Stats API methods (homepage/site-wide traffic counter)
+ */
+class StatsAPI {
+  constructor(private http: HttpClient) {}
+
+  // POST /api/stats/track
+  async track(): Promise<ApiResponse<void>> {
+    return this.http.post<void>("/api/stats/track");
+  }
+
+  // GET /api/stats
+  async get(): Promise<ApiResponse<SiteStatsResponse>> {
+    return this.http.get<SiteStatsResponse>("/api/stats");
+  }
+}
+
 // ============================================================================
 // Main API Client Class
 // ============================================================================
@@ -664,6 +683,7 @@ export class ApiClient {
   auth: AuthAPI;
   wp: WordPressAPI;
   rss: RSSAPI;
+  stats: StatsAPI;
 
   constructor(baseUrl: string) {
     this.http = new HttpClient(baseUrl);
@@ -680,6 +700,7 @@ export class ApiClient {
     this.auth = new AuthAPI(this.http);
     this.wp = new WordPressAPI(this.http);
     this.rss = new RSSAPI(baseUrl);
+    this.stats = new StatsAPI(this.http);
   }
 }
 

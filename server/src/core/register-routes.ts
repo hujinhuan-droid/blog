@@ -8,6 +8,7 @@ import { FriendService } from "../services/friends";
 import { MomentsService } from "../services/moments";
 import { RSSService } from "../services/rss";
 import { BlobService, StorageService } from "../services/storage";
+import { StatsService } from "../services/stats";
 import { TagService } from "../services/tag";
 import { UserService } from "../services/user";
 
@@ -29,4 +30,5 @@ export function registerRoutes(app: RinApp) {
   app.route("/", RSSService());
   app.route("/favicon", FaviconService());
   app.route("/favicon.ico", FaviconService());
+  app.route("/stats", StatsService());
 }

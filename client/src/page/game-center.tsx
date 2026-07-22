@@ -8,20 +8,23 @@ import { GameSnake } from "../components/games/GameSnake";
 import { GameMemory } from "../components/games/GameMemory";
 import { GameWhack } from "../components/games/GameWhack";
 import { GameTicTacToe } from "../components/games/GameTicTacToe";
+import { GameLegend } from "../components/games/GameLegend";
 
 interface GameDef {
   id: string;
   nameKey: string;
   descKey: string;
+  icon: string;
   Game: ComponentType<GameProps>;
 }
 
 const GAMES: GameDef[] = [
-  { id: "2048", nameKey: "games.2048.name", descKey: "games.2048.desc", Game: Game2048 },
-  { id: "snake", nameKey: "games.snake.name", descKey: "games.snake.desc", Game: GameSnake },
-  { id: "memory", nameKey: "games.memory.name", descKey: "games.memory.desc", Game: GameMemory },
-  { id: "whack", nameKey: "games.whack.name", descKey: "games.whack.desc", Game: GameWhack },
-  { id: "tictactoe", nameKey: "games.tictactoe.name", descKey: "games.tictactoe.desc", Game: GameTicTacToe },
+  { id: "2048", nameKey: "games.2048.name", descKey: "games.2048.desc", icon: "🎯", Game: Game2048 },
+  { id: "snake", nameKey: "games.snake.name", descKey: "games.snake.desc", icon: "🐍", Game: GameSnake },
+  { id: "memory", nameKey: "games.memory.name", descKey: "games.memory.desc", icon: "🧠", Game: GameMemory },
+  { id: "whack", nameKey: "games.whack.name", descKey: "games.whack.desc", icon: "🔨", Game: GameWhack },
+  { id: "tictactoe", nameKey: "games.tictactoe.name", descKey: "games.tictactoe.desc", icon: "❌", Game: GameTicTacToe },
+  { id: "legend", nameKey: "games.legend.name", descKey: "games.legend.desc", icon: "⚔️", Game: GameLegend },
 ];
 
 export function GameCenterPage() {
@@ -36,23 +39,45 @@ export function GameCenterPage() {
         <title>{`${t("game.title")} - ${siteConfig.name}`}</title>
         <meta property="og:site_name" content={siteConfig.name} />
       </Helmet>
-      <main className="wauto flex flex-col items-center mb-8 ani-show">
-        <div className="w-full text-start text-black dark:text-white py-4">
-          <h1 className="text-4xl font-bold">{t("game.title")}</h1>
-          <p className="text-sm mt-2 t-secondary">{t("game.subtitle")}</p>
+      <main className="wauto flex flex-col items-center mb-12 ani-show">
+        {/* Hero 区 */}
+        <div className="w-full mb-8 rounded-3xl bg-gradient-to-br from-theme/10 via-theme/5 to-transparent p-8 shadow-light border border-theme/10">
+          <div className="flex items-center gap-5">
+            <div className="shrink-0 w-16 h-16 rounded-2xl bg-gradient-to-br from-theme to-theme/70 flex items-center justify-center text-4xl shadow-lg">
+              🎮
+            </div>
+            <div>
+              <h1 className="text-4xl font-bold t-primary">{t("game.title")}</h1>
+              <p className="text-sm mt-2 t-secondary max-w-prose">{t("game.subtitle")}</p>
+            </div>
+          </div>
         </div>
 
         {!current ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 w-full">
             {GAMES.map((g) => (
               <button
                 key={g.id}
                 onClick={() => setActive(g.id)}
-                className="bg-w rounded-2xl p-5 text-left hover:ring-2 ring-theme transition"
+                className="group relative overflow-hidden bg-w rounded-3xl p-6 text-left shadow-lg shadow-light hover:shadow-2xl hover:shadow-deep hover:-translate-y-1 transition-all duration-300 border border-neutral-200/60 dark:border-neutral-700/60"
               >
-                <h3 className="text-lg font-bold t-primary">{t(g.nameKey)}</h3>
-                <p className="text-sm t-secondary mt-1">{t(g.descKey)}</p>
-                <span className="inline-block mt-3 text-theme text-sm font-medium">{t("game.play")} →</span>
+                {/* 悬停光晕 */}
+                <div className="absolute -right-10 -top-10 w-32 h-32 rounded-full bg-theme/10 blur-2xl group-hover:bg-theme/20 transition" />
+                <div className="relative flex items-start gap-4">
+                  <div className="shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-theme/25 to-theme/5 flex items-center justify-center text-3xl shadow-inner">
+                    {g.icon}
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-lg font-bold t-primary">{t(g.nameKey)}</h3>
+                    <p className="text-sm t-secondary mt-1.5 leading-relaxed">{t(g.descKey)}</p>
+                  </div>
+                </div>
+                <div className="relative mt-6 flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-theme text-sm font-semibold">
+                    {t("game.play")}
+                    <span className="transition-transform group-hover:translate-x-1">→</span>
+                  </span>
+                </div>
               </button>
             ))}
           </div>
@@ -60,11 +85,14 @@ export function GameCenterPage() {
           <div className="w-full">
             <button
               onClick={() => setActive(null)}
-              className="text-sm t-secondary mb-3 hover:text-theme"
+              className="text-sm t-secondary mb-4 hover:text-theme inline-flex items-center gap-1 transition"
             >
               ← {t("game.backToGames")}
             </button>
-            <h2 className="text-2xl font-bold t-primary mb-4">{t(current.nameKey)}</h2>
+            <h2 className="text-2xl font-bold t-primary mb-5 flex items-center gap-2">
+              <span>{current.icon}</span>
+              {t(current.nameKey)}
+            </h2>
             <GameShell key={current.id} gameId={current.id} Game={current.Game} />
           </div>
         )}

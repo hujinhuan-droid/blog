@@ -105,6 +105,23 @@ export interface AdjacentFeedResponse {
 }
 
 // ============================================================================
+// Site Stats Types (homepage traffic counter)
+// ============================================================================
+
+export interface SiteStatsResponse {
+  /** Whether traffic counting is enabled (counter.enabled config) */
+  enabled: boolean;
+  /** Total page views (PV) across the whole site */
+  pv: number;
+  /** Unique visitors (UV) estimated via HyperLogLog */
+  uv: number;
+  /** Visits recorded since local day start */
+  today: number;
+  /** Top articles ranked by PV */
+  topArticles: Array<{ id: number; title: string | null; pv: number }>;
+}
+
+// ============================================================================
 // User Types
 // ============================================================================
 
