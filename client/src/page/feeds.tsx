@@ -7,7 +7,7 @@ import { client } from "../app/runtime"
 import { ProfileContext } from "../state/profile"
 
 import { useSiteConfig } from "../hooks/useSiteConfig";
-import { siteName, HUGO_SITE_URL } from "../utils/constants"
+import { siteName } from "../utils/constants"
 import { tryInt } from "../utils/int"
 import { SiteTraffic } from "../components/site-traffic"
 import type { SiteStatsResponse } from "@rin/api"
@@ -110,19 +110,6 @@ export function FeedsPage() {
                             }
                         </div>
                     </div>
-                    {HUGO_SITE_URL && (
-                        <a href={HUGO_SITE_URL} target="_blank" rel="noreferrer"
-                            className="wauto group flex items-center gap-4 rounded-2xl border border-zinc-200 bg-w px-5 py-4 shadow-sm transition hover:border-theme/40 hover:shadow-md dark:border-zinc-700 dark:bg-dark">
-                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-theme/10 text-xl text-theme">
-                                <i className="ri-github-line" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <p className="truncate font-semibold t-primary">{t('homepage.hugo_title')}</p>
-                                <p className="truncate text-sm text-neutral-500">{t('homepage.hugo_desc')}</p>
-                            </div>
-                            <i className="ri-external-link-line text-neutral-400 transition group-hover:translate-x-1 group-hover:text-theme" />
-                        </a>
-                    )}
                     <Waiting for={status === 'idle'}>
                         <div className={feedListClass}>
                             {currentFeedData.map(({ id, ...feed }: any) => (

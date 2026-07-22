@@ -817,10 +817,5 @@
     "topArticles": "熱門文章",
     "views": "閱讀",
     "untitled": "無標題"
-  },
-  "hugo": "Hugo",
-  "homepage": {
-    "hugo_title": "我的 Hugo 網站",
-    "hugo_desc": "在 GitHub 查看專案原始碼"
   }
 }
