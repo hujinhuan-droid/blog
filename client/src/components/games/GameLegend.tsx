@@ -45,8 +45,9 @@ export function GameLegend({ onGameOver }: GameProps) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const ctx0 = canvas.getContext("2d");
+    if (!ctx0) return;
+    const ctx = ctx0;
 
     let raf = 0;
     let idc = 0;
