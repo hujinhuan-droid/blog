@@ -818,9 +818,5 @@
     "views": "views",
     "untitled": "Untitled"
   },
-  "hugo": "Hugo",
-  "homepage": {
-    "hugo_title": "My Hugo Repository",
-    "hugo_desc": "View the project source on GitHub"
-  }
+  "hugo": "Hugo"
 }
