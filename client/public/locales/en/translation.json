@@ -817,5 +817,10 @@
     "topArticles": "Popular Posts",
     "views": "views",
     "untitled": "Untitled"
+  },
+  "hugo": "Hugo",
+  "homepage": {
+    "hugo_title": "My Hugo Website",
+    "hugo_desc": "View the source on GitHub"
   }
 }
