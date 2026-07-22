@@ -808,5 +808,10 @@
     "topArticles": "人気記事",
     "views": "閲覧",
     "untitled": "無題"
+  },
+  "hugo": "Hugo",
+  "homepage": {
+    "hugo_title": "私の Hugo リポジトリ",
+    "hugo_desc": "GitHub でプロジェクトのソースを表示"
   }
 }
