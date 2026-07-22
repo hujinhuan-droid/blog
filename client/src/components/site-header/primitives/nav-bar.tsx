@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 import { Link, useLocation } from "wouter";
-import { HUGO_REPO_URL } from "../../../utils/constants";
 
 export function NavBar({
   menu,
@@ -23,7 +22,6 @@ export function NavBar({
       <NavItem menu={menu} onClick={onClick} itemClassName={itemClassName} title={t("friends.title")} selected={location === "/friends"} href="/friends" />
       <NavItem menu={menu} onClick={onClick} itemClassName={itemClassName} title={t("game.title")} selected={location === "/game" || location.startsWith("/game")} href="/game" />
       <NavItem menu={menu} onClick={onClick} itemClassName={itemClassName} title={t("about.title")} selected={location === "/about"} href="/about" />
-      <NavItemExternal menu={menu} itemClassName={itemClassName} title={t("hugo")} href={HUGO_REPO_URL} onClick={onClick} />
     </>
   );
 }
@@ -57,30 +55,4 @@ function NavItem({
       {title}
     </Link>
   ) : null;
-}
-
-function NavItemExternal({
-  menu,
-  title,
-  href,
-  onClick,
-  itemClassName = "",
-}: {
-  title: string;
-  href: string;
-  menu?: boolean;
-  onClick?: () => void;
-  itemClassName?: string;
-}) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      onClick={onClick}
-      className={`${menu ? "" : "hidden"} md:block cursor-pointer hover:text-theme duration-300 px-2 py-4 md:p-4 text-sm dark:text-white ${itemClassName}`}
-    >
-      {title} <i className="ri-external-link-line text-xs align-middle" />
-    </a>
-  );
 }
