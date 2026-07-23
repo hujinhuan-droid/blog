@@ -3,12 +3,7 @@ import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
 import { useSiteConfig } from "../hooks/useSiteConfig";
 import { GameShell, type GameProps } from "../components/games/GameShell";
-import { Game2048 } from "../components/games/Game2048";
-import { GameSnake } from "../components/games/GameSnake";
-import { GameMemory } from "../components/games/GameMemory";
-import { GameWhack } from "../components/games/GameWhack";
-import { GameTicTacToe } from "../components/games/GameTicTacToe";
-import { GameLegend } from "../components/games/GameLegend";
+import { GameDiablo } from "../components/games/GameDiablo";
 
 interface GameDef {
   id: string;
@@ -19,12 +14,7 @@ interface GameDef {
 }
 
 const GAMES: GameDef[] = [
-  { id: "2048", nameKey: "games.2048.name", descKey: "games.2048.desc", icon: "🎯", Game: Game2048 },
-  { id: "snake", nameKey: "games.snake.name", descKey: "games.snake.desc", icon: "🐍", Game: GameSnake },
-  { id: "memory", nameKey: "games.memory.name", descKey: "games.memory.desc", icon: "🧠", Game: GameMemory },
-  { id: "whack", nameKey: "games.whack.name", descKey: "games.whack.desc", icon: "🔨", Game: GameWhack },
-  { id: "tictactoe", nameKey: "games.tictactoe.name", descKey: "games.tictactoe.desc", icon: "❌", Game: GameTicTacToe },
-  { id: "legend", nameKey: "games.legend.name", descKey: "games.legend.desc", icon: "⚔️", Game: GameLegend },
+  { id: "diablo", nameKey: "games.diablo.name", descKey: "games.diablo.desc", icon: "🔥", Game: GameDiablo },
 ];
 
 export function GameCenterPage() {

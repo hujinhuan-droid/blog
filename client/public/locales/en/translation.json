@@ -241,6 +241,11 @@
     "legend": {
       "name": "Legend",
       "desc": "Top-down hack & slash: slay monsters, level up, loot gear"
+    },
+    "diablo": {
+      "name": "Shadow Dungeon",
+      "desc": "Diablo-style ARPG: descend floors, slay demons, forge legendary weapons",
+      "hint": "WASD move, mouse aim, click attack; 1 fireball / 2 frost nova / 3 heal; Q red potion / E blue potion; I inventory"
     }
   },
   "github_login": "Github Login",
