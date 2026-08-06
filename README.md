@@ -2,11 +2,11 @@
 
 English | [简体中文](./README_zh_CN.md)
 
-![GitHub commit activity](https://img.shields.io/github/commit-activity/w/openRin/Rin?style=for-the-badge)
-![GitHub branch check runs](https://img.shields.io/github/check-runs/openRin/Rin/main?style=for-the-badge)
-![GitHub top language](https://img.shields.io/github/languages/top/openRin/Rin?style=for-the-badge)
-![GitHub License](https://img.shields.io/github/license/openRin/Rin?style=for-the-badge)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/openRin/Rin/deploy.yml?style=for-the-badge)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/w/hujinhuan-droid/blog?style=for-the-badge)
+![GitHub branch check runs](https://img.shields.io/github/check-runs/hujinhuan-droid/blog/main?style=for-the-badge)
+![GitHub top language](https://img.shields.io/github/languages/top/hujinhuan-droid/blog?style=for-the-badge)
+![GitHub License](https://img.shields.io/github/license/hujinhuan-droid/blog?style=for-the-badge)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/hujinhuan-droid/blog/deploy.yml?style=for-the-badge)
 
 [![Discord](https://img.shields.io/badge/Discord-openRin-red?style=for-the-badge&color=%236e7acc)](https://discord.gg/JWbSTHvAPN)
 [![Telegram](https://img.shields.io/badge/Telegram-openRin-red?style=for-the-badge&color=%233390EC)](https://t.me/openRin)
@@ -42,7 +42,7 @@ https://xeu.life
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/openRin/Rin.git && cd Rin
+git clone https://github.com/hujinhuan-droid/blog.git && cd Rin
 
 # 2. Install dependencies
 bun install
@@ -137,11 +137,11 @@ Full documentation is available at https://docs.openrin.org.
 
 ## Star History
 
-<a href="https://star-history.com/#openRin/Rin&Date">
+<a href="https://star-history.com/#hujinhuan-droid/blog&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=openRin/Rin&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=openRin/Rin&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=openRin/Rin&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=hujinhuan-droid/blog&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=hujinhuan-droid/blog&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=hujinhuan-droid/blog&type=Date" />
  </picture>
 </a>
 
