@@ -190,64 +190,6 @@
     },
     "title": "朋友們"
   },
-  "game": {
-    "title": "遊戲中心",
-    "subtitle": "工作之餘放鬆一下，5 款小遊戲等你挑戰，成績進入本地排行榜",
-    "play": "開始遊戲",
-    "backToGames": "返回遊戲列表",
-    "gameOver": "遊戲結束",
-    "yourScore": "你的得分",
-    "player_default": "玩家",
-    "namePlaceholder": "輸入你的名字",
-    "saveScore": "儲存成績",
-    "saved": "成績已儲存 ✓",
-    "playAgain": "再玩一次",
-    "leaderboard": "排行榜",
-    "noScores": "暫無成績，快來挑戰吧！",
-    "score": "得分",
-    "moves": "步數",
-    "timeLeft": "剩餘時間"
-  },
-  "games": {
-    "2048": {
-      "name": "2048",
-      "desc": "合併方塊，湊出 2048",
-      "hint": "方向鍵或滑動移動，相同數字合併"
-    },
-    "snake": {
-      "name": "貪吃蛇",
-      "desc": "控制蛇吃食物，別撞牆",
-      "hint": "方向鍵控制移動方向"
-    },
-    "memory": {
-      "name": "記憶翻牌",
-      "desc": "翻開卡片，找出所有配對",
-      "hint": "點擊兩張卡片，相同則消除"
-    },
-    "whack": {
-      "name": "打地鼠",
-      "desc": "在限定時間內敲中儘可能多的地鼠",
-      "hint": "點擊冒頭的地鼠得分"
-    },
-    "tictactoe": {
-      "name": "井字棋",
-      "desc": "與 AI 對戰三子棋",
-      "hint": "三人連線即獲勝",
-      "win": "你贏了！",
-      "draw": "平局",
-      "lose": "你輸了",
-      "yourTurn": "輪到你了"
-    },
-    "legend": {
-      "name": "傳奇",
-      "desc": "俯視角砍怪升級，擊殺爆裝備變強"
-    },
-    "diablo": {
-      "name": "暗影地牢",
-      "desc": "暗黑風格 ARPG：層層闖關，屠魔爆裝，鍛造神兵",
-      "hint": "WASD 移動，滑鼠瞄準，左鍵攻擊；1 火球 / 2 冰霜新星 / 3 治療；Q 紅藥 / E 藍藥；I 背包"
-    }
-  },
   "github_login": "Github 登入",
   "hashtags": "標籤",
   "home": "首頁",

@@ -190,64 +190,6 @@
     },
     "title": "Friends"
   },
-  "game": {
-    "title": "Game Center",
-    "subtitle": "Take a break and challenge 5 mini-games. Scores go to a local leaderboard.",
-    "play": "Play",
-    "backToGames": "Back to games",
-    "gameOver": "Game Over",
-    "yourScore": "Your score",
-    "player_default": "Player",
-    "namePlaceholder": "Enter your name",
-    "saveScore": "Save score",
-    "saved": "Score saved ✓",
-    "playAgain": "Play again",
-    "leaderboard": "Leaderboard",
-    "noScores": "No scores yet. Be the first!",
-    "score": "Score",
-    "moves": "Moves",
-    "timeLeft": "Time left"
-  },
-  "games": {
-    "2048": {
-      "name": "2048",
-      "desc": "Merge tiles and reach 2048",
-      "hint": "Use arrow keys or swipe to move; same numbers merge"
-    },
-    "snake": {
-      "name": "Snake",
-      "desc": "Guide the snake to eat, don't hit the wall",
-      "hint": "Arrow keys to change direction"
-    },
-    "memory": {
-      "name": "Memory",
-      "desc": "Flip cards and match all pairs",
-      "hint": "Click two cards; match to clear"
-    },
-    "whack": {
-      "name": "Whack-a-Mole",
-      "desc": "Hit as many moles as you can in time",
-      "hint": "Click the moles that pop up"
-    },
-    "tictactoe": {
-      "name": "Tic-Tac-Toe",
-      "desc": "Play three-in-a-row against the AI",
-      "hint": "Get three in a row to win",
-      "win": "You win!",
-      "draw": "Draw",
-      "lose": "You lose",
-      "yourTurn": "Your turn"
-    },
-    "legend": {
-      "name": "Legend",
-      "desc": "Top-down hack & slash: slay monsters, level up, loot gear"
-    },
-    "diablo": {
-      "name": "Shadow Dungeon",
-      "desc": "Diablo-style ARPG: descend floors, slay demons, forge legendary weapons",
-      "hint": "WASD move, mouse aim, click attack; 1 fireball / 2 frost nova / 3 heal; Q red potion / E blue potion; I inventory"
-    }
-  },
   "github_login": "Github Login",
   "hashtags": "Hashtags",
   "home": "Home",

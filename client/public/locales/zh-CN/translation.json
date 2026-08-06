@@ -190,64 +190,6 @@
     },
     "title": "朋友们"
   },
-  "game": {
-    "title": "游戏中心",
-    "subtitle": "工作之余放松一下，5 款小游戏等你挑战，成绩进入本地排行榜",
-    "play": "开始游戏",
-    "backToGames": "返回游戏列表",
-    "gameOver": "游戏结束",
-    "yourScore": "你的得分",
-    "player_default": "玩家",
-    "namePlaceholder": "输入你的名字",
-    "saveScore": "保存成绩",
-    "saved": "成绩已保存 ✓",
-    "playAgain": "再玩一次",
-    "leaderboard": "排行榜",
-    "noScores": "暂无成绩，快来挑战吧！",
-    "score": "得分",
-    "moves": "步数",
-    "timeLeft": "剩余时间"
-  },
-  "games": {
-    "2048": {
-      "name": "2048",
-      "desc": "合并方块，凑出 2048",
-      "hint": "方向键或滑动移动，相同数字合并"
-    },
-    "snake": {
-      "name": "贪吃蛇",
-      "desc": "控制蛇吃食物，别撞墙",
-      "hint": "方向键控制移动方向"
-    },
-    "memory": {
-      "name": "记忆翻牌",
-      "desc": "翻开卡片，找出所有配对",
-      "hint": "点击两张卡片，相同则消除"
-    },
-    "whack": {
-      "name": "打地鼠",
-      "desc": "在限定时间内敲中尽可能多的地鼠",
-      "hint": "点击冒头的地鼠得分"
-    },
-    "tictactoe": {
-      "name": "井字棋",
-      "desc": "与 AI 对战三子棋",
-      "hint": "三人连线即获胜",
-      "win": "你赢了！",
-      "draw": "平局",
-      "lose": "你输了",
-      "yourTurn": "轮到你了"
-    },
-    "legend": {
-      "name": "传奇",
-      "desc": "俯视角砍怪升级，击杀爆装备变强"
-    },
-    "diablo": {
-      "name": "暗影地牢",
-      "desc": "暗黑风格 ARPG：层层闯关，屠魔爆装，锻造神兵",
-      "hint": "WASD 移动，鼠标瞄准，左键攻击；1 火球 / 2 冰霜新星 / 3 治疗；Q 红药 / E 蓝药；I 背包"
-    }
-  },
   "github_login": "Github 登录",
   "hashtags": "标签",
   "home": "首页",

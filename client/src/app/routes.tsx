@@ -26,7 +26,7 @@ import { QueueStatusPage } from "../page/queue-status";
 import { SearchPage } from "../page/search";
 import { Settings } from "../page/settings";
 import { TimelinePage } from "../page/timeline";
-import { GameCenterPage } from "../page/game-center";
+
 import { WritingPage } from "../page/writing";
 import { ProfileContext } from "../state/profile";
 import { tryInt } from "../utils/int";
@@ -104,10 +104,6 @@ export function AppRoutes() {
       <TocRoute path="/feed/:id">
         {(params, toc, cleanup) => <FeedPage id={params.id || ""} TOC={toc} clean={cleanup} />}
       </TocRoute>
-
-      <AppRoute path="/game">
-        <GameCenterPage />
-      </AppRoute>
 
       <TocRoute path="/:alias">
         {(params, toc, cleanup) => <FeedPage id={params.alias || ""} TOC={toc} clean={cleanup} />}
