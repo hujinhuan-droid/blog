@@ -1,5 +1,5 @@
 {
-  "name": "rin-server",
+  "name": "ai-agent-server",
   "version": "0.3.0",
   "module": "index.ts",
   "type": "module",
@@ -27,8 +27,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@rin/api": "workspace:*",
-    "@rin/config": "workspace:*",
+    "@ai-agent/api": "workspace:*",
+    "@ai-agent/config": "workspace:*",
     "arctic": "^3.7.0",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.30.10",
