@@ -1,6 +1,6 @@
 # Environment Variables Configuration Guide
 
-Rin requires two types of environment variables: **Variables (plaintext)** and **Secrets (encrypted)**.
+AI Agent requires two types of environment variables: **Variables (plaintext)** and **Secrets (encrypted)**.
 
 ## Quick Reference
 
@@ -19,7 +19,7 @@ These variables are stored in plaintext in `wrangler.toml` and control feature f
 
 | Variable | Required | Description | Default | Config Key |
 |----------|----------|-------------|---------|------------|
-| `NAME` | No | Site name & title | Rin | `site.name` |
+| `NAME` | No | Site name & title | AI Agent | `site.name` |
 | `DESCRIPTION` | No | Site description | A lightweight personal blogging system | `site.description` |
 | `AVATAR` | No | Site avatar URL | - | `site.avatar` |
 | `PAGE_SIZE` | No | Default pagination size | 5 | `site.page_size` |
