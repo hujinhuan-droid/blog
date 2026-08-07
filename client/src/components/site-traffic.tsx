@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useTranslation } from "react-i18next";
-import type { SiteStatsResponse } from "@rin/api";
+import type { SiteStatsResponse } from "@ai-agent/api";
 
 export function SiteTraffic({ stats }: { stats: SiteStatsResponse | null }) {
     const { t } = useTranslation();
