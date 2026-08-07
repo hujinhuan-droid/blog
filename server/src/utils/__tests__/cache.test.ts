@@ -776,9 +776,9 @@ describe('CacheImpl - 公共缓存开关', () => {
 
     it('client.config 不应受公共缓存开关影响', async () => {
         await clientConfig.set('cache.enabled', false);
-        await clientConfig.set('site.name', 'Rin Test');
+        await clientConfig.set('site.name', 'AI Agent Test');
 
         const freshClientConfig = new CacheImpl(db as any, mockEnv, 'client.config', 'database');
-        expect(await freshClientConfig.get('site.name')).toBe('Rin Test');
+        expect(await freshClientConfig.get('site.name')).toBe('AI Agent Test');
     });
 });
