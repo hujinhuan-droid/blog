@@ -16,6 +16,18 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: '../dist/client',
       emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-markdown': ['react-markdown', 'remark-gfm', 'remark-math', 'rehype-katex', 'rehype-raw', 'rehype-sanitize', 'rehype-react', 'remark-rehype'],
+            'vendor-editor': ['@monaco-editor/react'],
+            'vendor-ui': ['react-select', 'react-modal', 'reactjs-popup', 'react-helmet', 'react-loading', 'yet-another-react-lightbox'],
+            'vendor-mermaid': ['mermaid'],
+            'vendor-i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          },
+        },
+      },
     },
     plugins: [
       react(),
