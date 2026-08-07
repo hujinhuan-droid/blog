@@ -142,12 +142,12 @@ async function generateFeed(env: Env, db: DB, frontendUrl: string, c?: AppContex
 
     let feedConfig: any = {
         title: env.RSS_TITLE,
-        description: env.RSS_DESCRIPTION || "Feed from Rin",
+        description: env.RSS_DESCRIPTION || "Feed from AI Agent",
         id: frontendUrl,
         link: frontendUrl,
         copyright: "All rights reserved 2024",
         updated: new Date(),
-        generator: "Feed from Rin",
+        generator: "Feed from AI Agent",
         feedLinks: {
             // Native RSS support - feeds are now served from root path
             rss: `${frontendUrl}/rss.xml`,
