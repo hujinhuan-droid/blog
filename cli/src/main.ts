@@ -7,7 +7,7 @@ import { runSetupDev } from "./tasks/setup-dev";
 import { runSeoRender } from "./tasks/seo-render";
 
 function printHelp() {
-  console.log(`Rin CLI
+  console.log(`AI Agent CLI
 
 Commands:
   dev
@@ -32,7 +32,7 @@ export async function runCli(rawArgs: string[]) {
   }
 
   if (args.includes("-v") || args.includes("--version")) {
-    console.log("rin-cli v1.0.0");
+    console.log("ai-agent-cli v1.0.0");
     return;
   }
 
