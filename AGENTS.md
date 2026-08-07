@@ -49,9 +49,7 @@ The project uses a unified CLI tool located at `cli/bin/ai-agent.ts`. Command im
 
 This repository is a product monorepo, not a framework monorepo.
 
-- `ai-agent` should learn from `~/projects/rine` on module boundaries and type discipline.
-- `ai-agent` should NOT blindly copy `rine`'s `contracts/core/renderer/adapters/apps` layout.
-- The current repository still centers around a concrete app: React frontend, Cloudflare Worker backend, shared API package, and local CLI tooling.
+- The current repository centers around a concrete app: React frontend, Cloudflare Worker backend, shared API package, and local CLI tooling.
 - If a change improves directory symmetry but does not improve dependency boundaries, it is usually the wrong refactor.
 
 ### Current Reality
@@ -64,7 +62,7 @@ This repository is a product monorepo, not a framework monorepo.
 
 ### Refactor Direction
 
-When restructuring, prefer this target shape over a direct clone of `rine`:
+When restructuring, prefer this target shape:
 
 ```text
 ai-agent/
@@ -88,7 +86,7 @@ This is a direction, not a mandate to rename everything immediately.
 All agents must follow these rules for architecture work:
 
 1. Do not start by renaming `client/` to `apps/web` or `server/` to `apps/worker`.
-2. Do not create empty framework-style packages just to mirror `rine`.
+2. Do not create empty framework-style packages without a product need.
 3. Do not introduce a `renderer` package unless the app actually gains SSR or shared rendering orchestration.
 4. Do not split every server utility into `adapters/*` packages unless there are at least two credible implementations or an immediate runtime boundary that justifies it.
 5. Do not move code across the repo solely for aesthetics if imports, tests, and ownership get worse.
@@ -150,7 +148,6 @@ If those checks are not done, the refactor is not ready.
 
 Avoid these common mistakes:
 
-- Copying `rine` abstractions into `ai-agent` without a product need.
 - Moving files into `packages/` while still importing app internals from them.
 - Creating `core` modules that actually contain product-specific assembly.
 - Mixing sensitive server-only configuration logic with client-safe config views.
