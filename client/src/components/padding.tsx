@@ -1,1 +1,1 @@
-export { Padding } from "@rin/ui";
+export { Padding } from "@ai-agent/ui";
