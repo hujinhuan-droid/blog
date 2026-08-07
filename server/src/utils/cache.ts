@@ -128,8 +128,8 @@ class DatabaseStorageProvider implements StorageProvider {
 class S3StorageProvider implements StorageProvider {
     private cacheKey: string;
 
-    constructor(private env: Env, private cacheMap: Map<string, any>, private _type: string) {
-        this.cacheKey = path_join(this.env.S3_CACHE_FOLDER || 'cache', `${_type}.json`);
+    constructor(private env: Env, private cacheMap: Map<string, any>, type: string) {
+        this.cacheKey = path_join(this.env.S3_CACHE_FOLDER || 'cache', `${type}.json`);
     }
 
     async load(): Promise<void> {
