@@ -3,7 +3,7 @@ import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Helmet } from 'react-helmet';
 import { useTranslation } from "react-i18next";
 import Modal from 'react-modal';
-import { FlatActionButton, FlatPanel, SearchableSelect } from "@rin/ui";
+import { FlatActionButton, FlatPanel, SearchableSelect } from "@ai-agent/ui";
 import { ShowAlertType, useAlert, useConfirm } from "../components/dialog";
 import { Input } from "../components/input";
 import { Waiting } from "../components/loading";
