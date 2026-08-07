@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import type { AIConfig } from "@rin/api";
-import { AI_CONFIG_PREFIX } from "@rin/config";
+import type { AIConfig } from "@ai-agent/api";
+import { AI_CONFIG_PREFIX } from "@ai-agent/config";
 
 const originalFetch = globalThis.fetch;
 
