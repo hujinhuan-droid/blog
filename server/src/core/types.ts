@@ -1,4 +1,4 @@
-// Core types for Rin server
+// Core types for AI Agent server
 import type { Context as HonoContext } from "hono";
 
 // Re-export from hono-types
