@@ -365,7 +365,7 @@
         "desc": "啟用朋友們連結可訪問性檢查",
         "title": "友情連結健康監測",
         "ua": {
-          "desc": "設定友情連結可訪問性檢查時使用的 User-Agent, 預設 'Rin-Check/1.0'",
+          "desc": "設定友情連結可訪問性檢查時使用的 User-Agent, 預設 'AI Agent-Check/1.0'",
           "title": "友情連結健康監測 User-Agent"
         }
       },
