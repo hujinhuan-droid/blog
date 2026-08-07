@@ -77,7 +77,7 @@ export function UserService(): Hono {
             headers: {
                 Authorization: `Bearer ${gh_token.accessToken}`,
                 Accept: "application/json",
-                "User-Agent": "rin"
+                "User-Agent": "ai-agent"
             },
         }));
 
