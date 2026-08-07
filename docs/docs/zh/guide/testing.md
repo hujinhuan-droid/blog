@@ -1,10 +1,10 @@
 # 测试指南
 
-本文档提供 Rin 项目中测试的全面指南。
+本文档提供 AI Agent 项目中测试的全面指南。
 
 ## 概述
 
-Rin 为客户端和服务端使用不同的测试框架：
+AI Agent 为客户端和服务端使用不同的测试框架：
 
 - **客户端**: [Vitest](https://vitest.dev/) 配合 jsdom 环境进行 React 组件测试
 - **服务端**: [Bun 原生测试运行器](https://bun.sh/docs/cli/test) 配合内存 SQLite 数据库
