@@ -1,10 +1,10 @@
 {
-  "name": "rin-cli",
+  "name": "ai-agent-cli",
   "version": "0.3.0",
-  "description": "Rin CLI - Unified command line interface for Rin blog platform",
+  "description": "AI Agent CLI - Unified command line interface for AI Agent blog platform",
   "type": "module",
   "bin": {
-    "rin": "./bin/rin.ts"
+    "ai-agent": "./bin/ai-agent.ts"
   },
   "scripts": {
     "check": "tsc --noEmit",
