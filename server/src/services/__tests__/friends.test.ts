@@ -6,14 +6,12 @@ import { setupTestApp, cleanupTestDB } from '../../../tests/fixtures';
 import type { Database } from 'bun:sqlite';
 
 describe('FriendService', () => {
-    let db: any;
     let sqlite: Database;
     let env: Env;
     let app: Hono<{ Bindings: Env; Variables: Variables }>;
 
     beforeEach(async () => {
         const ctx = await setupTestApp(FriendService);
-        db = ctx.db;
         sqlite = ctx.sqlite;
         env = ctx.env;
         app = ctx.app;
