@@ -6,7 +6,6 @@ import { profileAsync } from "../core/server-timing";
 import { notify } from "../utils/webhook";
 import { resolveWebhookConfig } from "./config-helpers";
 import { commentSchemas, validateBody } from "../utils/validation";
-import { ValidationError } from "../errors";
 
 export function CommentService(): Hono {
     const app = new Hono();
@@ -52,7 +51,12 @@ export function CommentService(): Hono {
         const serverConfig = c.get('serverConfig');
         const uid = c.get('uid');
         const feedId = parseInt(c.req.param('feed'));
-        const { content, guestName, guestEmail, guestWebsite } = c.get('validatedBody');
+        const { content, guestName, guestEmail, guestWebsite } = c.get('validatedBody') as {
+          content: string;
+          guestName?: string;
+          guestEmail?: string;
+          guestWebsite?: string;
+        };
         
         const exist = await profileAsync(c, 'comment_create_feed', () => db.query.feeds.findFirst({ where: eq(feeds.id, feedId) }));
         if (!exist) {
