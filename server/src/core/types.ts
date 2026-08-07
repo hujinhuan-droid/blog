@@ -1,5 +1,4 @@
 // Core types for AI Agent server
-import type { Context as HonoContext } from "hono";
 
 // Re-export from hono-types
 export type { DB, Variables, AppContext, JWTUtils, OAuth2Utils } from "./hono-types";
