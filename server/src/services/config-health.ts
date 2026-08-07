@@ -186,7 +186,6 @@ export async function buildHealthCheckResponse(
         ["S3_SECRET_ACCESS_KEY", env.S3_SECRET_ACCESS_KEY],
       ] as const);
   const missingStorageKeys = requiredStorageKeys.filter(([, value]) => !value).map(([key]) => key);
-  const hasAccessHost = Boolean(env.S3_ACCESS_HOST);
 
   if (missingStorageKeys.length === 0) {
     items.push(
