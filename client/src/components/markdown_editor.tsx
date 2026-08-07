@@ -11,7 +11,7 @@ interface IMonacoSelection {
 import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Loading from 'react-loading';
-import { FlatInset, FlatTabButton } from "@rin/ui";
+import { FlatInset, FlatTabButton } from "@ai-agent/ui";
 import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
 import { buildMarkdownImage, uploadImageFile } from "../utils/image-upload";
