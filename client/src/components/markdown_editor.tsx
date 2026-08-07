@@ -10,7 +10,7 @@ interface IMonacoSelection {
 }
 import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import Loading from 'react-loading';
+// Lightweight inline spinner — no external dependency needed
 import { FlatInset, FlatTabButton } from "@ai-agent/ui";
 import { useAlert } from "./dialog";
 import { useColorMode } from "../utils/darkModeUtils";
@@ -431,7 +431,10 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
         </div>
         {uploading &&
           <div className="flex flex-row items-center space-x-2 px-2">
-            <Loading type="spin" color="#FC466B" height={16} width={16} />
+            <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="#FC466B" strokeWidth="4" />
+              <path className="opacity-75" fill="#FC466B" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
             <span className="text-sm text-neutral-500">{t('uploading')}</span>
           </div>
         }
