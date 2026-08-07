@@ -1,4 +1,4 @@
-import { SettingsBadge, SettingsCard, SettingsCardBody, SettingsCardHeader } from "@rin/ui";
+import { SettingsBadge, SettingsCard, SettingsCardBody, SettingsCardHeader } from "@ai-agent/ui";
 import type { ConfigHealthItem } from "../api/client";
 import { client } from "../app/runtime";
 import { useEffect, useMemo, useState } from "react";
