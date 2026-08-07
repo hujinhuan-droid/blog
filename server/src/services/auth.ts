@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AppContext, Variables } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
-import { setJWTCookie, clearJWTCookie } from "../core/hono-middleware";
+import { setJWTCookie } from "../core/hono-middleware";
 import { users } from "../db/schema";
 import {
     BadRequestError,
@@ -34,7 +34,7 @@ async function verifyPassword(password: string, storedHash: string): Promise<boo
   // New format: "salt:hash"
   const parts = storedHash.split(":");
   if (parts.length === 2) {
-    const [salt, hash] = parts;
+    const [salt, _hash] = parts;
     return (await hashPassword(password, salt)) === storedHash;
   }
   // Legacy unsalted SHA-256
@@ -54,7 +54,7 @@ export function PasswordAuthService(): Hono<{
         const jwt = c.get('jwt');
         const db = c.get('db');
         const env = c.env;
-        const { username, password } = c.get('validatedBody');
+        const { username, password } = c.get('validatedBody') as { username: string; password: string };
 
         // Check if admin credentials are configured
         const adminUsername = env.ADMIN_USERNAME;
