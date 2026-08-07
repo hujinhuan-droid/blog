@@ -7,11 +7,11 @@ export async function runDbCommand(args: string[]) {
   const { values } = parseArgs({
     args: args.slice(1),
     options: {
-      db: { type: "string", default: "rin" },
+      db: { type: "string", default: "ai-agent" },
     },
     strict: false,
   });
-  const dbName = (values.db as string) || "rin";
+  const dbName = (values.db as string) || "ai-agent";
 
   if (subcommand === "migrate") {
     await runLocalDbMigrate(dbName);
@@ -24,5 +24,5 @@ export async function runDbCommand(args: string[]) {
     return;
   }
 
-  console.log("Database commands:\n  rin db migrate\n  rin db fix-top-field");
+  console.log("Database commands:\n  ai-agent db migrate\n  ai-agent db fix-top-field");
 }
