@@ -1,5 +1,4 @@
 import { useContext, useEffect, useRef, useState } from 'react';
-import Popup from 'reactjs-popup';
 import { useLocation } from 'wouter';
 import { ClientConfigContext } from '../state/config';
 import { Helmet } from "react-helmet";
@@ -102,37 +101,10 @@ function Footer() {
                             setDoubleClickTimes(doubleClickTimes + 1)
                         }
                     }}>
-                        © {new Date().getFullYear()} Powered by <a className='hover:underline' href="https://github.com/hujinhuan-droid/blog" target="_blank">AI Agent</a>
+                        © {new Date().getFullYear()} Powered by <a className='hover:underline' href="https://github.com/hujinhuan-droid/blog" target="_blank">AI</a>
                     </span>
-                    {config.getBoolean('rss') && <>
-                        <Spliter />
-                        <Popup trigger={
-                            <button className="hover:underline" type="button">
-                                RSS
-                            </button>
-                        }
-                            position="top center"
-                            arrow={false}
-                            closeOnDocumentClick>
-                            <div className="border-card">
-                                <p className='font-bold t-primary'>
-                                    {t('footer.rss')}
-                                </p>
-                                <p>
-                                    <a href='/rss.xml'>
-                                        RSS
-                                    </a> <Spliter />
-                                    <a href='/atom.xml'>
-                                        Atom
-                                    </a> <Spliter />
-                                    <a href='/rss.json'>
-                                        JSON
-                                    </a>
-                                </p>
-
-                            </div>
-                        </Popup>
-                    </>}
+                    <Spliter />
+                    <a className='hover:underline' href="https://github.com/hujinhuan-droid/blog" target="_blank">Blog</a>
                 </p>
                 <div className="w-fit-content inline-flex rounded-full border border-zinc-200 p-[3px] dark:border-zinc-700">
                     <ThemeButton mode='light' current={modeState} label="Toggle light mode" icon="ri-sun-line" onClick={setMode} />
