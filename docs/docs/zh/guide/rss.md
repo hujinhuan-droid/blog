@@ -1,6 +1,6 @@
 # RSS 配置
 
-Rin 支持 RSS、Atom、Json 三种订阅格式
+AI Agent 支持 RSS、Atom、Json 三种订阅格式
 
 ## 环境变量
 
@@ -8,7 +8,7 @@ RSS 本身不需要太多的配置，默认是开箱即用的。但是你可以�
 
 ```ini
 RSS_TITLE=<RSS 标题，默认为你的用户名>
-RSS_DESCRIPTION=<RSS 描述，默认为 Feed from Rin>
+RSS_DESCRIPTION=<RSS 描述，默认为 Feed from AI Agent>
 ```
 
 以上环境变量通过在 Github 的 `Settings` > `Secrets and Variables` > `Actions` > `Variables` > `New repository variable` 中添加即可。
