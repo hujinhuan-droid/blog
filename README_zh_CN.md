@@ -1,4 +1,4 @@
-![封面](./docs/docs/public/rin-logo.png)
+![封面](./docs/docs/public/ai-agent-logo.png)
 
 [English](./README.md) | 简体中文
 
@@ -13,7 +13,7 @@
 
 ## 项目简介
 
-Rin 是一个基于 Cloudflare 开发者平台构建的现代化、无服务器博客系统，完全利用 Cloudflare Pages 托管、Workers 提供无服务器函数、D1 作为 SQLite 数据库、R2 进行对象存储。仅需一个指向 Cloudflare 的域名即可部署你的个人博客，无需服务器运维。
+AI Agent 是一个基于 Cloudflare 开发者平台构建的现代化、无服务器博客系统，完全利用 Cloudflare Pages 托管、Workers 提供无服务器函数、D1 作为 SQLite 数据库、R2 进行对象存储。仅需一个指向 Cloudflare 的域名即可部署你的个人博客，无需服务器运维。
 
 ## 在线演示
 
@@ -33,7 +33,7 @@ Rin 是一个基于 Cloudflare 开发者平台构建的现代化、无服务器�
 - **Webhook 通知**：通过可配置的 Webhook 接收新评论的实时提醒。
 - **特色图片**：自动识别文章内首张图片，并将其作为列表页的封面图展示。
 - **标签解析**：输入如 `#博客 #Cloudflare` 的标签文本，自动解析并展示为标签。
-- **类型安全**：通过 `@rin/api` 包在客户端和服务器之间共享 TypeScript 类型，实现端到端类型安全。
+- **类型安全**：通过 `@ai-agent/api` 包在客户端和服务器之间共享 TypeScript 类型，实现端到端类型安全。
 - ……更多功能请访问 # 探索。
 
 ## 文档
@@ -42,7 +42,7 @@ Rin 是一个基于 Cloudflare 开发者平台构建的现代化、无服务器�
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/hujinhuan-droid/blog.git && cd Rin
+git clone https://github.com/hujinhuan-droid/blog.git && cd AI Agent
 
 # 2. 安装依赖
 bun install
@@ -94,9 +94,9 @@ bun run deploy:client
 
 **可选的环境变量：**
 
-- `WORKER_NAME` - 后端工作进程名称（默认值：`rin-server`）
-- `PAGES_NAME` - 前端页面名称（默认值：`rin-client`）
-- `DB_NAME` - D1 数据库名称（默认值：`rin`）
+- `WORKER_NAME` - 后端工作进程名称（默认值：`ai-agent-server`）
+- `PAGES_NAME` - 前端页面名称（默认值：`ai-agent-client`）
+- `DB_NAME` - D1 数据库名称（默认值：`ai-agent`）
 - `R2_BUCKET_NAME` - R2 存储桶名称。设置后，部署会自动推导对应的 `S3_*` 配置；未设置时，不会自动选择任何 bucket。
 
 部署脚本将自动执行以下操作：
@@ -147,7 +147,7 @@ bun run deploy:client
 
 ## 参与贡献
 
-我们欢迎各种形式的贡献——代码、文档、设计和想法。请查阅我们的[贡献指南](https://github.com/hujinhuan-droid/blog/guide/contribution.html)，一起参与 Rin 的构建！
+我们欢迎各种形式的贡献——代码、文档、设计和想法。请查阅我们的[贡献指南](https://github.com/hujinhuan-droid/blog/guide/contribution.html)，一起参与 AI Agent 的构建！
 
 ## License
 
