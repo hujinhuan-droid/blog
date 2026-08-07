@@ -56,13 +56,13 @@ describe("buildWranglerTriggersConfig", () => {
 
 describe("buildWranglerQueueConfig", () => {
   it("includes queue consumers for preview deploys", () => {
-    const config = buildWranglerQueueConfig("rin-preview-tasks", true);
-    expect(config).toContain('queue = "rin-preview-tasks"');
+    const config = buildWranglerQueueConfig("ai-agent-preview-tasks", true);
+    expect(config).toContain('queue = "ai-agent-preview-tasks"');
     expect(config).toContain("[[queues.consumers]]");
   });
 
   it("includes queue consumers for production deploys", () => {
-    const config = buildWranglerQueueConfig("rin-tasks", false);
+    const config = buildWranglerQueueConfig("ai-agent-tasks", false);
     expect(config).toContain("[[queues.producers]]");
     expect(config).toContain("[[queues.consumers]]");
   });
