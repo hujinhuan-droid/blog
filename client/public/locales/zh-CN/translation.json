@@ -365,7 +365,7 @@
         "desc": "启用朋友们链接可访问性检查",
         "title": "友链健康监测",
         "ua": {
-          "desc": "设置友链可访问性检查时使用的 User-Agent, 默认 'Rin-Check/1.0'",
+          "desc": "设置友链可访问性检查时使用的 User-Agent, 默认 'AI Agent-Check/1.0'",
           "title": "友链健康监测 User-Agent"
         }
       },
