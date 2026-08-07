@@ -6,7 +6,7 @@ import {useTranslation} from "react-i18next";
 import Loading from 'react-loading';
 import {ShowAlertType, useAlert} from '../components/dialog';
 import {Checkbox, Input} from "../components/input";
-import { DateTimeInput, FlatMetaRow, FlatPanel } from "@rin/ui";
+import { DateTimeInput, FlatMetaRow, FlatPanel } from "@ai-agent/ui";
 import { client } from "../app/runtime";
 import {Cache} from '../utils/cache';
 import {useSiteConfig} from "../hooks/useSiteConfig";
