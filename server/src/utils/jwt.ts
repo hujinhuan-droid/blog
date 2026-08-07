@@ -1,8 +1,6 @@
 import {
     SignJWT,
     jwtVerify,
-    type JWTPayload,
-    type JWSHeaderParameters,
     type KeyLike
 } from 'jose'
 
