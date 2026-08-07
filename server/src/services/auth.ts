@@ -9,14 +9,36 @@ import {
     ForbiddenError,
     InternalServerError,
 } from "../errors";
+import { authSchemas, validateBody } from "../utils/validation";
 
-// Hash password using SHA-256
-async function hashPassword(password: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+// Generate a cryptographically secure random salt
+function generateSalt(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Hash password with salt using SHA-256
+async function hashPassword(password: string, salt: string = ""): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(salt + password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hash = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  // Store as "salt:hash" for verification
+  if (salt) return `${salt}:${hash}`;
+  return hash;
+}
+
+// Verify password against stored hash (supports both salted and unsalted)
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  // New format: "salt:hash"
+  const parts = storedHash.split(":");
+  if (parts.length === 2) {
+    const [salt, hash] = parts;
+    return (await hashPassword(password, salt)) === storedHash;
+  }
+  // Legacy unsalted SHA-256
+  return (await hashPassword(password)) === storedHash;
 }
 
 export function PasswordAuthService(): Hono<{
@@ -28,10 +50,11 @@ export function PasswordAuthService(): Hono<{
         Variables: Variables;
     }>();
     // Login with username and password
-    app.post("/login", async (c: AppContext) => {
+    app.post("/login", validateBody(authSchemas.login), async (c: AppContext) => {
         const jwt = c.get('jwt');
         const db = c.get('db');
         const env = c.env;
+        const { username, password } = c.get('validatedBody');
 
         // Check if admin credentials are configured
         const adminUsername = env.ADMIN_USERNAME;
@@ -41,20 +64,11 @@ export function PasswordAuthService(): Hono<{
             throw new BadRequestError('Admin credentials not configured');
         }
 
-        const { username, password } = await profileAsync(c, 'auth_login_parse', () => c.req.json()) as { username: string; password: string };
-
-        if (!username || !password) {
-            throw new BadRequestError('Username and password are required');
-        }
-
-        // Hash the provided password
-        const hashedPassword = await profileAsync(c, 'auth_login_hash', () => hashPassword(password));
-
         // Check if this is the admin login
         if (username === adminUsername) {
-            const expectedHash = await profileAsync(c, 'auth_admin_hash', () => hashPassword(adminPassword));
-            
-            if (hashedPassword !== expectedHash) {
+            // Verify against configured admin password (plain-text comparison first,
+            // then salted hash for the persisted user record)
+            if (password !== adminPassword) {
                 throw new ForbiddenError('Invalid credentials');
             }
 
@@ -64,13 +78,16 @@ export function PasswordAuthService(): Hono<{
             }));
 
             if (!user) {
-                // Create admin user if not exists
+                // Create admin user with salted password
+                const salt = await profileAsync(c, 'auth_admin_salt', () => Promise.resolve(generateSalt()));
+                const saltedHash = await profileAsync(c, 'auth_admin_hash', () => hashPassword(adminPassword, salt));
+
                 const result = await profileAsync(c, 'auth_admin_insert', () => db.insert(users).values({
                     username: adminUsername,
                     openid: "admin",
                     avatar: "",
                     permission: 1,
-                    password: expectedHash,
+                    password: saltedHash,
                 }).returning({ insertedId: users.id }));
 
                 if (!result || result.length === 0) {
@@ -86,10 +103,13 @@ export function PasswordAuthService(): Hono<{
                 throw new InternalServerError('Failed to get admin user');
             }
 
-            if (user.password !== expectedHash) {
-                // Update admin password if changed
+            // Verify stored password and update if admin password changed
+            const passwordValid = await profileAsync(c, 'auth_admin_verify', () => verifyPassword(adminPassword, user.password));
+            if (!passwordValid) {
+                const salt = await profileAsync(c, 'auth_admin_salt_update', () => Promise.resolve(generateSalt()));
+                const newSaltedHash = await profileAsync(c, 'auth_admin_hash_update', () => hashPassword(adminPassword, salt));
                 await profileAsync(c, 'auth_admin_sync', () => db.update(users)
-                    .set({ password: expectedHash, username: adminUsername })
+                    .set({ password: newSaltedHash, username: adminUsername })
                     .where(eq(users.id, user.id)));
             }
 
@@ -101,7 +121,6 @@ export function PasswordAuthService(): Hono<{
 
             return c.json({
                 success: true,
-                token: token,
                 user: {
                     id: user.id,
                     username: user.username,
@@ -120,7 +139,8 @@ export function PasswordAuthService(): Hono<{
             throw new ForbiddenError('Invalid credentials');
         }
 
-        if (user.password !== hashedPassword) {
+        const passwordValid = await profileAsync(c, 'auth_user_verify', () => verifyPassword(password, user.password));
+        if (!passwordValid) {
             throw new ForbiddenError('Invalid credentials');
         }
 
@@ -132,7 +152,6 @@ export function PasswordAuthService(): Hono<{
 
         return c.json({
             success: true,
-            token: token,
             user: {
                 id: user.id,
                 username: user.username,
