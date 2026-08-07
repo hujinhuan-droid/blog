@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ConfigWrapper } from "@rin/config";
+import { ConfigWrapper } from "@ai-agent/config";
 import type { Profile } from "../state/profile";
 import { defaultClientConfig } from "../state/config";
 import { applyThemeColor } from "../utils/theme-color";
