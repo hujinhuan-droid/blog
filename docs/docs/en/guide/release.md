@@ -1,10 +1,10 @@
 # Release Process
 
-This document describes the release process for the Rin project.
+This document describes the release process for the AI Agent project.
 
 ## Overview
 
-Rin uses [Semantic Versioning](https://semver.org/) and follows a structured release workflow to ensure stability and consistency.
+AI Agent uses [Semantic Versioning](https://semver.org/) and follows a structured release workflow to ensure stability and consistency.
 
 **Key Features:**
 - 🤖 **Automated Release Notes**: Generated from conventional commit messages
@@ -51,19 +51,19 @@ See [Commit Convention](./commit-convention.md) for detailed guidelines.
 
 ```bash
 # Bump patch version (0.1.0 -> 0.1.1)
-bun cli/bin/rin.ts release patch
+bun cli/bin/ai-agent.ts release patch
 
 # Bump minor version (0.1.0 -> 0.2.0)
-bun cli/bin/rin.ts release minor
+bun cli/bin/ai-agent.ts release minor
 
 # Bump major version (0.1.0 -> 1.0.0)
-bun cli/bin/rin.ts release major
+bun cli/bin/ai-agent.ts release major
 
 # Or set a specific version
-bun cli/bin/rin.ts release 1.2.3
+bun cli/bin/ai-agent.ts release 1.2.3
 
 # Pre-release version
-bun cli/bin/rin.ts release 0.3.0-rc.1
+bun cli/bin/ai-agent.ts release 0.3.0-rc.1
 ```
 
 The script will:
@@ -93,7 +93,7 @@ git commit --amend --no-edit
 To preview changes without applying them:
 
 ```bash
-bun cli/bin/rin.ts release minor --dry-run
+bun cli/bin/ai-agent.ts release minor --dry-run
 ```
 
 ### 5. Push the Release
@@ -216,7 +216,7 @@ git checkout -b fix/critical-bug v0.2.0
 git commit -m "fix(api): resolve critical security issue"
 
 # Run release script
-bun cli/bin/rin.ts release patch
+bun cli/bin/ai-agent.ts release patch
 
 # Push (no need to merge to main for hotfixes)
 git push origin fix/critical-bug
