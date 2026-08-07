@@ -99,7 +99,7 @@ export function FeedPage({ id, TOC, clean }: { id: string, TOC: () => JSX.Elemen
           setError(error.value as string);
         } else if (data && typeof data !== "string") {
           setTimeout(() => {
-            setFeed(data as any);
+            setFeed(data);
             setTop(data.top || 0);
             const headImageUrl = extractFirstMarkdownImageUrl(data.content);
             if (headImageUrl) {
@@ -512,8 +512,8 @@ function CommentInput({
 type Comment = {
   id: number;
   content: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
   user?: {
     id: number;
     username: string;
@@ -539,7 +539,7 @@ function Comments({ id }: { id: string }) {
         if (error) {
           setError(error.value as string);
         } else if (data && Array.isArray(data)) {
-          setComments(data as any);
+          setComments(data);
         }
       });
   }
