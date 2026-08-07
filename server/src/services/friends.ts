@@ -220,15 +220,15 @@ export function FriendService(): Hono {
 }
 
 export async function friendCrontab(
-    env: Env,
+    _env: Env,
     ctx: ExecutionContext,
     db: DB,
-    cache: CacheImpl,
+    _cache: CacheImpl,
     serverConfig: CacheImpl,
-    clientConfig: CacheImpl
+    _clientConfig: CacheImpl
 ) {
     const enable = await serverConfig.getOrDefault('friend_crontab', true);
-    const ua = await serverConfig.get('friend_ua') || 'AI Agent-Check/0.1.0';
+    const ua = (await serverConfig.get('friend_ua') as string) || 'AI Agent-Check/0.1.0';
     
     if (!enable) {
         return;
