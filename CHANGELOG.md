@@ -123,8 +123,8 @@ This prerelease expands `rc1` with a second round of UI and operability improvem
 This prerelease rolls up the work completed after `v0.2.0` into a single upgrade candidate focused on the new runtime architecture, shared packages, and day-to-day operability. The largest changes are the backend runtime migration, the custom API client/auth flow, and the move toward unified local tooling and configuration management.
 
 ### Added
-- **Unified Rin CLI**: Added a first-party CLI entrypoint for local development, deployment, database tasks, and release preparation.
-- **Shared workspace packages**: Introduced `@rin/api`, `@rin/config`, and `@rin/ui` as real shared packages used by the app.
+- **Unified AI Agent CLI**: Added a first-party CLI entrypoint for local development, deployment, database tasks, and release preparation.
+- **Shared workspace packages**: Introduced `@ai-agent/api`, `@ai-agent/config`, and `@ai-agent/ui` as real shared packages used by the app.
 - **Authentication options**: Added password-based admin login, a dedicated `/login` page, and a `/profile` page for avatar and nickname updates.
 - **AI configuration**: Added AI summary support, custom model support, and merged AI settings into the main server configuration flow.
 - **Content features**: Added Moments, search, pinned/top feeds, adjacent feed navigation, friend sorting and apply flows, visit count display, and compatibility task management pages.
@@ -133,7 +133,7 @@ This prerelease rolls up the work completed after `v0.2.0` into a single upgrade
 
 ### Changed
 - **Backend runtime**: Replaced the old Elysia-based server stack with a lighter Worker-oriented runtime and then a Hono-based app assembly, with lazy route/dependency loading and clearer middleware boundaries.
-- **API client**: Replaced Eden Treaty usage with a custom type-safe API client and shared transport contracts in `@rin/api`.
+- **API client**: Replaced Eden Treaty usage with a custom type-safe API client and shared transport contracts in `@ai-agent/api`.
 - **Authentication transport**: Moved authenticated requests from authorization headers to cookie-based sessions and replaced the previous OAuth dependency with an in-repo OAuth implementation.
 - **Statistics and caching**: Migrated PV/UV aggregation to HyperLogLog and added cache persistence modes for both D1 and S3.
 - **Configuration and deployment**: Simplified local development setup, removed legacy `FRONTEND_URL` and `API_URL` assumptions, and updated CI/deploy workflows around generated Wrangler configuration and repository-level variables.
@@ -176,8 +176,8 @@ This prerelease rolls up the work completed after `v0.2.0` into a single upgrade
 这个预发布版本将 `v0.2.0` 之后完成的大量工作整理为一个可验证的升级候选版本，重点集中在新的运行时架构、共享包抽取，以及日常开发和部署可维护性的提升。最大的变化包括后端运行时迁移、自定义 API client 与认证流程，以及统一的本地工具链。
 
 #### 新增
-- **统一 Rin CLI**：新增一套一方维护的 CLI 入口，用于本地开发、部署、数据库任务和 release 准备。
-- **共享 workspace 包**：引入 `@rin/api`、`@rin/config` 和 `@rin/ui`，作为应用当前实际使用的共享包。
+- **统一 AI Agent CLI**：新增一套一方维护的 CLI 入口，用于本地开发、部署、数据库任务和 release 准备。
+- **共享 workspace 包**：引入 `@ai-agent/api`、`@ai-agent/config` 和 `@ai-agent/ui`，作为应用当前实际使用的共享包。
 - **认证方式扩展**：新增账号密码登录、独立 `/login` 页面，以及可更新头像和昵称的 `/profile` 页面。
 - **AI 配置能力**：新增 AI 摘要、自定义模型支持，并将 AI 设置并入主服务端配置流程。
 - **内容能力**：新增 Moments、搜索、置顶文章、相邻文章、友情链接排序与申请流程、访问统计展示以及兼容性任务管理页面。
@@ -186,7 +186,7 @@ This prerelease rolls up the work completed after `v0.2.0` into a single upgrade
 
 #### 变更
 - **后端运行时**：将旧的 Elysia 服务端栈替换为更轻量的 Worker 运行时，并进一步整理为 Hono 应用装配结构，支持懒加载路由与依赖，并使中间件边界更清晰。
-- **API client**：移除 Eden Treaty 调用方式，改为自定义的类型安全 API client，并通过 `@rin/api` 共享传输契约。
+- **API client**：移除 Eden Treaty 调用方式，改为自定义的类型安全 API client，并通过 `@ai-agent/api` 共享传输契约。
 - **认证传输**：认证请求从 Authorization Header 迁移为 Cookie Session，同时将原 OAuth 依赖替换为仓库内实现。
 - **统计与缓存**：PV/UV 统计迁移到 HyperLogLog，并为缓存新增 D1 与 S3 两种持久化模式。
 - **配置与部署**：简化本地开发设置，移除旧的 `FRONTEND_URL` 与 `API_URL` 假设，并更新围绕 Wrangler 生成配置和仓库级变量的 CI / 部署流程。
@@ -294,7 +294,7 @@ If you're upgrading from v0.1.0, follow these steps:
 ## [v0.1.0] - 2024-XX-XX
 
 ### Added
-- 🎉 Initial release of Rin blog platform
+- 🎉 Initial release of AI Agent blog platform
 - **Backend**: Cloudflare Workers with Elysia framework
 - **Frontend**: React + Vite + Tailwind CSS hosted on Cloudflare Pages
 - **Database**: Cloudflare D1 (SQLite-based edge database)
