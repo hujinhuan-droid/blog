@@ -6,8 +6,8 @@ export interface ScoreEntry {
   date: string;
 }
 
-const STORAGE_KEY = "rin:leaderboard";
-const NAME_KEY = "rin:playerName";
+const STORAGE_KEY = "ai-agent:leaderboard";
+const NAME_KEY = "ai-agent:playerName";
 
 function readAll(): Record<string, ScoreEntry[]> {
   try {
