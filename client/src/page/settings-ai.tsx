@@ -5,7 +5,7 @@ import {
   SettingsCardBody,
   SettingsCardHeader,
   SettingsCardRow,
-} from "@rin/ui";
+} from "@ai-agent/ui";
 import * as Switch from "@radix-ui/react-switch";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -170,7 +170,7 @@ export function AISummarySettings({
                     </p>
                     <input
                       type="password"
-                      name="rin-ai-api-key"
+                      name="ai-agent-ai-api-key"
                       autoComplete="new-password"
                       autoCapitalize="off"
                       autoCorrect="off"
