@@ -12,12 +12,12 @@ describe("readBootstrappedClientConfig", () => {
 
   it("returns the inline bootstrap config from window", () => {
     (globalThis as GlobalWithClientConfig).__RIN_CLIENT_CONFIG__ = {
-      "site.name": "Rin",
+      "site.name": "AI Agent",
       "theme.color": "#fc466b",
     };
 
     expect(readBootstrappedClientConfig()).toEqual({
-      "site.name": "Rin",
+      "site.name": "AI Agent",
       "theme.color": "#fc466b",
     });
   });
