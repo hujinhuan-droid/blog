@@ -65,7 +65,7 @@ export async function buildHealthCheckResponse(
   ]);
 
   const items: HealthCheckItem[] = [];
-  const githubReady = Boolean(env.RIN_GITHUB_CLIENT_ID && env.RIN_GITHUB_CLIENT_SECRET);
+  const githubReady = Boolean(env.BLOG_GITHUB_CLIENT_ID && env.BLOG_GITHUB_CLIENT_SECRET);
   const passwordReady = Boolean(env.ADMIN_USERNAME && env.ADMIN_PASSWORD);
   const defaultPasswordInUse =
     env.ADMIN_USERNAME === "admin" && env.ADMIN_PASSWORD === "admin123";
