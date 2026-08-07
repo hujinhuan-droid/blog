@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Helmet } from "react-helmet";
-import type { ConfigWrapper } from "@rin/config";
+import type { ConfigWrapper } from "@ai-agent/config";
 import type { Profile } from "../state/profile";
 import { ClientConfigContext } from "../state/config";
 import { ProfileContext } from "../state/profile";
