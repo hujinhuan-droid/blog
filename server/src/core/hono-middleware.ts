@@ -2,7 +2,7 @@
 import { createMiddleware } from "hono/factory";
 import { getCookie, setCookie } from "hono/cookie";
 import { drizzle } from "drizzle-orm/d1";
-import type { AppContext, Variables, JWTUtils, OAuth2Utils } from "./hono-types";
+import type { AppContext, Variables, OAuth2Utils } from "./hono-types";
 import { eq } from "drizzle-orm";
 import { profileAsync } from "./server-timing";
 
