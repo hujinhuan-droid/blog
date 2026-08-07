@@ -1,1 +1,1 @@
-export { Button, ButtonWithLoading } from "@rin/ui";
+export { Button, ButtonWithLoading } from "@ai-agent/ui";
