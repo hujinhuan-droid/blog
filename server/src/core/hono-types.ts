@@ -47,6 +47,8 @@ export interface Variables {
     admin: boolean;
     username?: string;
     env: Env;
+    validatedBody?: unknown;
+    validatedQuery?: unknown;
 }
 
 export type AppContext = HonoContext<{
