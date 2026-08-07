@@ -35,11 +35,17 @@ export function UserService(): Hono {
 
         setCookie(c, 'redirect_to', callbackUrl.toString(), {
             path: '/',
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Lax',
         });
 
         const genState = await profileAsync(c, 'user_oauth_state', () => Promise.resolve(oauth2.generateState()));
         setCookie(c, 'state', genState, {
             path: '/',
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Lax',
         });
 
         return c.redirect(oauth2.createRedirectUrl(genState, "GitHub"), 302);
@@ -106,10 +112,12 @@ export function UserService(): Hono {
             await profileAsync(c, 'user_existing_update', () => db.update(users).set(profile).where(eq(users.id, existingUser.id)));
             authToken = await profileAsync(c, 'user_existing_token', () => jwt.sign({ id: existingUser.id }));
             setJWTCookie(c, authToken);
-            // Store token in cookie for frontend to read (not HttpOnly)
+            // Store auth token in HttpOnly cookie only (never expose in URL)
             setCookie(c, 'auth_token', authToken, {
                 expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
                 path: '/',
+                httpOnly: true,
+                secure: true,
                 sameSite: 'Lax',
             });
         } else {
@@ -126,20 +134,25 @@ export function UserService(): Hono {
 
             authToken = await profileAsync(c, 'user_insert_token', () => jwt.sign({ id: result[0].insertedId }));
             setJWTCookie(c, authToken);
-            // Store token in cookie for frontend to read (not HttpOnly)
+            // Store auth token in HttpOnly cookie only (never expose in URL)
             setCookie(c, 'auth_token', authToken, {
                 expires: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7),
                 path: '/',
+                httpOnly: true,
+                secure: true,
                 sameSite: 'Lax',
             });
         }
 
         const redirectTo = getCookie(c, 'redirect_to');
         const redirect_url = new URL(redirectTo || '/');
-        // Add token to URL for frontend to store (for cross-domain auth)
-        if (authToken) {
-            redirect_url.searchParams.set('token', authToken);
-        }
+        // Token is stored in HttpOnly cookie; no need to expose in URL
+        deleteCookie(c, 'redirect_to', {
+            path: '/',
+            httpOnly: true,
+            secure: true,
+            sameSite: 'Lax',
+        });
         return c.redirect(redirect_url.toString(), 302);
     });
 
