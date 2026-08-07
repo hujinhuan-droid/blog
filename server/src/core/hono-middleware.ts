@@ -1,4 +1,4 @@
-// Hono middleware for Rin server
+// Hono middleware for AI Agent server
 import { createMiddleware } from "hono/factory";
 import { getCookie, setCookie } from "hono/cookie";
 import { drizzle } from "drizzle-orm/d1";
