@@ -16,7 +16,10 @@ export function registerErrorHandlers(app: BlogApp) {
   });
 
   app.onError((err: Error, c: Context) => {
-    console.error("Error:", err);
+    const isProd = c.env?.ENVIRONMENT === "production";
+    if (!isProd) {
+      console.error("Error:", err);
+    }
 
     const error = err as Error & {
       code?: string;
@@ -43,7 +46,7 @@ export function registerErrorHandlers(app: BlogApp) {
         success: false,
         error: {
           code: "INTERNAL_ERROR",
-          message: err.message || "An unexpected error occurred",
+          message: isProd ? "An unexpected error occurred" : (err.message || "An unexpected error occurred"),
         },
       },
       500,
