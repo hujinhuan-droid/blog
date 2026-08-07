@@ -228,7 +228,7 @@ export async function friendCrontab(
     clientConfig: CacheImpl
 ) {
     const enable = await serverConfig.getOrDefault('friend_crontab', true);
-    const ua = await serverConfig.get('friend_ua') || 'Rin-Check/0.1.0';
+    const ua = await serverConfig.get('friend_ua') || 'AI Agent-Check/0.1.0';
     
     if (!enable) {
         return;
