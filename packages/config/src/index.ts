@@ -1,4 +1,4 @@
-import type { AIConfig } from "@rin/api";
+import type { AIConfig } from "@ai-agent/api";
 
 export const WEBHOOK_URL_KEY = "WEBHOOK_URL";
 
@@ -14,7 +14,7 @@ export const CLIENT_CONFIG_DEFAULTS = new Map(
     "theme.color": "#fc466b",
     "comment.enabled": true,
     "login.enabled": true,
-    "site.name": "Rin",
+    "site.name": "AI Agent",
     "site.description": "A lightweight personal blogging system",
     "site.avatar": "",
     "site.page_size": 5,
@@ -25,7 +25,7 @@ export const SERVER_CONFIG_DEFAULTS = new Map(
   Object.entries({
     friend_apply_auto_accept: false,
     friend_crontab: true,
-    friend_ua: "Rin-Check/0.1.0",
+    friend_ua: "AI Agent-Check/0.1.0",
     "webhook.method": "POST",
     "webhook.content_type": "application/json",
     "webhook.headers": "{}",
