@@ -1,1 +1,1 @@
-export { WEBHOOK_URL_KEY } from "@rin/config";
+export { WEBHOOK_URL_KEY } from "@ai-agent/config";
