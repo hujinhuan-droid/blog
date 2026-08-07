@@ -1,4 +1,4 @@
-import { WEBHOOK_URL_KEY } from "@rin/config";
+import { WEBHOOK_URL_KEY } from "@ai-agent/config";
 import { getAIConfig } from "../utils/db-config";
 
 type HealthStatus = "success" | "warning" | "danger";
