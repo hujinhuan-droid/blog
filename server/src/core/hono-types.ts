@@ -1,4 +1,4 @@
-// Hono context types for Rin server
+// Hono context types for AI Agent server
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import type { Context as HonoContext } from "hono";
 
