@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { UserService } from '../user';
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
-import type { Variables, JWTUtils, OAuth2Utils } from "../../core/hono-types";
+import type { Variables, JWTUtils } from "../../core/hono-types";
 import { setupTestApp, TestCacheImpl, cleanupTestDB, createMockEnv } from '../../../tests/fixtures';
 import type { Database } from 'bun:sqlite';
 
@@ -80,8 +80,8 @@ describe('UserService', () => {
 
         it('should return 400 if OAuth not configured', async () => {
             const envNoOAuth = createMockEnv({
-                RIN_GITHUB_CLIENT_ID: '',
-                RIN_GITHUB_CLIENT_SECRET: '',
+                BLOG_GITHUB_CLIENT_ID: '',
+                BLOG_GITHUB_CLIENT_SECRET: '',
             });
             
             const appNoOAuth = new Hono<{ Bindings: Env; Variables: Variables }>();
@@ -92,7 +92,7 @@ describe('UserService', () => {
                 c.set('clientConfig', new TestCacheImpl());
                 c.set('jwt', {
                     sign: async (payload: any) => `mock_token_${payload.id}`,
-                    verify: async (token: string) => null,
+                    verify: async (_token: string) => null,
                 } as JWTUtils);
                 c.set('oauth2', undefined);
                 c.set('env', envNoOAuth);
