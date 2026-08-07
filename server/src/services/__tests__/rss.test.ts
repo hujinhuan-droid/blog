@@ -6,14 +6,12 @@ import { createMockDB, createMockEnv, setupTestApp, cleanupTestDB } from '../../
 import type { Database } from 'bun:sqlite';
 
 describe('RSSService', () => {
-    let db: any;
     let sqlite: Database;
     let env: Env;
     let app: Hono<{ Bindings: Env; Variables: Variables }>;
 
     beforeEach(async () => {
         const ctx = await setupTestApp(RSSService);
-        db = ctx.db;
         sqlite = ctx.sqlite;
         env = ctx.env;
         app = ctx.app;
@@ -177,13 +175,11 @@ describe('RSSService', () => {
 });
 
 describe('rssCrontab', () => {
-    let db: any;
     let sqlite: Database;
     let env: Env;
 
     beforeEach(async () => {
         const mockDB = createMockDB();
-        db = mockDB.db;
         sqlite = mockDB.sqlite;
         env = createMockEnv();
         
