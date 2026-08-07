@@ -87,14 +87,7 @@ describe('Security Audit - Mock Implementation Patterns', () => {
                 /fake/i,
             ];
             
-            // Production should not use these patterns
-            const _prodEnvVars = [
-                'DATABASE_URL',
-                'JWT_SECRET',
-                'API_KEY',
-            ];
-            
-            // Just verify patterns work
+            // Verify patterns work against test vs production
             expect(testEnvPatterns.some(p => p.test('test-secret'))).toBe(true);
             expect(testEnvPatterns.some(p => p.test('production-secret'))).toBe(false);
         });
