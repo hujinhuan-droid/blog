@@ -6,7 +6,7 @@ import { setupTestApp, cleanupTestDB } from '../../../tests/fixtures';
 import type { Database } from 'bun:sqlite';
 
 describe('CommentService', () => {
-    let db: any;
+    let _db: any;
     let sqlite: Database;
     let env: Env;
     let app: Hono<{ Bindings: Env; Variables: Variables }>;
@@ -14,7 +14,7 @@ describe('CommentService', () => {
 
     beforeEach(async () => {
         const ctx = await setupTestApp(CommentService);
-        db = ctx.db;
+        _db = ctx.db;
         sqlite = ctx.sqlite;
         env = ctx.env;
         app = ctx.app;
