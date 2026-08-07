@@ -10,13 +10,13 @@
     "isolatedModules": true,
     "baseUrl": ".",
     "paths": {
-      "@rin/api": [
+      "@ai-agent/api": [
         "packages/api/src/index.ts"
       ],
-      "@rin/ui": [
+      "@ai-agent/ui": [
         "packages/ui/src/index.ts"
       ],
-      "@rin/config": [
+      "@ai-agent/config": [
         "packages/config/src/index.ts"
       ]
     }
