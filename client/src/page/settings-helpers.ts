@@ -1,4 +1,4 @@
-import { ConfigWrapper } from "@rin/config";
+import { ConfigWrapper } from "@ai-agent/config";
 import type { TFunction } from "i18next";
 import { client, endpoint } from "../app/runtime";
 import { defaultClientConfig, defaultServerConfig } from "../state/config";
