@@ -7,7 +7,6 @@ import type { Database } from 'bun:sqlite';
 import type { TestCacheImpl } from '../../../tests/fixtures';
 
 describe('FeedService', () => {
-    let db: any;
     let sqlite: Database;
     let env: Env;
     let app: Hono<{ Bindings: Env; Variables: Variables }>;
@@ -17,7 +16,6 @@ describe('FeedService', () => {
 
     beforeEach(async () => {
         const ctx = await setupTestApp(FeedService);
-        db = ctx.db;
         sqlite = ctx.sqlite;
         env = ctx.env;
         app = ctx.app;
