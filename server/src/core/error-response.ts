@@ -1,7 +1,7 @@
 import type { Context } from "hono";
-import type { RinApp } from "./app-types";
+import type { BlogApp } from "./app-types";
 
-export function registerErrorHandlers(app: RinApp) {
+export function registerErrorHandlers(app: BlogApp) {
   app.notFound((c: Context) => {
     return c.json(
       {
