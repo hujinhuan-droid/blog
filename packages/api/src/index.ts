@@ -1,4 +1,4 @@
-// Rin API - Shared API types and schemas
+// AI Agent API - Shared API types and schemas
 // Used by both client and server
 
 // Types
