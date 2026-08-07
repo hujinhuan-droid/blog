@@ -365,7 +365,7 @@
         "desc": "Enable accessibility check for friends' links",
         "title": "Friend Link Health Monitoring",
         "ua": {
-          "desc": "Set the User-Agent used for friend link accessibility check, default 'Rin-Check/1.0'",
+          "desc": "Set the User-Agent used for friend link accessibility check, default 'AI Agent-Check/1.0'",
           "title": "Friend Link Health Monitoring User-Agent"
         }
       },
