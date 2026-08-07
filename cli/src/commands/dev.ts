@@ -30,7 +30,7 @@ function createWranglerArgs(port: number) {
 function createViteEnv(serverPort?: number) {
   return {
     ...process.env,
-    RIN_VITE_CACHE_DIR: `/tmp/rin-vite-cache-${serverPort ?? "client"}`,
+    RIN_VITE_CACHE_DIR: `/tmp/ai-agent-vite-cache-${serverPort ?? "client"}`,
     ...(serverPort ? { RIN_SERVER_PORT: String(serverPort) } : {}),
   };
 }
