@@ -3,9 +3,9 @@ import {
     CLIENT_CONFIG_DEFAULTS,
     ConfigWrapper,
     SERVER_CONFIG_DEFAULTS,
-} from "@rin/config";
+} from "@ai-agent/config";
 
-export { ConfigWrapper } from "@rin/config";
+export { ConfigWrapper } from "@ai-agent/config";
 
 export const defaultClientConfig = CLIENT_CONFIG_DEFAULTS;
 export const defaultServerConfig = SERVER_CONFIG_DEFAULTS;
