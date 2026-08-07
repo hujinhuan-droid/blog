@@ -29,7 +29,7 @@ declare namespace Cloudflare {
 		S3_BUCKET: "your-bucket-name";
 		S3_FORCE_PATH_STYLE: string;
 		WEBHOOK_URL: "";
-		RSS_TITLE: "Rin Development";
+		RSS_TITLE: "AI Agent Development";
 		RSS_DESCRIPTION: "Development Environment";
 		RIN_GITHUB_CLIENT_ID: string;
 		RIN_GITHUB_CLIENT_SECRET: string;
