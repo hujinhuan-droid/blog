@@ -104,7 +104,7 @@ export function PasswordAuthService(): Hono<{
             }
 
             // Verify stored password and update if admin password changed
-            const passwordValid = await profileAsync(c, 'auth_admin_verify', () => verifyPassword(adminPassword, user.password));
+            const passwordValid = await profileAsync(c, 'auth_admin_verify', () => verifyPassword(adminPassword, user.password ?? ""));
             if (!passwordValid) {
                 const salt = await profileAsync(c, 'auth_admin_salt_update', () => Promise.resolve(generateSalt()));
                 const newSaltedHash = await profileAsync(c, 'auth_admin_hash_update', () => hashPassword(adminPassword, salt));
@@ -139,7 +139,7 @@ export function PasswordAuthService(): Hono<{
             throw new ForbiddenError('Invalid credentials');
         }
 
-        const passwordValid = await profileAsync(c, 'auth_user_verify', () => verifyPassword(password, user.password));
+        const passwordValid = await profileAsync(c, 'auth_user_verify', () => verifyPassword(password, user.password ?? ""));
         if (!passwordValid) {
             throw new ForbiddenError('Invalid credentials');
         }
