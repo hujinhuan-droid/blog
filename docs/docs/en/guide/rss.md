@@ -1,6 +1,6 @@
 # RSS Support and Configuration
 
-Rin supports RSS, Atom, and Json subscription formats
+AI Agent supports RSS, Atom, and Json subscription formats
 
 ## Configuration
 
@@ -10,7 +10,7 @@ RSS itself does not require much configuration and is ready to use by default. H
 
 ```ini
 RSS_TITLE=<RSS title, defaults to your username>
-RSS_DESCRIPTION=<RSS description, defaults to Feed from Rin>
+RSS_DESCRIPTION=<RSS description, defaults to Feed from AI Agent>
 ```
 
 You can add these environment variables in GitHub under `Settings` > `Secrets and Variables` > `Actions` > `Variables` > `New repository variable`.
