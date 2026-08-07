@@ -3,7 +3,6 @@ import _ from 'lodash';
 import {useCallback, useEffect, useState} from "react";
 import {Helmet} from "react-helmet";
 import {useTranslation} from "react-i18next";
-import Loading from 'react-loading';
 import {ShowAlertType, useAlert} from '../components/dialog';
 import {Checkbox, Input} from "../components/input";
 import { DateTimeInput, FlatMetaRow, FlatPanel } from "@ai-agent/ui";
@@ -13,6 +12,31 @@ import {useSiteConfig} from "../hooks/useSiteConfig";
 import {siteName} from "../utils/constants";
 import mermaid from 'mermaid';
 import { MarkdownEditor } from '../components/markdown_editor';
+
+/** Extended feed data returned by GET /api/feed/:id (includes editorial fields) */
+interface FeedEditorData {
+  title: string | null;
+  content: string;
+  hashtags: Array<{ name: string; id: number }>;
+  alias?: string;
+  summary?: string;
+  listed: number;
+  draft: number;
+  createdAt: string;
+}
+
+// Loading spinner for the editor page
+function EditorLoading({ t }: { t: (key: string) => string }) {
+  return (
+    <div className="flex flex-row items-center space-x-2 px-2">
+      <svg className="animate-spin h-4 w-4 text-[#FC466B]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+      <span className="text-sm text-neutral-500">{t('uploading')}</span>
+    </div>
+  );
+}
 
 async function publish({
   title,
@@ -188,15 +212,16 @@ export function WritingPage({ id }: { id?: number }) {
         .get(id)
         .then(({ data }) => {
           if (data) {
-            if (title == "" && data.title) setTitle(data.title);
-            if (tags == "" && Array.isArray(data.hashtags))
-              setTags(data.hashtags.map(({ name }: {name: string}) => `#${name}`).join(" "));
-            if (alias == "" && (data as any).alias) setAlias((data as any).alias);
-            if (content == "") setContent(data.content);
-            if (summary == "") setSummary((data as any).summary || "");
-            setListed((data as any).listed === 1);
-            setDraft((data as any).draft === 1);
-            setCreatedAt(new Date(data.createdAt));
+            const feedData = data as FeedEditorData;
+            if (title == "" && feedData.title) setTitle(feedData.title);
+            if (tags == "" && Array.isArray(feedData.hashtags))
+              setTags(feedData.hashtags.map(({ name }: {name: string}) => `#${name}`).join(" "));
+            if (alias == "" && feedData.alias) setAlias(feedData.alias);
+            if (content == "") setContent(feedData.content);
+            if (summary == "") setSummary(feedData.summary || "");
+            setListed(feedData.listed === 1);
+            setDraft(feedData.draft === 1);
+            setCreatedAt(new Date(feedData.createdAt));
           }
         });
     }
@@ -233,7 +258,10 @@ export function WritingPage({ id }: { id?: number }) {
         className={`inline-flex items-center justify-center gap-2 rounded-xl bg-theme px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-theme-hover active:bg-theme-active disabled:cursor-not-allowed disabled:opacity-60 ${className ?? ""}`}
         disabled={publishing}
       >
-        {publishing && <Loading type="spin" height={16} width={16} />}
+        {publishing && <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>}
         <span>{t('publish.title')}</span>
       </button>
     );
