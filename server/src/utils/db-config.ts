@@ -1,5 +1,5 @@
-import type { AIConfig } from "@rin/api";
-import { AI_CONFIG_PREFIX, DEFAULT_AI_CONFIG } from "@rin/config";
+import type { AIConfig } from "@ai-agent/api";
+import { AI_CONFIG_PREFIX, DEFAULT_AI_CONFIG } from "@ai-agent/config";
 
 type ConfigReader = {
     get(key: string): Promise<unknown>;
