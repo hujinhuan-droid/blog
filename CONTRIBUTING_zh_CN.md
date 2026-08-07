@@ -1,4 +1,4 @@
-# 为 Rin 做贡献
+# 为 AI Agent 做贡献
 
 [English](./CONTRIBUTING.md) | 简体中文
 
@@ -47,7 +47,7 @@ cp .\cli\templates\git-commit-msg.sh .\.git\hooks\commit-msg
 
 6. 执行数据库迁移
    > [!TIP]  
-   > 如果您的数据库名称(`wrangler.toml`中`database_name`)不为 `rin`\
+   > 如果您的数据库名称(`wrangler.toml`中`database_name`)不为 `ai-agent`\
    > 请在执行迁移之前通过本地环境变量或 CLI 参数指定 `DB_NAME`
     ```sh
     bun run db:migrate
