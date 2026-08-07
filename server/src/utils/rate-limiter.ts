@@ -1,5 +1,4 @@
 import type { Context, Next } from "hono";
-import { RateLimitError } from "../errors";
 
 interface RateLimitEntry {
   count: number;
