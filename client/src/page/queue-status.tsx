@@ -1,4 +1,4 @@
-import { SettingsBadge, SettingsCard, SettingsCardBody, SettingsCardHeader } from "@rin/ui";
+import { SettingsBadge, SettingsCard, SettingsCardBody, SettingsCardHeader } from "@ai-agent/ui";
 import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useTranslation } from "react-i18next";
