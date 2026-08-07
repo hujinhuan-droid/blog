@@ -175,11 +175,13 @@ describe('RSSService', () => {
 });
 
 describe('rssCrontab', () => {
+    let db: any;
     let sqlite: Database;
     let env: Env;
 
     beforeEach(async () => {
         const mockDB = createMockDB();
+        db = mockDB.db;
         sqlite = mockDB.sqlite;
         env = createMockEnv();
         
