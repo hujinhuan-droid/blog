@@ -1,6 +1,6 @@
-# Rin Migration Guide (v0.3.0)
+# AI Agent Migration Guide (v0.3.0)
 
-This guide helps existing Rin users migrate to the latest version.
+This guide helps existing AI Agent users migrate to the latest version.
 
 ## Overview of Changes
 
@@ -48,7 +48,7 @@ If you prefer simple username/password authentication over GitHub OAuth:
 
 ### Step 3: Remove Pages (Optional but Recommended)
 
-Starting from 0.3.0, Rin now uses Workers to host static assets instead of Cloudflare Pages. Follow these steps to migrate:
+Starting from 0.3.0, AI Agent now uses Workers to host static assets instead of Cloudflare Pages. Follow these steps to migrate:
 
 1. **Unbind Pages Domain**
    - Go to Cloudflare Dashboard → Pages
@@ -57,7 +57,7 @@ Starting from 0.3.0, Rin now uses Workers to host static assets instead of Cloud
 
 2. **Bind Domain to Worker**
    - Go to Cloudflare Dashboard → Workers & Pages
-   - Select your Worker (`rin-server`)
+   - Select your Worker (`ai-agent-server`)
    - Click "Triggers" → "Add Custom Domain"
    - Enter your domain and save
 
