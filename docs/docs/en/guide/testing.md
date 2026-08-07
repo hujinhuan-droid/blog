@@ -1,10 +1,10 @@
 # Testing Guide
 
-This document provides a comprehensive guide to testing in the Rin project.
+This document provides a comprehensive guide to testing in the AI Agent project.
 
 ## Overview
 
-Rin uses different testing frameworks for the client and server:
+AI Agent uses different testing frameworks for the client and server:
 
 - **Client**: [Vitest](https://vitest.dev/) with jsdom environment for React component testing
 - **Server**: [Bun's native test runner](https://bun.sh/docs/cli/test) with in-memory SQLite database
