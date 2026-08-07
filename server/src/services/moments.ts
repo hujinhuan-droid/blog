@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { moments } from "../db/schema";
 import type { AppContext } from "../core/hono-types";
 import { profileAsync } from "../core/server-timing";
-import { momentCreateSchema, momentUpdateSchema } from "@rin/api";
+import { momentCreateSchema, momentUpdateSchema } from "@ai-agent/api";
 
 export function MomentsService(): Hono {
     const app = new Hono();
