@@ -1,11 +1,11 @@
 # Webhook 指南
 
-Rin 可以在以下场景向自定义 webhook 发送通知：
+AI Agent 可以在以下场景向自定义 webhook 发送通知：
 
 - 有新评论时
 - 有新的友链申请时
 
-你可以用它把 Rin 接到 Discord、Telegram Bot、Slack 网关、飞书、钉钉、n8n、Zapier，或者你自己的 HTTP 服务。
+你可以用它把 AI Agent 接到 Discord、Telegram Bot、Slack 网关、飞书、钉钉、n8n、Zapier，或者你自己的 HTTP 服务。
 
 ## 在哪里配置
 
@@ -15,7 +15,7 @@ Rin 可以在以下场景向自定义 webhook 发送通知：
 
 ## 支持的配置项
 
-Rin 当前支持以下 webhook 配置：
+AI Agent 当前支持以下 webhook 配置：
 
 - `Webhook URL`：目标地址。这里也支持模板变量，尤其适合 GET 场景拼接 query string。
 - `Webhook Method`：`GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`HEAD`、`OPTIONS`
@@ -38,7 +38,7 @@ Rin 当前支持以下 webhook 配置：
 
 ## 默认行为
 
-如果你只配置了 `Webhook URL`，Rin 默认会使用：
+如果你只配置了 `Webhook URL`，AI Agent 默认会使用：
 
 - Method：`POST`
 - Content-Type：`application/json`
@@ -62,7 +62,7 @@ https://example.com/webhook?event={{event}}&message={{message}}&title={{title}}
 - Method：`GET`
 - Body Template：保持默认或忽略
 
-Rin 会对 GET 风格 URL 中的查询参数值进行 URL 编码。
+AI Agent 会对 GET 风格 URL 中的查询参数值进行 URL 编码。
 
 ## JSON POST 示例
 
@@ -78,7 +78,7 @@ https://example.com/webhook
 
 ```json
 {
-  "X-Rin-Event": "{{event}}"
+  "X-AI Agent-Event": "{{event}}"
 }
 ```
 
@@ -101,8 +101,8 @@ https://example.com/webhook
 - `GET` 和 `HEAD` 请求不会发送请求体。
 - webhook URL 中的模板变量在替换前会先进行 URL 编码。
 - `Webhook Headers` 在模板渲染后必须仍然是合法 JSON。
-- 如果 `Webhook Headers` 或 `Webhook Body Template` 本身是合法 JSON，Rin 会按 JSON 字符串规则转义插入值，避免破坏 JSON 结构。
-- 如果请求体模板不是合法 JSON，Rin 会保持原有的纯文本替换行为。
+- 如果 `Webhook Headers` 或 `Webhook Body Template` 本身是合法 JSON，AI Agent 会按 JSON 字符串规则转义插入值，避免破坏 JSON 结构。
+- 如果请求体模板不是合法 JSON，AI Agent 会保持原有的纯文本替换行为。
 - 在正式保存前，建议先用“发送测试 Webhook”验证一次。
 
 ## 常见问题
@@ -123,7 +123,7 @@ https://example.com/webhook
 
 ### 我只想收到一条简单消息
 
-保持默认配置，只填写 `Webhook URL` 即可。Rin 会发送：
+保持默认配置，只填写 `Webhook URL` 即可。AI Agent 会发送：
 
 ```json
 {"content":"<message>"}
