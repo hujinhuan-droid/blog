@@ -1,4 +1,4 @@
-# Contribute to Rin
+# Contribute to AI Agent
 
 We are happy to accept your patches and contributions to this project. You just need to follow some small guidelines.
 
