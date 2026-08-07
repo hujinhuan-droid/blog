@@ -1,1 +1,1 @@
-export { Waiting } from "@rin/ui";
+export { Waiting } from "@ai-agent/ui";
