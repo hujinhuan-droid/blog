@@ -1,6 +1,6 @@
 # 环境变量配置指南
 
-Rin 部署需要配置两类环境变量：**Variables（明文变量）**和**Secrets（加密变量）**。
+AI Agent 部署需要配置两类环境变量：**Variables（明文变量）**和**Secrets（加密变量）**。
 
 ## 快速区分
 
@@ -19,7 +19,7 @@ Rin 部署需要配置两类环境变量：**Variables（明文变量）**和**S
 
 | 变量名 | 必填 | 描述 | 默认值 | 配置键名 |
 |--------|------|------|--------|----------|
-| `NAME` | 否 | 网站名称 | Rin | `site.name` |
+| `NAME` | 否 | 网站名称 | AI Agent | `site.name` |
 | `DESCRIPTION` | 否 | 网站描述 | A lightweight personal blogging system | `site.description` |
 | `AVATAR` | 否 | 网站头像 URL | - | `site.avatar` |
 | `PAGE_SIZE` | 否 | 默认分页大小 | 5 | `site.page_size` |
