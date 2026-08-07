@@ -4,7 +4,7 @@ pageType: home
 hero:
   tagline: Dynamic blog system based on Cloudflare
   image:
-    src: /rin-logo.png
+    src: /ai-agent-logo.png
   actions:
     - theme: brand
       text: Quick Start
@@ -23,7 +23,7 @@ features:
     details: No build for write, just write and edit real-time
     icon: 🪶
   - title: Type Safety
-    details: End-to-end type safety with shared @rin/api types
+    details: End-to-end type safety with shared @ai-agent/api types
     icon: 🛡️
   - title: Health check
     details: Check your friends link every 20 minutes
