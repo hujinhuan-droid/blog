@@ -1,4 +1,4 @@
-# Rin 文档
+# AI Agent 文档
 
 本文档站点使用 [Rspress](https://rspress.dev/) 构建。
 
