@@ -27,7 +27,7 @@ export function HashtagsPage() {
         if (ref.current) return;
         client.tag.list().then(({ data }) => {
             if (data) {
-                setHashtags(data as any);
+                setHashtags(data);
             }
         });
         ref.current = true;
