@@ -95,7 +95,7 @@ export function ConfigService(): Hono {
             webhookBodyTemplate: resolvedWebhookBodyTemplate,
         } = await wrapTime(c, 'webhook_config', resolveWebhookConfig(serverConfig, env, body));
         const frontendUrl = new URL(c.req.url).origin;
-        const testMessage = body.test_message?.trim() || "This is a test webhook message from Rin settings.";
+        const testMessage = body.test_message?.trim() || "This is a test webhook message from AI Agent settings.";
 
         if (!webhookUrl?.trim()) {
             return c.json({ success: false, error: "Webhook URL is required" }, 400);
