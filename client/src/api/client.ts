@@ -1,4 +1,4 @@
-// API Client for Rin - Type-safe HTTP client to replace Eden
+// API Client for AI Agent - Type-safe HTTP client to replace Eden
 // This client provides a clean, type-safe interface for all backend API endpoints
 
 import { getAuthToken } from "../utils/auth";
@@ -34,7 +34,7 @@ import type {
   LoginRequest,
   LoginResponse,
   SiteStatsResponse,
-} from "@rin/api";
+} from "@ai-agent/api";
 
 export interface SettingsConfigResponse {
   clientConfig: ConfigResponse;
@@ -157,7 +157,7 @@ export type {
   LoginRequest,
   LoginResponse,
   SiteStatsResponse,
-} from "@rin/api";
+} from "@ai-agent/api";
 
 
 /**
