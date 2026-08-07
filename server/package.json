@@ -41,7 +41,8 @@
     "remark-gfm": "^4.0.0",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.0",
-    "unified": "^11.0.4"
+    "unified": "^11.0.4",
+    "zod": "^3.23.0"
   },
   "trustedDependencies": [
     "es5-ext"
