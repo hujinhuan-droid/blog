@@ -1,11 +1,11 @@
 # Webhook Guide
 
-Rin can send notifications to a custom webhook when:
+AI Agent can send notifications to a custom webhook when:
 
 - a new comment is created
 - a new friend-link application is submitted
 
-You can use this to connect Rin to Discord, Telegram bots, Slack gateways, Feishu, DingTalk, n8n, Zapier, or any custom HTTP endpoint.
+You can use this to connect AI Agent to Discord, Telegram bots, Slack gateways, Feishu, DingTalk, n8n, Zapier, or any custom HTTP endpoint.
 
 ## Where to Configure It
 
@@ -15,7 +15,7 @@ You can also provide an initial default through the `WEBHOOK_URL` environment va
 
 ## Supported Fields
 
-Rin currently supports these webhook settings:
+AI Agent currently supports these webhook settings:
 
 - `Webhook URL`: target endpoint. Template variables are supported here too, which is especially useful for GET query strings.
 - `Webhook Method`: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, or `OPTIONS`
@@ -38,7 +38,7 @@ You can use these variables in the webhook URL, headers, and body template:
 
 ## Default Behavior
 
-If you only set `Webhook URL`, Rin uses:
+If you only set `Webhook URL`, AI Agent uses:
 
 - method: `POST`
 - content type: `application/json`
@@ -62,7 +62,7 @@ Recommended settings:
 - Method: `GET`
 - Body template: leave default or ignore it
 
-Rin will URL-encode query parameter values for GET-style URLs.
+AI Agent will URL-encode query parameter values for GET-style URLs.
 
 ## JSON POST Example
 
@@ -78,7 +78,7 @@ https://example.com/webhook
 
 ```json
 {
-  "X-Rin-Event": "{{event}}"
+  "X-AI Agent-Event": "{{event}}"
 }
 ```
 
@@ -101,8 +101,8 @@ https://example.com/webhook
 - `GET` and `HEAD` requests do not send a request body.
 - Template variables in webhook URLs are URL-encoded before substitution.
 - `Webhook Headers` must be valid JSON after template rendering.
-- If `Webhook Headers` or `Webhook Body Template` is valid JSON, Rin escapes inserted values as JSON strings to avoid breaking the JSON structure.
-- If the body template is not valid JSON, Rin keeps plain-text substitution behavior unchanged.
+- If `Webhook Headers` or `Webhook Body Template` is valid JSON, AI Agent escapes inserted values as JSON strings to avoid breaking the JSON structure.
+- If the body template is not valid JSON, AI Agent keeps plain-text substitution behavior unchanged.
 - The test button is the fastest way to verify your endpoint before saving.
 
 ## Troubleshooting
@@ -123,7 +123,7 @@ Check:
 
 ### I only want a simple message
 
-Keep the defaults and set only `Webhook URL`. Rin will send:
+Keep the defaults and set only `Webhook URL`. AI Agent will send:
 
 ```json
 {"content":"<message>"}
