@@ -179,8 +179,8 @@ export function createMockEnv(overrides: Partial<Env> = {}): Env {
         WEBHOOK_URL: '',
         RSS_TITLE: 'Test Blog',
         RSS_DESCRIPTION: 'Test Environment',
-        RIN_GITHUB_CLIENT_ID: 'test-client-id',
-        RIN_GITHUB_CLIENT_SECRET: 'test-client-secret',
+        BLOG_GITHUB_CLIENT_ID: 'test-client-id',
+        BLOG_GITHUB_CLIENT_SECRET: 'test-client-secret',
         JWT_SECRET: 'test-jwt-secret',
         S3_ACCESS_KEY_ID: 'test-access-key',
         S3_SECRET_ACCESS_KEY: 'test-secret-key',
@@ -339,14 +339,14 @@ export async function setupTestApp(
                 sign: async (payload: any) => `mock_token_${payload.id}`,
                 verify: async (token: string) => {
                     const match = token.match(/mock_token_(\d+)/);
-                    return match ? { id: parseInt(match[1]) } : null;
+                    return match ? { id: parseInt(match[1]), username: 'testuser' } : null;
                 },
             };
 
             const oauth2: OAuth2Utils = {
                 generateState: () => 'mock_state',
-                createRedirectUrl: (state: string, provider: string) => `https://github.com/login?state=${state}`,
-                authorize: async (provider: string, code: string) => code === 'valid_code' ? { accessToken: 'gh_token' } : null,
+                createRedirectUrl: (state: string, _provider: string) => `https://github.com/login?state=${state}`,
+                authorize: async (_provider: string, code: string) => code === 'valid_code' ? { accessToken: 'gh_token' } : null,
             };
 
             c.set('db', db as any);
