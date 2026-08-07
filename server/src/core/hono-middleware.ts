@@ -8,21 +8,19 @@ import { profileAsync } from "./server-timing";
 
 // Lazy initialization container
 class LazyInitContainer {
-    private env: Env;
     private instances: Map<string, unknown> = new Map();
     private initializing: Map<string, Promise<unknown>> = new Map();
 
-    constructor(env: Env) {
-        this.env = env;
+    constructor(_env: Env) {
     }
 
     async get<T>(key: string, factory: () => Promise<T>): Promise<T> {
         if (this.instances.has(key)) {
-            return this.instances.get(key);
+            return this.instances.get(key) as T;
         }
 
         if (this.initializing.has(key)) {
-            return this.initializing.get(key);
+            return this.initializing.get(key) as Promise<T>;
         }
 
         const initPromise = factory().then(instance => {
