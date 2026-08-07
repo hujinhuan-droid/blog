@@ -1,4 +1,4 @@
-# Contribute to Rin
+# Contribute to AI Agent
 
 English | [简体中文](./CONTRIBUTING_zh_CN.md)
 
@@ -48,7 +48,7 @@ If you want to skip the hook, run `git commit` with the `--no-verify` option.
 
 6. Perform the database migration
    > [!TIP]  
-   > If your database name (`database_name` in `wrangler.toml`) is not `rin`\
+   > If your database name (`database_name` in `wrangler.toml`) is not `ai-agent`\
    > Please modify `DB_NAME` in your local env or pass the CLI option before performing the migration
     ```sh
     bun run db:migrate
