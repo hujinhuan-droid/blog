@@ -2,7 +2,6 @@ import type { Context, Middleware } from "./types";
 import {
   AppError,
   isAppError,
-  createErrorResponse,
   InternalServerError,
 } from "../errors";
 
@@ -21,7 +20,7 @@ export function generateRequestId(): string {
 // ============================================================================
 
 export function errorHandlerMiddleware(): Middleware {
-  return async (context: Context, env: Env): Promise<Response | void> => {
+  return async (_context: Context, _env: Env): Promise<Response | void> => {
     // Request ID is generated in the router and passed through context
     // This middleware doesn't need to do anything on the way in
     return undefined;
