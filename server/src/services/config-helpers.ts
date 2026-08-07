@@ -3,7 +3,7 @@ import {
   CLIENT_CONFIG_ENV_DEFAULTS,
   SENSITIVE_SERVER_CONFIG_FIELDS,
   WEBHOOK_URL_KEY,
-} from "@rin/config";
+} from "@ai-agent/config";
 import { getFrontendAIEnabled, readAIConfigFromMap } from "../utils/db-config";
 
 type ConfigMapLike = {
