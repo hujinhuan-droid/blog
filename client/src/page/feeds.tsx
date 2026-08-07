@@ -10,7 +10,7 @@ import { useSiteConfig } from "../hooks/useSiteConfig";
 import { siteName } from "../utils/constants"
 import { tryInt } from "../utils/int"
 import { SiteTraffic } from "../components/site-traffic"
-import type { SiteStatsResponse } from "@rin/api"
+import type { SiteStatsResponse } from "@ai-agent/api"
 import { useTranslation } from "react-i18next";
 
 type FeedsData = {
