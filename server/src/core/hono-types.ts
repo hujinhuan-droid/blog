@@ -12,7 +12,7 @@ export interface JwtPayload {
 }
 
 export interface JWTUtils {
-    sign(payload: JwtPayload): Promise<string>;
+    sign(payload: Record<string, unknown>): Promise<string>;
     verify(token: string): Promise<JwtPayload | null>;
 }
 
