@@ -1,18 +1,14 @@
 import { cors } from "hono/cors";
 import { timing } from "hono/timing";
+import { createMiddleware } from "hono/factory";
 import { authMiddleware, initContainerMiddleware } from "./hono-middleware";
 import { csrfSetCookie } from "../utils/csrf";
 import type { BlogApp } from "./app-types";
 
-function getAllowedOrigins(env: Env): (string | RegExp)[] {
-  // Use ALLOWED_ORIGINS env var (comma-separated), fallback to wildcard for dev
-  const configured = env.ALLOWED_ORIGINS;
-  if (configured) {
-    return configured.split(",").map((s) => s.trim()).filter(Boolean);
-  }
-  // In dev/local, allow all localhost origins
-  return [/^https?:\/\/localhost(:\d+)?$/];
-}
+// CORS whitelist: allow localhost origins for development
+const allowedOrigins: (string | RegExp)[] = [
+  /^https?:\/\/localhost(:\d+)?$/,
+];
 
 export function registerMiddlewares(app: BlogApp) {
   // Security headers
@@ -33,14 +29,13 @@ export function registerMiddlewares(app: BlogApp) {
     "*",
     cors({
       origin: (origin) => {
-        const allowed = getAllowedOrigins(c.env);
         // Allow requests with no origin (curl, server-to-server)
         if (!origin) return origin;
-        for (const pattern of allowed) {
+        for (const pattern of allowedOrigins) {
           if (typeof pattern === "string" && pattern === origin) return origin;
           if (pattern instanceof RegExp && pattern.test(origin)) return origin;
         }
-        return allowed[0] ? String(allowed[0]) : "";
+        return "";
       },
       allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
       allowHeaders: ["content-type", "authorization", "x-csrf-token"],
@@ -50,7 +45,7 @@ export function registerMiddlewares(app: BlogApp) {
   );
 
   app.use("*", timing({ totalDescription: "" }));
-  app.use("*", csrfSetCookie);
+  app.use("*", createMiddleware(csrfSetCookie()));
   app.use("*", initContainerMiddleware);
   app.use("*", authMiddleware);
 }
