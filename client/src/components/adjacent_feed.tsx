@@ -1,4 +1,4 @@
-import type { AdjacentFeed, AdjacentFeedResponse } from "@rin/api";
+import type { AdjacentFeed, AdjacentFeedResponse } from "@ai-agent/api";
 import {useEffect, useState} from "react";
 import { client } from "../app/runtime";
 import {timeago} from "../utils/timeago.ts";
