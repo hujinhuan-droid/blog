@@ -6,7 +6,6 @@ import type { Database } from "bun:sqlite";
 import type { Variables } from "../../core/hono-types";
 
 describe("ConfigService", () => {
-    let db: any;
     let sqlite: Database;
     let env: Env;
     let app: Hono<{ Bindings: Env; Variables: Variables }>;
@@ -14,7 +13,6 @@ describe("ConfigService", () => {
 
     beforeEach(async () => {
         const ctx = await setupTestApp(ConfigService);
-        db = ctx.db;
         sqlite = ctx.sqlite;
         env = ctx.env;
         app = ctx.app;
