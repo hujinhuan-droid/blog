@@ -17,8 +17,8 @@ import { MomentItem } from "../components/moment_item"
 interface Moment {
     id: number;
     content: string;
-    createdAt: Date;
-    updatedAt: Date;
+    createdAt: string;
+    updatedAt: string;
     user: {
         id: number;
         username: string;
@@ -67,9 +67,9 @@ export function MomentsPage() {
                 setHasNextPage(data.hasNext)
                 
                 if (append) {
-                    setMoments(prev => [...prev, ...momentData] as any)
+                    setMoments(prev => [...prev, ...momentData])
                 } else {
-                    setMoments(momentData as any)
+                    setMoments(momentData)
                 }
                 
                 setCurrentPage(page)
