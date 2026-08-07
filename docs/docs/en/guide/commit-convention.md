@@ -1,6 +1,6 @@
 # Commit Message Convention
 
-This document outlines the commit message convention for the Rin project. Following these conventions allows us to automatically generate changelogs and release notes.
+This document outlines the commit message convention for the AI Agent project. Following these conventions allows us to automatically generate changelogs and release notes.
 
 ## Format
 
