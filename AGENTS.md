@@ -1,9 +1,9 @@
-# AGENTS.md - Rin Project Guidelines
+# AGENTS.md - AI Agent Project Guidelines
 
 ## Build Commands
 
 ```bash
-# Development (using Rin CLI)
+# Development (using AI Agent CLI)
 bun dev                    # Start both client and server
 bun dev:client            # Client only (Vite + React)
 bun dev:server            # Server only (Wrangler dev server on port 11498)
@@ -13,7 +13,7 @@ bun dev:cron              # Server with cron triggers enabled
 bun run build             # Build all workspaces (turbo)
 bun run check             # TypeScript type check (turbo)
 
-# Database (using Rin CLI)
+# Database (using AI Agent CLI)
 bun run db:generate       # Generate Drizzle migrations
 bun run db:migrate        # Run local database migrations
 
@@ -21,12 +21,12 @@ bun run db:migrate        # Run local database migrations
 bun run format:check      # Check formatting
 bun run format:write      # Fix formatting
 
-# Deployment (using Rin CLI)
+# Deployment (using AI Agent CLI)
 bun run deploy            # Deploy both frontend (Pages) and backend (Workers)
 bun run deploy:server     # Deploy backend only
  bun run deploy:client     # Deploy frontend only
 
-# Release (using Rin CLI)
+# Release (using AI Agent CLI)
 bun run release <version> # Create a new release (patch/minor/major/x.y.z)
 
 # Testing
@@ -35,22 +35,22 @@ bun run test:server       # Run server tests only
  bun run test:coverage     # Run tests with coverage report
 ```
 
-## Rin CLI
+## AI Agent CLI
 
-The project uses a unified CLI tool located at `cli/bin/rin.ts`. Command implementations live under `cli/src/{commands,tasks,lib}`.
+The project uses a unified CLI tool located at `cli/bin/ai-agent.ts`. Command implementations live under `cli/src/{commands,tasks,lib}`.
 
 ### CLI Commands
-- `bun cli/bin/rin.ts dev [options]` - Start development server
-- `bun cli/bin/rin.ts deploy [options]` - Deploy to Cloudflare
-- `bun cli/bin/rin.ts db migrate` - Run database migrations
-- `bun cli/bin/rin.ts release <version>` - Create a new release
+- `bun cli/bin/ai-agent.ts dev [options]` - Start development server
+- `bun cli/bin/ai-agent.ts deploy [options]` - Deploy to Cloudflare
+- `bun cli/bin/ai-agent.ts db migrate` - Run database migrations
+- `bun cli/bin/ai-agent.ts release <version>` - Create a new release
 
 ## Architecture Status
 
 This repository is a product monorepo, not a framework monorepo.
 
-- `rin` should learn from `~/projects/rine` on module boundaries and type discipline.
-- `rin` should NOT blindly copy `rine`'s `contracts/core/renderer/adapters/apps` layout.
+- `ai-agent` should learn from `~/projects/rine` on module boundaries and type discipline.
+- `ai-agent` should NOT blindly copy `rine`'s `contracts/core/renderer/adapters/apps` layout.
 - The current repository still centers around a concrete app: React frontend, Cloudflare Worker backend, shared API package, and local CLI tooling.
 - If a change improves directory symmetry but does not improve dependency boundaries, it is usually the wrong refactor.
 
@@ -67,7 +67,7 @@ This repository is a product monorepo, not a framework monorepo.
 When restructuring, prefer this target shape over a direct clone of `rine`:
 
 ```text
-rin/
+ai-agent/
 ├── apps/
 │   ├── web/            # current client app
 │   └── worker/         # current server app
@@ -150,7 +150,7 @@ If those checks are not done, the refactor is not ready.
 
 Avoid these common mistakes:
 
-- Copying `rine` abstractions into `rin` without a product need.
+- Copying `rine` abstractions into `ai-agent` without a product need.
 - Moving files into `packages/` while still importing app internals from them.
 - Creating `core` modules that actually contain product-specific assembly.
 - Mixing sensitive server-only configuration logic with client-safe config views.
@@ -275,12 +275,12 @@ blog-src/
 │   │   ├── core/       # Router and types
 │   │   └── utils/      # Utilities
 ├── packages/        # Shared packages
-│   └── api/         # @rin/api - Shared API types
-├── cli/             # Rin CLI tool
+│   └── api/         # @ai-agent/api - Shared API types
+├── cli/             # AI Agent CLI tool
 │   └── bin/
-│       └── rin.ts   # CLI entry point
+│       └── ai-agent.ts   # CLI entry point
 ├── docs/            # Rspress documentation
-├── cli/             # Rin CLI entrypoints, commands, tasks, templates
+├── cli/             # AI Agent CLI entrypoints, commands, tasks, templates
 └── scripts/         # Compatibility wrappers around CLI tasks
 ```
 
@@ -288,7 +288,7 @@ blog-src/
 
 - **Client**: React 18, Vite, TailwindCSS, Wouter (routing), i18next, Vitest
 - **Server**: Hono-like router, Drizzle ORM, Cloudflare Workers/D1, bun:test
-- **Shared Types**: @rin/api package for type-safe API communication
+- **Shared Types**: @ai-agent/api package for type-safe API communication
 - **Package Manager**: Bun
 - **Build**: Turbo for monorepo orchestration
 - **Testing**: Vitest (client), Bun native test runner (server)
