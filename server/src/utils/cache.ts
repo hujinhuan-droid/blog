@@ -1,4 +1,4 @@
-import { eq, and, like } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import type { DB } from "../core/hono-types";
 import { cache } from "../db/schema";
 import { path_join } from "./path";
@@ -128,8 +128,8 @@ class DatabaseStorageProvider implements StorageProvider {
 class S3StorageProvider implements StorageProvider {
     private cacheKey: string;
 
-    constructor(private env: Env, private cacheMap: Map<string, any>, private type: string) {
-        this.cacheKey = path_join(this.env.S3_CACHE_FOLDER || 'cache', `${type}.json`);
+    constructor(private env: Env, private cacheMap: Map<string, any>, private _type: string) {
+        this.cacheKey = path_join(this.env.S3_CACHE_FOLDER || 'cache', `${_type}.json`);
     }
 
     async load(): Promise<void> {
