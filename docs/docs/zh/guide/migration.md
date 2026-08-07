@@ -1,6 +1,6 @@
-# Rin 迁移指南 (v0.3.0)
+# AI Agent 迁移指南 (v0.3.0)
 
-本指南帮助现有 Rin 用户迁移到最新版本。
+本指南帮助现有 AI Agent 用户迁移到最新版本。
 
 ## 变更概览
 
@@ -48,7 +48,7 @@ GITHUB_CLIENT_SECRET  → RIN_GITHUB_CLIENT_SECRET
 
 ### 第三步：移除 Pages（可选但推荐）
 
-自 0.3.0 开始，Rin 改为使用 Workers 托管静态资源，不再依赖 Cloudflare Pages。建议按以下步骤迁移：
+自 0.3.0 开始，AI Agent 改为使用 Workers 托管静态资源，不再依赖 Cloudflare Pages。建议按以下步骤迁移：
 
 1. **解绑 Pages 域名**
    - 进入 Cloudflare Dashboard → Pages
@@ -57,7 +57,7 @@ GITHUB_CLIENT_SECRET  → RIN_GITHUB_CLIENT_SECRET
 
 2. **将域名绑定到 Worker**
    - 进入 Cloudflare Dashboard → Workers & Pages
-   - 选择您的 Worker (`rin-server`)
+   - 选择您的 Worker (`ai-agent-server`)
    - 点击"触发器" → "添加自定义域"
    - 输入您的域名并保存
 
