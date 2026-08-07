@@ -88,7 +88,7 @@ describe('Security Audit - Mock Implementation Patterns', () => {
             ];
             
             // Production should not use these patterns
-            const prodEnvVars = [
+            const _prodEnvVars = [
                 'DATABASE_URL',
                 'JWT_SECRET',
                 'API_KEY',
