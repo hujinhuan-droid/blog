@@ -78,13 +78,13 @@ export const initContainerMiddleware = createMiddleware<{
         }));
 
         let oauth2: OAuth2Utils | undefined = undefined;
-        if (c.env.RIN_GITHUB_CLIENT_ID && c.env.RIN_GITHUB_CLIENT_SECRET) {
+        if (c.env.BLOG_GITHUB_CLIENT_ID && c.env.BLOG_GITHUB_CLIENT_SECRET) {
             oauth2 = await container.get('oauth2', async () => profileAsync(c, "init_oauth2", async () => {
                     const { createOAuthPlugin, GitHubProvider } = await import('../utils/oauth');
                     return createOAuthPlugin({
                         GitHub: new GitHubProvider({
-                            clientId: c.env.RIN_GITHUB_CLIENT_ID,
-                            clientSecret: c.env.RIN_GITHUB_CLIENT_SECRET
+                            clientId: c.env.BLOG_GITHUB_CLIENT_ID,
+                            clientSecret: c.env.BLOG_GITHUB_CLIENT_SECRET
                         })
                     });
                 }));
