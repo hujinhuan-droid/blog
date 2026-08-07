@@ -36,7 +36,7 @@
 #### Improvements and Optimizations
 
 - **API Client Refactoring**: Replaced Elysia/Eden with custom API client
-  - Removed @elysiajs/eden and rin-server dependencies
+  - Removed @elysiajs/eden and ai-agent-server dependencies
   - Created type-safe API client
   - Simplified API call pattern (from treaty pattern to direct method calls)
   - **BREAKING CHANGE**: Client API interface changed, e.g., `client.feed.index.get()` → `client.feed.list()`
