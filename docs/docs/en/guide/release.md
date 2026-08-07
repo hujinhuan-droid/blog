@@ -175,7 +175,7 @@ That URL is exactly what the `artifact_url` input in `deploy.yml` is meant to co
 
 ```bash
 # Add upstream remote
-git remote add upstream https://github.com/openRin/Rin.git
+git remote add upstream https://github.com/hujinhuan-droid/blog.git
 
 # Fetch latest changes
 git fetch upstream
@@ -300,5 +300,5 @@ When in doubt, use **minor** for new features.
 ## Questions?
 
 - 📖 Read [Commit Convention](./commit-convention.md) for commit guidelines
-- 🐛 Report issues: [GitHub Issues](https://github.com/openRin/Rin/issues)
+- 🐛 Report issues: [GitHub Issues](https://github.com/hujinhuan-droid/blog/issues)
 - 💬 Join discussions in our community

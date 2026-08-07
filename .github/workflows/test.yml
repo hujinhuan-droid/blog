@@ -2,9 +2,9 @@ name: CI - Test and Type Check
 
 on:
   push:
-    branches: [main, trunk]
+    branches: [main]
   pull_request:
-    branches: [main, trunk]
+    branches: [main]
 
 jobs:
   test-server:
@@ -102,7 +102,7 @@ jobs:
         run: bun run test:coverage
       
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           files: ./server/coverage/lcov.info,./client/coverage/lcov.info
           flags: unittests

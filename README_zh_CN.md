@@ -8,8 +8,8 @@
 ![GitHub License](https://img.shields.io/github/license/hujinhuan-droid/blog?style=for-the-badge)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/hujinhuan-droid/blog/deploy.yml?style=for-the-badge)
 
-[![Discord](https://img.shields.io/badge/Discord-openRin-red?style=for-the-badge&color=%236e7acc)](https://discord.gg/JWbSTHvAPN)
-[![Telegram](https://img.shields.io/badge/Telegram-openRin-red?style=for-the-badge&color=%233390EC)](https://t.me/openRin)
+[![Discord](https://img.shields.io/badge/Discord-blog-red?style=for-the-badge&color=%236e7acc)](#)
+[![Telegram](https://img.shields.io/badge/Telegram-blog-red?style=for-the-badge&color=%233390EC)](#)
 
 ## 项目简介
 
@@ -17,7 +17,7 @@ Rin 是一个基于 Cloudflare 开发者平台构建的现代化、无服务器�
 
 ## 在线演示
 
-https://xeu.life
+#
 
 ## 功能特性
 
@@ -34,7 +34,7 @@ https://xeu.life
 - **特色图片**：自动识别文章内首张图片，并将其作为列表页的封面图展示。
 - **标签解析**：输入如 `#博客 #Cloudflare` 的标签文本，自动解析并展示为标签。
 - **类型安全**：通过 `@rin/api` 包在客户端和服务器之间共享 TypeScript 类型，实现端到端类型安全。
-- ……更多功能请访问 https://xeu.life 探索。
+- ……更多功能请访问 # 探索。
 
 ## 文档
 
@@ -127,12 +127,12 @@ bun run deploy:client
 - `NAME`, `DESCRIPTION`, `AVATAR` - 站点配置
 - `R2_BUCKET_NAME` - 要使用的特定 R2 存储桶
 
-完整文档请访问 https://docs.openrin.org。
+完整文档请访问 https://github.com/hujinhuan-droid/blog。
 
 ## 社区与支持
 
-- 加入我们的 https://discord.gg/JWbSTHvAPN 参与讨论或获取帮助。
-- 关注 https://t.me/openRin 频道获取最新动态。
+- 加入我们的 # 参与讨论或获取帮助。
+- 关注 # 频道获取最新动态。
 - 发现 Bug 或有功能建议？欢迎在 GitHub 上提交 Issue。
 
 ## Star 历史
@@ -147,14 +147,14 @@ bun run deploy:client
 
 ## 参与贡献
 
-我们欢迎各种形式的贡献——代码、文档、设计和想法。请查阅我们的[贡献指南](https://docs.openrin.org/guide/contribution.html)，一起参与 Rin 的构建！
+我们欢迎各种形式的贡献——代码、文档、设计和想法。请查阅我们的[贡献指南](https://github.com/hujinhuan-droid/blog/guide/contribution.html)，一起参与 Rin 的构建！
 
 ## License
 
 ```
 MIT License
 
-Copyright (c) 2024 Xeu
+Copyright (c) 2024 Blog Authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

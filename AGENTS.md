@@ -261,7 +261,7 @@ ln -s ../../cli/templates/git-commit-msg.sh .git/hooks/commit-msg
 ### Project Structure
 
 ```
-/home/xeu/projects/rin/
+blog-src/
 ├── client/          # React + Vite frontend
 │   ├── src/
 │   │   ├── components/   # React components

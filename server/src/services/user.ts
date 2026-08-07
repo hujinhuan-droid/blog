@@ -58,9 +58,6 @@ export function UserService(): Hono {
         const query = c.req.query();
         const stateCookie = getCookie(c, 'state');
 
-        console.log('param_state', query.state);
-        console.log('cookie_state', stateCookie);
-
         // Verify state to prevent CSRF attacks
         if (query.state !== stateCookie) {
             throw new BadRequestError('Invalid state parameter');

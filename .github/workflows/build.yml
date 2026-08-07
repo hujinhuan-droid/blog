@@ -5,12 +5,10 @@ on:
     branches:
       - main
       - master
-      - trunk
   pull_request:
     branches:
       - main
       - master
-      - trunk
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 

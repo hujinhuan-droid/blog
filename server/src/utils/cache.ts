@@ -52,7 +52,6 @@ class DatabaseStorageProvider implements StorageProvider {
     constructor(private db: DB, private cacheMap: Map<string, any>, private type: string) {}
 
     async load(): Promise<void> {
-        console.log('Cache load from database', this.type);
         try {
             const rows = await this.db.select().from(cache).where(eq(cache.type, this.type));
             for (const row of rows) {
@@ -62,7 +61,6 @@ class DatabaseStorageProvider implements StorageProvider {
                     this.cacheMap.set(row.key, row.value);
                 }
             }
-            console.log(`Cache loaded ${rows.length} entries from database`);
         } catch (e: any) {
             console.error('Cache load from database failed');
             console.error(e.message);
@@ -80,7 +78,6 @@ class DatabaseStorageProvider implements StorageProvider {
             if (!currentKeys.has(key)) {
                 await this.db.delete(cache)
                     .where(and(eq(cache.key, key), eq(cache.type, this.type)));
-                console.log('Cache removed from database:', key);
             }
         }
 
@@ -111,7 +108,6 @@ class DatabaseStorageProvider implements StorageProvider {
         try {
             await this.db.delete(cache)
                 .where(and(eq(cache.key, key), eq(cache.type, this.type)));
-            console.log('Cache deleted from database:', key);
         } catch (e: any) {
             console.error('Cache delete from database failed');
             console.error(e.message);
@@ -121,7 +117,6 @@ class DatabaseStorageProvider implements StorageProvider {
     async clear(): Promise<void> {
         try {
             await this.db.delete(cache).where(eq(cache.type, this.type));
-            console.log('Cache cleared from database');
         } catch (e: any) {
             console.error('Cache clear from database failed');
             console.error(e.message);
@@ -138,11 +133,9 @@ class S3StorageProvider implements StorageProvider {
     }
 
     async load(): Promise<void> {
-        console.log('Cache load from storage', this.cacheKey);
         try {
             const response = await getStorageObject(this.env, this.cacheKey);
             if (!response) {
-                console.log('Cache file not found in storage, starting with empty cache');
                 return;
             }
             const data = await response.json<any>();
@@ -163,7 +156,6 @@ class S3StorageProvider implements StorageProvider {
                 JSON.stringify(Object.fromEntries(this.cacheMap)),
                 'application/json'
             ).then(() => {
-                console.log('Cache saved to storage');
             }).catch((e: any) => {
                 console.error('Cache save to storage failed');
                 console.error(e.message);
@@ -303,10 +295,8 @@ export class CacheImpl {
         }
         const cached = await this.get(key);
         if (cached !== undefined) {
-            console.log('Cache hit', key);
             return cached as T;
         }
-        console.log('Cache miss', key);
         const newValue = await value();
         await this.set(key, newValue);
         return newValue;
@@ -342,9 +332,7 @@ export class CacheImpl {
 
     async deletePrefix(prefix: string) {
         for (let key of this.cache.keys()) {
-            console.log('Cache key', key);
             if (key.startsWith(prefix)) {
-                console.log('Cache delete', key);
                 await this.delete(key, false);
             }
         }
@@ -353,9 +341,7 @@ export class CacheImpl {
 
     async deleteSuffix(suffix: string) {
         for (let key of this.cache.keys()) {
-            console.log("Cache key", key);
             if (key.endsWith(suffix)) {
-                console.log("Cache delete", key);
                 await this.delete(key, false);
             }
         }
@@ -373,12 +359,10 @@ export class CacheImpl {
 
     // Migration helper: Load from S3 and save to database
     async migrateFromS3ToDatabase() {
-        console.log('Migrating cache from S3 to database...');
         const s3Provider = new S3StorageProvider(this.env, this.cache, this.type);
         await s3Provider.load();
         const dbProvider = new DatabaseStorageProvider(this.db, this.cache, this.type);
         await dbProvider.save();
-        console.log('Migration completed');
     }
 }
 

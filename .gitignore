@@ -38,3 +38,7 @@ dist-ssr
 
 # Bun
 .bun/*
+
+# Test coverage
+coverage/
+*.tsbuildinfo

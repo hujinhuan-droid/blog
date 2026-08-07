@@ -164,7 +164,6 @@ export async function testAIModel(
 
         if (config.provider === 'worker-ai') {
             const fullModelName = getWorkerAIModelId(config.model);
-            console.log(`[Test AI] Using Worker AI model: ${fullModelName}`);
             result = await executeWorkerAI(env, fullModelName, [
                 { role: "user", content: testPrompt },
             ]);

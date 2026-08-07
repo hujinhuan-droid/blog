@@ -36,12 +36,12 @@ cp .\cli\templates\git-commit-msg.sh .\.git\hooks\commit-msg
     bun i
     ```
 
-4. 将 `wrangler.example.toml` 文件复制到 `wrangler.toml` 并填写必要信息
+4. 将 `wrangler.toml` 文件复制到 `wrangler.toml` 并填写必要信息
    > [!TIP]   
    > 通常情况下，您只需要填写 `database_name` 和 `database_id` 两项\
    > S3 相关配置非必须，但是如果您想要使用图片上传功能，您需要填写 S3 配置
 
-5. 将 `client/.env.example` 文件复制到 `client/.env` 并修改必要配置
+5. 将 `.env.example` 文件复制到 `client/.env` 并修改必要配置
    > [!TIP]   
    > 通常情况下，您只需要填写 `AVATAR`、`NAME` 和 `DESCRIPTION` 三项
 
@@ -54,7 +54,7 @@ cp .\cli\templates\git-commit-msg.sh .\.git\hooks\commit-msg
     ```
 
 7. 配置 `.dev.vars` 文件
-   将 `.dev.example.vars` 复制到 `.dev.vars` 并填写必要信息
+   将 `.dev.vars` 复制到 `.dev.vars` 并填写必要信息
    > [!TIP]   
    > 通常情况下，您需要填写 `RIN_GITHUB_CLIENT_ID` 和 `RIN_GITHUB_CLIENT_SECRET` 以及 `JWT_SECRET` 三项 \
    > 开发环境下需要单独创建一个 Github OAuth 服务，回调地址为 `http://localhost:11498/api/user/github/callback` \\

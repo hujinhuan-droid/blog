@@ -90,7 +90,6 @@ async function handleFeed(c: AppContext, fileName: string) {
         const response = await profileAsync(c, 'rss_s3_fetch', () => getStorageObject(env, key));
 
         if (response) {
-            console.log(`[RSS] Storage hit for ${key}`);
             const text = await profileAsync(c, 'rss_s3_body', () => response.text());
             return c.text(text, 200, {
                 'Content-Type': contentType,
@@ -98,12 +97,10 @@ async function handleFeed(c: AppContext, fileName: string) {
             });
         }
     } catch (e: any) {
-        console.log(`[RSS] Storage fetch failed: ${e.message}, falling back to generation`);
     }
     
     // Generate feed in real-time (fallback or primary mode)
     try {
-        console.log(`[RSS] Generating ${fileName} in real-time...`);
         const frontendUrl = new URL(c.req.url).origin;
         const feed = await profileAsync(c, 'rss_generate_feed', () => generateFeed(env, db, frontendUrl, c));
         
@@ -272,7 +269,6 @@ export async function rssCrontab(env: Env, db: DB) {
                 data,
                 name.endsWith('.json') ? 'application/json' : 'application/xml'
             );
-            console.log(`[RSS] Saved ${name} to S3`);
         } catch (e: any) {
             console.error(`[RSS] Failed to save ${name}:`, e.message);
         }

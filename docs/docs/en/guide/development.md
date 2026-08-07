@@ -7,7 +7,7 @@ This document explains how to develop and debug the Rin project locally.
 ### 1. Clone the Project
 
 ```bash
-git clone https://github.com/openRin/Rin.git
+git clone https://github.com/hujinhuan-droid/blog.git
 cd Rin
 ```
 
@@ -285,6 +285,5 @@ Please refer to the [Deployment Guide](./deploy.mdx) for production deployment p
 
 ## Getting Help
 
-- 📖 Full documentation: https://docs.openrin.org
-- 💬 Discord: https://discord.gg/JWbSTHvAPN
-- 🐛 Submit Issue: https://github.com/openRin/Rin/issues
+- 📖 Full documentation: https://github.com/hujinhuan-droid/blog
+- 🐛 Submit Issue: https://github.com/hujinhuan-droid/blog/issues

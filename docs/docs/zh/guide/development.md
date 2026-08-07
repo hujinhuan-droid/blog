@@ -7,7 +7,7 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/openRin/Rin.git
+git clone https://github.com/hujinhuan-droid/blog.git
 cd Rin
 ```
 
@@ -285,6 +285,5 @@ bun run dev:setup
 
 ## 获取帮助
 
-- 📖 完整文档：https://docs.openrin.org
-- 💬 Discord：https://discord.gg/JWbSTHvAPN
-- 🐛 提交 Issue：https://github.com/openRin/Rin/issues
+- 📖 完整文档：https://github.com/hujinhuan-droid/blog
+- 🐛 提交 Issue：https://github.com/hujinhuan-droid/blog/issues

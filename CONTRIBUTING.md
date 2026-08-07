@@ -36,13 +36,13 @@ If you want to skip the hook, run `git commit` with the `--no-verify` option.
     bun i
     ```
 
-4. Copy the `wrangler.example.toml` file to `wrangler.toml` and fill in the necessary information
+4. Copy the `wrangler.toml` file to `wrangler.toml` and fill in the necessary information
    > [!TIP]   
    > Normally, you only need to fill in the `database_name` and `database_id` fields.\
    > S3 configuration is not required, but if you want to use the image upload feature, you need to fill in the S3
    configuration.
 
-5. Copy the `client/.env.example` file to `client/.env` and change the necessary configuration.
+5. Copy the `.env.example` file to `client/.env` and change the necessary configuration.
    > [!TIP]   
    > Typically, you only need to fill in `AVATAR`, `NAME` and `DESCRIPTION`.
 
@@ -55,7 +55,7 @@ If you want to skip the hook, run `git commit` with the `--no-verify` option.
     ```
 
 7. Configuring the `.dev.vars' file
-   Copy `.dev.example.vars` to `.dev.vars` and fill in the required information
+   Copy `.dev.vars` to `.dev.vars` and fill in the required information
    > [!TIP]   
    > Typically, you need to fill in the `RIN_GITHUB_CLIENT_ID` and `RIN_GITHUB_CLIENT_SECRET` as well as
    the `JWT_SECRET` fields.

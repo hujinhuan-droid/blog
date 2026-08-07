@@ -23,7 +23,7 @@ export default defineConfig({
   ],
   themeConfig: {
     socialLinks: [
-      { icon: 'github', mode: 'link', content: 'https://github.com/openRin/Rin' },
+      { icon: 'github', mode: 'link', content: 'https://github.com/hujinhuan-droid/blog' },
     ],
   },
   i18nSource: {

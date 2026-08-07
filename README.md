@@ -8,8 +8,8 @@ English | [简体中文](./README_zh_CN.md)
 ![GitHub License](https://img.shields.io/github/license/hujinhuan-droid/blog?style=for-the-badge)
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/hujinhuan-droid/blog/deploy.yml?style=for-the-badge)
 
-[![Discord](https://img.shields.io/badge/Discord-openRin-red?style=for-the-badge&color=%236e7acc)](https://discord.gg/JWbSTHvAPN)
-[![Telegram](https://img.shields.io/badge/Telegram-openRin-red?style=for-the-badge&color=%233390EC)](https://t.me/openRin)
+[![Discord](https://img.shields.io/badge/Discord-blog-red?style=for-the-badge&color=%236e7acc)](#)
+[![Telegram](https://img.shields.io/badge/Telegram-blog-red?style=for-the-badge&color=%233390EC)](#)
 
 ## Introduction
 
@@ -17,7 +17,7 @@ Rin is a modern, serverless blog platform built entirely on Cloudflare's develop
 
 ## Live Demo
 
-https://xeu.life
+#
 
 ## Features
 
@@ -34,7 +34,7 @@ https://xeu.life
 - **Featured Images**: Automatically detect the first image in an article and use it as the cover image in listings.
 - **Tag Parsing**: Input tags like `#Blog #Cloudflare` and have them automatically parsed and displayed.
 - **Type Safety**: End-to-end type safety with shared TypeScript types between client and server via `@rin/api` package.
-- ...and more! Explore all features at https://xeu.life.
+- ...and more! Explore all features at #.
 
 ## Documentation
 
@@ -127,12 +127,12 @@ The repository includes several automated workflows:
 - `NAME`, `DESCRIPTION`, `AVATAR` - Site configuration
 - `R2_BUCKET_NAME` - Specific R2 bucket to use
 
-Full documentation is available at https://docs.openrin.org.
+Full documentation is available at https://github.com/hujinhuan-droid/blog.
 
 ## Community & Support
 
-- Join our https://discord.gg/JWbSTHvAPN for discussions and help.
-- Follow updates on https://t.me/openRin.
+- Join our # for discussions and help.
+- Follow updates on #.
 - Found a bug or have a feature request? Please open an issue on GitHub.
 
 ## Star History
@@ -147,14 +147,14 @@ Full documentation is available at https://docs.openrin.org.
 
 ## Contributing
 
-We welcome contributions of all kinds—code, documentation, design, and ideas. Please check out our [contributing guidelines](https://docs.openrin.org/en/guide/contribution.html) and join us in building Rin together!
+We welcome contributions of all kinds—code, documentation, design, and ideas. Please check out our [contributing guidelines](https://github.com/hujinhuan-droid/blog/en/guide/contribution.html) and join us in building Rin together!
 
 ## License
 
 ```
 MIT License
 
-Copyright (c) 2024 Xeu
+Copyright (c) 2024 Blog Authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

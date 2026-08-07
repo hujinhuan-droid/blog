@@ -178,9 +178,9 @@ If migration fails and you need to rollback:
 
 ## Need Help?
 
-- 📖 [Full Documentation](https://rin-docs.xeu.life)
-- 🐛 [GitHub Issues](https://github.com/openRin/Rin/issues)
-- 💬 [GitHub Discussions](https://github.com/openRin/Rin/discussions)
+- 📖 [Full Documentation](https://github.com/hujinhuan-droid/blog)
+- 🐛 [GitHub Issues](https://github.com/hujinhuan-droid/blog/issues)
+- 💬 [GitHub Discussions](https://github.com/hujinhuan-droid/blog/discussions)
 
 ---
 
