@@ -5,6 +5,8 @@ import { comments, feeds, users } from "../db/schema";
 import { profileAsync } from "../core/server-timing";
 import { notify } from "../utils/webhook";
 import { resolveWebhookConfig } from "./config-helpers";
+import { commentSchemas, validateBody } from "../utils/validation";
+import { ValidationError } from "../errors";
 
 export function CommentService(): Hono {
     const app = new Hono();
@@ -44,18 +46,13 @@ export function CommentService(): Hono {
         return c.json(result);
     });
 
-    app.post('/:feed', async (c: AppContext) => {
+    app.post('/:feed', validateBody(commentSchemas.create), async (c: AppContext) => {
         const db = c.get('db');
         const env = c.get('env');
         const serverConfig = c.get('serverConfig');
         const uid = c.get('uid');
         const feedId = parseInt(c.req.param('feed'));
-        const body = await profileAsync(c, 'comment_create_parse', () => c.req.json());
-        const { content, guestName, guestEmail, guestWebsite } = body;
-        
-        if (!content) {
-            return c.text('Content is required', 400);
-        }
+        const { content, guestName, guestEmail, guestWebsite } = c.get('validatedBody');
         
         const exist = await profileAsync(c, 'comment_create_feed', () => db.query.feeds.findFirst({ where: eq(feeds.id, feedId) }));
         if (!exist) {
