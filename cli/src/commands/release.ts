@@ -164,7 +164,7 @@ export async function runReleaseCommand(args: string[]) {
   const versionArg = args.find((arg) => !arg.startsWith("-"));
   if (!versionArg) {
     console.log(
-      "Usage: rin release <version>\n  version: patch | minor | major | x.y.z | x.y.z-beta.1",
+      "Usage: ai-agent release <version>\n  version: patch | minor | major | x.y.z | x.y.z-beta.1",
     );
     return;
   }
