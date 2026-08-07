@@ -9,7 +9,7 @@ import {useTranslation} from "react-i18next";
 
 interface FeedItem {
     id: number;
-    createdAt: Date;
+    createdAt: string;
     title: string | null;
 }
 
@@ -23,7 +23,7 @@ export function TimelinePage() {
         client.feed.timeline()
         .then(({ data }) => {
             if (data) {
-                const arr = Array.isArray(data) ? data : []
+                const arr = (Array.isArray(data) ? data : []) as FeedItem[]
                 setLength(arr.length)
                 // 兼容的分组逻辑
                 const groups = (Object.groupBy

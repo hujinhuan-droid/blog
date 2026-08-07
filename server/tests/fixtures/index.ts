@@ -179,8 +179,8 @@ export function createMockEnv(overrides: Partial<Env> = {}): Env {
         WEBHOOK_URL: '',
         RSS_TITLE: 'Test Blog',
         RSS_DESCRIPTION: 'Test Environment',
-        BLOG_GITHUB_CLIENT_ID: 'test-client-id',
-        BLOG_GITHUB_CLIENT_SECRET: 'test-client-secret',
+        RIN_GITHUB_CLIENT_ID: 'test-client-id',
+        RIN_GITHUB_CLIENT_SECRET: 'test-client-secret',
         JWT_SECRET: 'test-jwt-secret',
         S3_ACCESS_KEY_ID: 'test-access-key',
         S3_SECRET_ACCESS_KEY: 'test-secret-key',
@@ -339,7 +339,7 @@ export async function setupTestApp(
                 sign: async (payload: any) => `mock_token_${payload.id}`,
                 verify: async (token: string) => {
                     const match = token.match(/mock_token_(\d+)/);
-                    return match ? { id: parseInt(match[1]), username: 'testuser' } : null;
+                    return match ? { id: parseInt(match[1]), username: 'test' } : null;
                 },
             };
 

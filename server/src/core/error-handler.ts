@@ -1,9 +1,5 @@
 import type { Context, Middleware } from "./types";
-import {
-  AppError,
-  isAppError,
-  InternalServerError,
-} from "../errors";
+import { AppError, isAppError, InternalServerError } from "../errors";
 
 // ============================================================================
 // Request ID Generation

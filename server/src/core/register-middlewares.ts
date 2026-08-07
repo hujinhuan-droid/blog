@@ -5,11 +5,6 @@ import { authMiddleware, initContainerMiddleware } from "./hono-middleware";
 import { csrfSetCookie } from "../utils/csrf";
 import type { BlogApp } from "./app-types";
 
-// CORS whitelist: allow localhost origins for development
-const allowedOrigins: (string | RegExp)[] = [
-  /^https?:\/\/localhost(:\d+)?$/,
-];
-
 export function registerMiddlewares(app: BlogApp) {
   // Security headers
   app.use("*", async (c, next) => {
@@ -25,6 +20,8 @@ export function registerMiddlewares(app: BlogApp) {
     );
   });
 
+  const allowedOrigins: (string | RegExp)[] = [/^https?:\/\/localhost(:\d+)?$/];
+
   app.use(
     "*",
     cors({
@@ -35,7 +32,7 @@ export function registerMiddlewares(app: BlogApp) {
           if (typeof pattern === "string" && pattern === origin) return origin;
           if (pattern instanceof RegExp && pattern.test(origin)) return origin;
         }
-        return "";
+        return allowedOrigins[0] ? String(allowedOrigins[0]) : "";
       },
       allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
       allowHeaders: ["content-type", "authorization", "x-csrf-token"],

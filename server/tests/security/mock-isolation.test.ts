@@ -87,7 +87,9 @@ describe('Security Audit - Mock Implementation Patterns', () => {
                 /fake/i,
             ];
             
-            // Verify patterns work against test vs production
+            // Production should not use these patterns
+            
+            // Just verify patterns work
             expect(testEnvPatterns.some(p => p.test('test-secret'))).toBe(true);
             expect(testEnvPatterns.some(p => p.test('production-secret'))).toBe(false);
         });

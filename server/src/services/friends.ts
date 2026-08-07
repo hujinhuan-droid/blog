@@ -228,7 +228,7 @@ export async function friendCrontab(
     _clientConfig: CacheImpl
 ) {
     const enable = await serverConfig.getOrDefault('friend_crontab', true);
-    const ua = (await serverConfig.get('friend_ua') as string) || 'AI Agent-Check/0.1.0';
+    const ua = await serverConfig.get('friend_ua') || 'AI Agent-Check/0.1.0';
     
     if (!enable) {
         return;
@@ -243,7 +243,7 @@ export async function friendCrontab(
         try {
             const response = await fetch(new Request(friend.url, { 
                 method: 'GET', 
-                headers: { 'User-Agent': ua } 
+                headers: { 'User-Agent': ua as string } 
             }));
             
             if (response.ok) {

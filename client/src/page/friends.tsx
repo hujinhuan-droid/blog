@@ -67,7 +67,7 @@ export function FriendsPage() {
         if (ref.current) return
         client.friend.list().then(({ data }) => {
             if (data) {
-                const friend_list = data.friend_list || []
+                const friend_list = (data.friend_list || []) as unknown as FriendItem[]
                 const friends_available = friend_list.filter(({ health, accepted }: FriendItem) => health.length === 0 && accepted === 1) || []
                 setFriendsAvailable(friends_available)
                 const friends_unavailable = friend_list.filter(({ health, accepted }: FriendItem) => health.length > 0 && accepted === 1) || []

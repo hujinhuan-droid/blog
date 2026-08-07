@@ -17,8 +17,8 @@ import { MomentItem } from "../components/moment_item"
 interface Moment {
     id: number;
     content: string;
-    createdAt: string;
-    updatedAt: string;
+    createdAt: Date;
+    updatedAt: Date;
     user: {
         id: number;
         username: string;
@@ -62,7 +62,7 @@ export function MomentsPage() {
             limit: limit
         }).then(({ data }) => {
             if (data) {
-                const momentData = Array.isArray(data.data) ? data.data : [];
+                const momentData = (Array.isArray(data.data) ? data.data : []) as unknown as Moment[];
                 setLength(momentData.length)
                 setHasNextPage(data.hasNext)
                 

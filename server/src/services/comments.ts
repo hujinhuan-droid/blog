@@ -51,12 +51,7 @@ export function CommentService(): Hono {
         const serverConfig = c.get('serverConfig');
         const uid = c.get('uid');
         const feedId = parseInt(c.req.param('feed'));
-        const { content, guestName, guestEmail, guestWebsite } = c.get('validatedBody') as {
-          content: string;
-          guestName?: string;
-          guestEmail?: string;
-          guestWebsite?: string;
-        };
+        const { content, guestName, guestEmail, guestWebsite } = c.get('validatedBody') as { content: string; guestName?: string; guestEmail?: string; guestWebsite?: string };
         
         const exist = await profileAsync(c, 'comment_create_feed', () => db.query.feeds.findFirst({ where: eq(feeds.id, feedId) }));
         if (!exist) {

@@ -114,7 +114,7 @@ export function PasswordAuthService(): Hono<{
             }
 
             // Generate JWT token
-            const token = await profileAsync(c, 'auth_admin_token', () => jwt.sign({ id: user.id }));
+            const token = await profileAsync(c, 'auth_admin_token', () => jwt.sign({ id: user.id, username: user.username }));
 
             // Set JWT cookie using Hono helper
             setJWTCookie(c, token);
@@ -145,7 +145,7 @@ export function PasswordAuthService(): Hono<{
         }
 
         // Generate JWT token
-        const token = await profileAsync(c, 'auth_user_token', () => jwt.sign({ id: user.id }));
+        const token = await profileAsync(c, 'auth_user_token', () => jwt.sign({ id: user.id, username: user.username }));
 
         // Set JWT cookie using Hono helper
         setJWTCookie(c, token);

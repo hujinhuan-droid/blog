@@ -110,7 +110,7 @@ export function UserService(): Hono {
         if (existingUser) {
             profile.permission = existingUser.permission;
             await profileAsync(c, 'user_existing_update', () => db.update(users).set(profile).where(eq(users.id, existingUser.id)));
-            authToken = await profileAsync(c, 'user_existing_token', () => jwt.sign({ id: existingUser.id }));
+            authToken = await profileAsync(c, 'user_existing_token', () => jwt.sign({ id: existingUser.id, username: existingUser.username }));
             setJWTCookie(c, authToken);
             // Store auth token in HttpOnly cookie only (never expose in URL)
             setCookie(c, 'auth_token', authToken, {
@@ -132,7 +132,7 @@ export function UserService(): Hono {
                 throw new InternalServerError('Failed to register user');
             }
 
-            authToken = await profileAsync(c, 'user_insert_token', () => jwt.sign({ id: result[0].insertedId }));
+            authToken = await profileAsync(c, 'user_insert_token', () => jwt.sign({ id: result[0].insertedId, username: profile.username || 'admin' }));
             setJWTCookie(c, authToken);
             // Store auth token in HttpOnly cookie only (never expose in URL)
             setCookie(c, 'auth_token', authToken, {

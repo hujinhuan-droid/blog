@@ -45,7 +45,7 @@ export function HashtagPage({ name }: { name: string }) {
         const nameDecoded = decodeURI(name)
         client.tag.get(nameDecoded).then(({ data }) => {
             if (data) {
-                setHashtag(data)
+                setHashtag(data as unknown as FeedsData)
                 setStatus('idle')
             }
         })
