@@ -1,6 +1,6 @@
 # Local Development Guide
 
-This document explains how to develop and debug the Rin project locally.
+This document explains how to develop and debug the AI Agent project locally.
 
 ## Quick Start
 
@@ -8,7 +8,7 @@ This document explains how to develop and debug the Rin project locally.
 
 ```bash
 git clone https://github.com/hujinhuan-droid/blog.git
-cd Rin
+cd AI Agent
 ```
 
 ### 2. Install Dependencies
@@ -198,13 +198,13 @@ The project uses a custom HTTP client instead of Eden for type-safe API communic
 - **Features**: Type-safe requests, error handling, auth token management
 - **Usage**: All API calls go through the typed client
 
-### Shared Types (@rin/api)
+### Shared Types (@ai-agent/api)
 
-The `@rin/api` package provides shared TypeScript types for both client and server:
+The `@ai-agent/api` package provides shared TypeScript types for both client and server:
 
 - **Location**: `packages/api/`
 - **Purpose**: End-to-end type safety for API contracts
-- **Usage**: Import types from `@rin/api` in both client and server code
+- **Usage**: Import types from `@ai-agent/api` in both client and server code
 
 When adding new API endpoints:
 1. Define types in `packages/api/src/types.ts`
@@ -267,8 +267,8 @@ GitHub OAuth needs to be configured for local development:
 │   ├── tests/             # Test files
 │   └── package.json
 ├── packages/               # Shared packages
-│   └── api/                # @rin/api - Shared API types
-├── cli/                    # Rin CLI tool
+│   └── api/                # @ai-agent/api - Shared API types
+├── cli/                    # AI Agent CLI tool
 │   ├── bin/               # Thin executable entrypoints
 │   ├── src/               # Commands, tasks, shared helpers
 │   └── templates/         # Git hook and file templates
