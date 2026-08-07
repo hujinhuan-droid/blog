@@ -4,9 +4,16 @@ import type { Context as HonoContext } from "hono";
 
 export type DB = DrizzleD1Database<typeof import("../db/schema")>;
 
+export interface JwtPayload {
+    id: number;
+    username: string;
+    permission?: number;
+    [key: string]: unknown;
+}
+
 export interface JWTUtils {
-    sign(payload: any): Promise<string>;
-    verify(token: string): Promise<any | null>;
+    sign(payload: JwtPayload): Promise<string>;
+    verify(token: string): Promise<JwtPayload | null>;
 }
 
 export interface OAuth2Utils {
@@ -15,15 +22,16 @@ export interface OAuth2Utils {
     authorize(provider: string, code: string): Promise<{ accessToken: string } | null>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface CacheImpl {
-    get(key: string): Promise<any | null>;
-    set(key: string, value: any, save?: boolean): Promise<void>;
+    get(key: string): Promise<unknown | null>;
+    set(key: string, value: unknown, save?: boolean): Promise<void>;
     delete(key: string, save?: boolean): Promise<void>;
     deletePrefix(prefix: string): Promise<void>;
     getOrSet<T>(key: string, factory: () => Promise<T>): Promise<T>;
     getOrDefault<T>(key: string, defaultValue: T): Promise<T>;
-    getBySuffix(suffix: string): Promise<any[]>;
-    all(): Promise<Map<string, any>>;
+    getBySuffix(suffix: string): Promise<unknown[]>;
+    all(): Promise<Map<string, unknown>>;
     save(): Promise<void>;
     clear(): Promise<void>;
 }

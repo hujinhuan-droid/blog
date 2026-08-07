@@ -1,5 +1,13 @@
 import Editor from '@monaco-editor/react';
-import { editor, Range, Selection } from 'monaco-editor';
+import type { editor } from 'monaco-editor';
+
+// Monaco Range/Selection are loaded at runtime by @monaco-editor/react
+interface IMonacoSelection {
+  startLineNumber: number;
+  startColumn: number;
+  endLineNumber: number;
+  endColumn: number;
+}
 import React, { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import Loading from 'react-loading';
@@ -109,7 +117,7 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
     return { editorInstance, model, selection };
   };
 
-  const replaceSelection = (selection: Selection, text: string, nextSelection?: Selection) => {
+  const replaceSelection = (selection: IMonacoSelection, text: string, nextSelection?: IMonacoSelection) => {
     const editorInstance = editorRef.current;
     if (!editorInstance) return;
 
@@ -142,8 +150,8 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
     const innerEnd = positionAfterText(innerStart.lineNumber, innerStart.column, innerText);
     const end = positionAfterText(selection.startLineNumber, selection.startColumn, insertedText);
     const nextSelection = selectedText
-      ? new Selection(end.lineNumber, end.column, end.lineNumber, end.column)
-      : new Selection(innerStart.lineNumber, innerStart.column, innerEnd.lineNumber, innerEnd.column);
+      ? new ((window as any).monaco.Selection)(end.lineNumber, end.column, end.lineNumber, end.column)
+      : new ((window as any).monaco.Selection)(innerStart.lineNumber, innerStart.column, innerEnd.lineNumber, innerEnd.column);
 
     replaceSelection(selection, insertedText, nextSelection);
   };
@@ -161,7 +169,7 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
     const urlStart = positionAfterText(selection.startLineNumber, selection.startColumn, prefix);
     const urlEnd = positionAfterText(urlStart.lineNumber, urlStart.column, url);
 
-    replaceSelection(selection, insertedText, new Selection(urlStart.lineNumber, urlStart.column, urlEnd.lineNumber, urlEnd.column));
+    replaceSelection(selection, insertedText, new ((window as any).monaco.Selection)(urlStart.lineNumber, urlStart.column, urlEnd.lineNumber, urlEnd.column));
   };
 
   const insertMarkdownImage = () => {
@@ -177,7 +185,7 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
     const urlStart = positionAfterText(selection.startLineNumber, selection.startColumn, prefix);
     const urlEnd = positionAfterText(urlStart.lineNumber, urlStart.column, url);
 
-    replaceSelection(selection, insertedText, new Selection(urlStart.lineNumber, urlStart.column, urlEnd.lineNumber, urlEnd.column));
+    replaceSelection(selection, insertedText, new ((window as any).monaco.Selection)(urlStart.lineNumber, urlStart.column, urlEnd.lineNumber, urlEnd.column));
   };
 
   const insertCodeBlock = () => {
@@ -193,8 +201,8 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
     const innerEnd = positionAfterText(innerStart.lineNumber, innerStart.column, innerText);
     const end = positionAfterText(selection.startLineNumber, selection.startColumn, insertedText);
     const nextSelection = selectedText
-      ? new Selection(end.lineNumber, end.column, end.lineNumber, end.column)
-      : new Selection(innerStart.lineNumber, innerStart.column, innerEnd.lineNumber, innerEnd.column);
+      ? new ((window as any).monaco.Selection)(end.lineNumber, end.column, end.lineNumber, end.column)
+      : new ((window as any).monaco.Selection)(innerStart.lineNumber, innerStart.column, innerEnd.lineNumber, innerEnd.column);
 
     replaceSelection(selection, insertedText, nextSelection);
   };
@@ -227,7 +235,7 @@ export function MarkdownEditor({ content, setContent, placeholder = "> Write you
         return formatter(model.getLineContent(lineNumber), index);
       });
     const targetEndLine = isEmptySingleLine ? startLineNumber : endLineNumber;
-    const range = new Range(
+    const range = new ((window as any).monaco.Range)(
       startLineNumber,
       1,
       targetEndLine,

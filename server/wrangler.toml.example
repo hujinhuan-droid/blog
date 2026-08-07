@@ -1,0 +1,33 @@
+# Wrangler configuration for Cloudflare Workers deployment
+# Copy this file to wrangler.toml and fill in your values
+# See: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "blog-worker"
+main = "src/entry.ts"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "blog-db"
+database_id = "your-d1-database-id"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "blog-assets"
+
+[vars]
+# JWT secret for authentication (generate with: openssl rand -base64 32)
+JWT_SECRET = "your-jwt-secret"
+
+# GitHub OAuth (optional, for admin login)
+# RIN_GITHUB_CLIENT_ID = "your-github-client-id"
+# RIN_GITHUB_CLIENT_SECRET = "your-github-client-secret"
+
+# S3-compatible storage (Cloudflare R2 or any S3 API)
+S3_ENDPOINT = "https://your-account.r2.cloudflarestorage.com"
+S3_ACCESS_HOST = "https://your-image-domain.com"
+S3_BUCKET = "your-bucket-name"
+
+# RSS Feed metadata
+RSS_TITLE = "My Blog"
+RSS_DESCRIPTION = "A personal blog"

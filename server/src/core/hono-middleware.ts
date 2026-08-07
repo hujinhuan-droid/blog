@@ -9,8 +9,8 @@ import { profileAsync } from "./server-timing";
 // Lazy initialization container
 class LazyInitContainer {
     private env: Env;
-    private instances: Map<string, any> = new Map();
-    private initializing: Map<string, Promise<any>> = new Map();
+    private instances: Map<string, unknown> = new Map();
+    private initializing: Map<string, Promise<unknown>> = new Map();
 
     constructor(env: Env) {
         this.env = env;

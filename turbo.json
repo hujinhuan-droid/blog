@@ -9,11 +9,11 @@
       "cache": false,
       "persistent": true
     },
-    "t": {
+    "test": {
       "cache": false,
-      "dependsOn": ["^g"]
+      "dependsOn": ["^db:generate"]
     },
-    "g": {
+    "db:generate": {
         "cache": false,
         "dependsOn": ["^db:gen"]
     },
