@@ -1,4 +1,4 @@
-![Cover](./docs/docs/public/rin-logo.png)
+![Cover](./docs/docs/public/ai-agent-logo.png)
 
 English | [简体中文](./README_zh_CN.md)
 
@@ -13,7 +13,7 @@ English | [简体中文](./README_zh_CN.md)
 
 ## Introduction
 
-Rin is a modern, serverless blog platform built entirely on Cloudflare's developer platform: Pages for hosting, Workers for serverless functions, D1 for SQLite database, and R2 for object storage. Deploy your personal blog with just a domain name pointed to Cloudflare—no server management required.
+AI Agent is a modern, serverless blog platform built entirely on Cloudflare's developer platform: Pages for hosting, Workers for serverless functions, D1 for SQLite database, and R2 for object storage. Deploy your personal blog with just a domain name pointed to Cloudflare—no server management required.
 
 ## Live Demo
 
@@ -33,7 +33,7 @@ Rin is a modern, serverless blog platform built entirely on Cloudflare's develop
 - **Webhook Notifications**: Receive real-time alerts for new comments via configurable webhooks.
 - **Featured Images**: Automatically detect the first image in an article and use it as the cover image in listings.
 - **Tag Parsing**: Input tags like `#Blog #Cloudflare` and have them automatically parsed and displayed.
-- **Type Safety**: End-to-end type safety with shared TypeScript types between client and server via `@rin/api` package.
+- **Type Safety**: End-to-end type safety with shared TypeScript types between client and server via `@ai-agent/api` package.
 - ...and more! Explore all features at #.
 
 ## Documentation
@@ -42,7 +42,7 @@ Rin is a modern, serverless blog platform built entirely on Cloudflare's develop
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/hujinhuan-droid/blog.git && cd Rin
+git clone https://github.com/hujinhuan-droid/blog.git && cd AI Agent
 
 # 2. Install dependencies
 bun install
@@ -94,9 +94,9 @@ bun run deploy:client
 
 **Optional environment variables:**
 
-- `WORKER_NAME` - Backend worker name (default: `rin-server`)
-- `PAGES_NAME` - Frontend pages name (default: `rin-client`)
-- `DB_NAME` - D1 database name (default: `rin`)
+- `WORKER_NAME` - Backend worker name (default: `ai-agent-server`)
+- `PAGES_NAME` - Frontend pages name (default: `ai-agent-client`)
+- `DB_NAME` - D1 database name (default: `ai-agent`)
 - `R2_BUCKET_NAME` - R2 bucket name. If set, deploy derives the matching `S3_*` values automatically. If unset, no bucket is auto-selected.
 
 The deployment script will automatically:
@@ -147,7 +147,7 @@ Full documentation is available at https://github.com/hujinhuan-droid/blog.
 
 ## Contributing
 
-We welcome contributions of all kinds—code, documentation, design, and ideas. Please check out our [contributing guidelines](https://github.com/hujinhuan-droid/blog/en/guide/contribution.html) and join us in building Rin together!
+We welcome contributions of all kinds—code, documentation, design, and ideas. Please check out our [contributing guidelines](https://github.com/hujinhuan-droid/blog/en/guide/contribution.html) and join us in building AI Agent together!
 
 ## License
 
