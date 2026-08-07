@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { execSync } from "node:child_process";
 import { fixTopField, getMigrationFileVersion, getMigrationVersion, isInfoExist, updateMigrationVersion } from "../lib/db-migration";
 
-export async function runLocalDbMigrate(dbName = "rin") {
+export async function runLocalDbMigrate(dbName = "ai-agent") {
   const sqlDir = path.join(process.cwd(), "server", "sql");
 
   const type = "local";
