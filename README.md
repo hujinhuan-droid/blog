@@ -65,24 +65,41 @@ npm run dev
 3. 改 `wrangler.toml` 里 `APP_URL` 为你的域名，并填好 `database_id`。
 4. 第一个用 GitHub 登录的用户自动成为管理员。
 
-## 部署
+## 部署到 Cloudflare
+
+一键部署（推荐，已附带 `scripts/deploy.sh`）：
 
 ```bash
-wrangler d1 create ai-agent-blog          # 建数据库，拿到 id 填回 wrangler.toml
-wrangler r2 bucket create ai-agent-blog-images
-npm run migrate:remote                    # 初始化线上 D1
-wrangler deploy                           # 部署
+bash scripts/deploy.sh
 ```
+
+脚本自动完成：安装依赖 → `wrangler login` → 建 R2 桶 → 建 D1 库并回填 id → 迁移数据库 → `wrangler deploy`。
+
+手动分步：
+
+```bash
+npm install
+npx wrangler login
+npx wrangler r2 bucket create ai-agent-blog-images
+npx wrangler d1 create ai-agent-blog      # 把输出的 id 填回 wrangler.toml 的 database_id
+npm run migrate:remote                    # 初始化线上 D1（建表 + 示例文章）
+npm run deploy                            # 部署 Worker + 静态前端
+```
+
+### 配置管理员登录（二选一）
+
+- **密码登录（调试/本地）**：`npx wrangler secret put ADMIN_PASSWORD`，登录页选「密码登录」即获管理员。
+- **GitHub OAuth（正式）**：
+  1. github.com/settings/developers 新建 OAuth App，回调 `https://你的域名/api/auth/callback`
+  2. `npx wrangler secret put GITHUB_CLIENT_ID` 与 `npx wrangler secret put GITHUB_CLIENT_SECRET`
+  3. 把 `wrangler.toml` 的 `APP_URL` 改成你的域名，再 `npm run deploy`
+  4. 第一个用 GitHub 登录的用户自动成为管理员。
 
 ## 关于「替换旧项目」
 
-本目录是一个全新独立项目。若要用它覆盖 GitHub 上的旧 `blog` 仓库：
+本项目已在 2026-08-13 通过 `git push --force` 覆盖到 GitHub 仓库 `hujinhuan-droid/blog` 的 `main` 分支（旧历史被替换）。如需再次推送：
 
 ```bash
-git init
-git remote add origin git@github.com:hujinhuan-droid/blog.git
-git add -A && git commit -m "rewrite: cloudflare blog MVP"
-git push --force origin main             # ⚠️ 会覆盖旧仓库历史，确认无误再执行
+git add -A && git commit -m "update: ..."
+git push --force origin main             # ⚠️ 仍会覆盖远程历史
 ```
-
-或直接新建一个仓库推送。
