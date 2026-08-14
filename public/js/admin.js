@@ -33,7 +33,7 @@ function renderLogin() {
     </div>`;
   const doLogin = async () => {
     const uname = (document.getElementById("uname").value || "").trim();
-    const pw = document.getElementById("pw").value;
+    const pw = (document.getElementById("pw").value || "").trim();
     if (!uname || !pw) {
       toast("请输入账号和密码");
       return;

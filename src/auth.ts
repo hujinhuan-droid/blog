@@ -148,9 +148,9 @@ export async function ensureAdminAccount(env: AuthEnv): Promise<void> {
 
   const hash = await hashPassword(password);
   if (existing) {
-    if (!existing.password_hash) {
-      await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(hash, existing.id).run();
-    }
+    // 环境变量 ADMIN_PASSWORD 为权威来源：始终覆盖，确保与线上 secret 一致
+    // （修复早期随机密码遗留的哈希导致“账号密码错误”的问题）
+    await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(hash, existing.id).run();
     return;
   }
   await env.DB
@@ -162,13 +162,14 @@ export async function ensureAdminAccount(env: AuthEnv): Promise<void> {
 /** 账号密码登录：校验 username + password，返回管理员用户 */
 export async function passwordLogin(env: AuthEnv, username: string, password: string): Promise<UserRow | null> {
   const u = (username || "").trim();
-  if (!u || !password) return null;
+  const pw = (password || "").trim();
+  if (!u || !pw) return null;
   const row = (await env.DB
     .prepare("SELECT * FROM users WHERE username = ? AND role = 'admin'")
     .bind(u)
     .first()) as (UserRow & { password_hash?: string | null }) | null;
   if (!row || !row.password_hash) return null;
-  const ok = await verifyPassword(row.password_hash, password);
+  const ok = await verifyPassword(row.password_hash, pw);
   return ok ? row : null;
 }
 
