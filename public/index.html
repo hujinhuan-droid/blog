@@ -8,13 +8,20 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="#/">AI Agent Blog</a>
-      <nav class="nav" id="nav"></nav>
+      <div class="wrap">
+        <a class="brand" href="#/">AI Agent Blog</a>
+        <nav class="nav" id="nav"></nav>
+      </div>
     </header>
 
     <main id="app" class="container"></main>
 
-    <footer class="footer">© AI Agent Blog · Powered by Cloudflare (Pages / Workers / D1 / R2)</footer>
+    <footer class="footer">
+      <div class="wrap">
+        <div class="site-stats" id="site-stats"></div>
+        <div class="copyright">© AI Agent Blog · Powered by Cloudflare (Pages / Workers / D1 / R2)</div>
+      </div>
+    </footer>
 
     <script src="/js/markdown.js"></script>
     <script src="/js/admin.js"></script>
