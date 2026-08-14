@@ -1,13 +1,16 @@
-// 鉴权：GitHub OAuth + 会话 cookie（含可选密码登录，便于本地调试）
+// 鉴权：GitHub OAuth + 账号密码登录 + 会话 cookie
 
-import { UserRow, DB, createSession, getUserBySession, getOrCreatePasswordAdmin, upsertGithubUser } from "./db";
+import { UserRow, DB, createSession, upsertGithubUser } from "./db";
 
 const SESSION_COOKIE = "sid";
+const PBKDF2_ITERATIONS = 100_000;
+const PBKDF2_PEPPER = "ai-agent-blog::login"; // 固定盐，防止相同密码在多处哈希一致
 
 export interface AuthEnv {
   DB: DB;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+  ADMIN_USERNAME?: string;
   ADMIN_PASSWORD?: string;
   APP_URL?: string;
 }
@@ -36,7 +39,12 @@ export function clearSessionCookie(): string {
 
 export async function currentUser(req: Request, env: AuthEnv): Promise<UserRow | null> {
   const token = parseCookies(req)[SESSION_COOKIE];
-  return getUserBySession(env.DB, token);
+  if (!token) return null;
+  const s = (await env.DB.prepare("SELECT user_id FROM sessions WHERE token = ?").bind(token).first()) as
+    | { user_id: number }
+    | null;
+  if (!s) return null;
+  return (await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(s.user_id).first()) as UserRow | null;
 }
 
 /** 生成 GitHub 授权跳转地址；未配置 OAuth 时返回 null（前端改用密码登录） */
@@ -79,10 +87,89 @@ export async function exchangeGithubCode(code: string, env: AuthEnv): Promise<Us
   });
 }
 
-/** 密码登录（本地调试用）：校验 ADMIN_PASSWORD，返回管理员用户 */
-export async function passwordLogin(env: AuthEnv, password: string): Promise<UserRow | null> {
-  if (!env.ADMIN_PASSWORD || password !== env.ADMIN_PASSWORD) return null;
-  return getOrCreatePasswordAdmin(env.DB, "admin");
+// ---------------- 密码哈希（Web Crypto PBKDF2） ----------------
+
+function toHex(bytes: Uint8Array): string {
+  let s = "";
+  for (const b of bytes) s += b.toString(16).padStart(2, "0");
+  return s;
+}
+
+function fromHex(hex: string): Uint8Array {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  return out;
+}
+
+/** 返回 `pbkdf2$<saltHex>$<hashHex>` */
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]),
+    { name: "HMAC", hash: "SHA-256", length: 256 },
+    false,
+    ["sign"]
+  );
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(PBKDF2_PEPPER)));
+  return `pbkdf2$${toHex(salt)}$${toHex(sig)}`;
+}
+
+export async function verifyPassword(stored: string | null, password: string): Promise<boolean> {
+  if (!stored || !stored.startsWith("pbkdf2$")) return false;
+  const [, saltHex, sigHex] = stored.split("$");
+  if (!saltHex || !sigHex) return false;
+  const salt = fromHex(saltHex);
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]),
+    { name: "HMAC", hash: "SHA-256", length: 256 },
+    false,
+    ["sign"]
+  );
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(PBKDF2_PEPPER)));
+  return toHex(sig) === sigHex;
+}
+
+/**
+ * 确保存在一个可用「账号密码」登录的管理员账号。
+ * 账号 = ADMIN_USERNAME（默认 admin），密码 = ADMIN_PASSWORD。
+ * 仅在配置了 ADMIN_PASSWORD 时生效；若账号已存在但缺哈希，则补写哈希。
+ */
+export async function ensureAdminAccount(env: AuthEnv): Promise<void> {
+  const username = (env.ADMIN_USERNAME || "admin").trim();
+  const password = (env.ADMIN_PASSWORD || "").trim();
+  if (!password) return; // 未配置密码，不创建可登录账号（保持已有账号不变）
+
+  const existing = (await env.DB
+    .prepare("SELECT * FROM users WHERE username = ? AND role = 'admin'")
+    .bind(username)
+    .first()) as (UserRow & { password_hash?: string | null }) | null;
+
+  const hash = await hashPassword(password);
+  if (existing) {
+    if (!existing.password_hash) {
+      await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(hash, existing.id).run();
+    }
+    return;
+  }
+  await env.DB
+    .prepare("INSERT INTO users (username, role, password_hash, created_at) VALUES (?, 'admin', ?, ?)")
+    .bind(username, hash, Date.now())
+    .run();
+}
+
+/** 账号密码登录：校验 username + password，返回管理员用户 */
+export async function passwordLogin(env: AuthEnv, username: string, password: string): Promise<UserRow | null> {
+  const u = (username || "").trim();
+  if (!u || !password) return null;
+  const row = (await env.DB
+    .prepare("SELECT * FROM users WHERE username = ? AND role = 'admin'")
+    .bind(u)
+    .first()) as (UserRow & { password_hash?: string | null }) | null;
+  if (!row || !row.password_hash) return null;
+  const ok = await verifyPassword(row.password_hash, password);
+  return ok ? row : null;
 }
 
 export interface LoginResult {

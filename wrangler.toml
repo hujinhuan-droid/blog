@@ -22,4 +22,10 @@ bucket_name = "ai-agent-blog-images"
 
 # 环境变量（密钥请用 `wrangler secret put` 设置，不要写进此文件）
 [vars]
-APP_URL = "http://localhost:8787"
+APP_URL = "https://hujinhuan.cc.cd"
+
+# 自定义域名 hujinhuan.cc.cd 已创建并启用（Cloudflare 侧持久），不再由 wrangler 重复管理 routes
+# 如需再次用 wrangler 管理自定义域，请给 token 加 Zone:Edit 权限后恢复下面的配置：
+# [[routes]]
+# pattern = "hujinhuan.cc.cd"
+# custom_domain = true

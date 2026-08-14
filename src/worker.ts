@@ -5,6 +5,7 @@ import {
   githubAuthorizeUrl,
   exchangeGithubCode,
   passwordLogin,
+  ensureAdminAccount,
   startSession,
   clearSessionCookie,
   parseCookies,
@@ -112,16 +113,17 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
 
   if (method === "POST" && seg.length === 3 && seg[1] === "auth" && seg[2] === "login") {
     const body = await readJson(req);
-    // 密码登录（本地调试）
-    if (body.password) {
-      const u = await passwordLogin(env, body.password);
-      if (!u) return json({ error: "密码错误或未配置 ADMIN_PASSWORD" }, 401);
+    // 账号密码登录（主路径）
+    if (body.username && body.password) {
+      await ensureAdminAccount(env);
+      const u = await passwordLogin(env, body.username, body.password);
+      if (!u) return json({ error: "账号或密码错误" }, 401);
       const s = await startSession(env, u);
       return json({ user: s.user }, 200, { "set-cookie": s.cookie });
     }
-    // GitHub OAuth 跳转
+    // GitHub OAuth 跳转（兜底）
     const url = githubAuthorizeUrl(env);
-    if (!url) return json({ error: "未配置 GitHub OAuth，请使用密码登录或配置 GITHUB_CLIENT_ID" }, 400);
+    if (!url) return json({ error: "未配置 GitHub OAuth，请使用账号密码登录" }, 400);
     return new Response(null, { status: 302, headers: { location: url } });
   }
 

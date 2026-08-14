@@ -20,6 +20,7 @@ export interface UserRow {
   avatar: string | null;
   email: string | null;
   role: string;
+  password_hash: string | null;
   created_at: number;
 }
 

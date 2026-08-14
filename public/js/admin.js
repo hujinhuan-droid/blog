@@ -22,18 +22,26 @@ function renderLogin() {
   app.innerHTML = `
     <div class="login-card form">
       <h2>管理员登录</h2>
-      <p class="muted">第一个 GitHub 登录用户自动成为管理员；本地调试可用密码登录。</p>
-      <a class="btn btn-primary" href="/api/auth/login">使用 GitHub 登录</a>
+      <p class="muted">使用账号密码进入后台管理</p>
+      <label>账号</label>
+      <input type="text" id="uname" placeholder="admin" autocomplete="username" />
+      <label>密码</label>
+      <input type="password" id="pw" placeholder="密码" autocomplete="current-password" />
+      <button class="btn btn-primary" id="pwLogin" style="margin-top:14px;width:100%">登录</button>
       <div class="divider">— 或 —</div>
-      <div>
-        <input type="password" id="pw" placeholder="调试密码（ADMIN_PASSWORD）" />
-        <button class="btn" id="pwLogin">密码登录</button>
-      </div>
+      <a class="btn" href="/api/auth/login">使用 GitHub 登录</a>
     </div>`;
-  const btn = document.getElementById("pwLogin");
-  btn.onclick = async () => {
+  const doLogin = async () => {
+    const uname = (document.getElementById("uname").value || "").trim();
     const pw = document.getElementById("pw").value;
-    const res = await api("/auth/login", { method: "POST", body: JSON.stringify({ password: pw }) });
+    if (!uname || !pw) {
+      toast("请输入账号和密码");
+      return;
+    }
+    const res = await api("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username: uname, password: pw }),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       toast(data.error || "登录失败");
@@ -43,6 +51,12 @@ function renderLogin() {
     renderNav();
     renderAdmin();
   };
+  document.getElementById("pwLogin").onclick = doLogin;
+  app.querySelectorAll("#uname, #pw").forEach((inp) =>
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doLogin();
+    })
+  );
 }
 
 async function renderDashboard() {
