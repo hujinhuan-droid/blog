@@ -1,5 +1,15 @@
-// 前端路由 + 读者端视图 + 导航
+// 前端路由 + 读者端视图 + 导航 + 站点统计
 let CURRENT_USER = null;
+
+// 顶部主导航（与底部站点统计平行对齐）
+const MENUS = [
+  { label: "文章", hash: "#/" },
+  { label: "时间轴", hash: "#/timeline" },
+  { label: "动态", hash: "#/feed" },
+  { label: "标签", hash: "#/tags" },
+  { label: "朋友们", hash: "#/friends" },
+  { label: "关于", hash: "#/about" },
+];
 
 function api(path, opts) {
   return fetch("/api" + path, Object.assign({ headers: { "content-type": "application/json" } }, opts));
@@ -32,15 +42,21 @@ function el(html) {
 function renderNav() {
   const nav = document.getElementById("nav");
   nav.innerHTML = "";
+  const menu = el(`<div class="menu"></div>`);
+  for (const m of MENUS) {
+    menu.appendChild(el(`<a class="menu-link" href="${m.hash}">${m.label}</a>`));
+  }
+  nav.appendChild(menu);
+
+  const right = el(`<div class="nav-right"></div>`);
   if (CURRENT_USER) {
     const u = CURRENT_USER;
     if (u.role === "admin") {
-      nav.appendChild(el(`<a class="btn btn-sm" href="#/admin">管理后台</a>`));
+      right.appendChild(el(`<a class="btn btn-sm" href="#/admin">管理后台</a>`));
     }
-    const user = el(
-      `<span class="user">${u.avatar ? `<img class="avatar" src="${u.avatar}"/>` : ""}${u.username}</span>`
+    right.appendChild(
+      el(`<span class="user">${u.avatar ? `<img class="avatar" src="${u.avatar}"/>` : ""}${u.username}</span>`)
     );
-    nav.appendChild(user);
     const logout = el(`<button class="btn btn-sm">退出</button>`);
     logout.onclick = async () => {
       await api("/auth/logout", { method: "POST" });
@@ -48,10 +64,30 @@ function renderNav() {
       renderNav();
       location.hash = "#/";
     };
-    nav.appendChild(logout);
+    right.appendChild(logout);
   } else {
-    nav.appendChild(el(`<a class="btn btn-sm btn-primary" href="#/admin">登录</a>`));
+    right.appendChild(el(`<a class="btn btn-sm btn-primary" href="#/admin">登录</a>`));
   }
+  nav.appendChild(right);
+}
+
+// 底部站点统计（与顶栏共用 .wrap 容器，实现平行对齐）
+async function renderSiteStats() {
+  const box = document.getElementById("site-stats");
+  if (!box) return;
+  let count = 0;
+  try {
+    const r = await api("/posts");
+    const p = await r.json();
+    count = Array.isArray(p) ? p.length : 0;
+  } catch {}
+  const started = Date.parse("2026-08-13");
+  const days = Math.max(1, Math.floor((Date.now() - started) / 86400000) + 1);
+  box.innerHTML =
+    `<span>文章 ${count}</span>` +
+    `<span>标签 0</span>` +
+    `<span>运行 ${days} 天</span>` +
+    `<span>访客 —</span>`;
 }
 
 async function renderHome() {
@@ -99,6 +135,63 @@ async function renderPost(slug) {
   app.appendChild(detail);
 }
 
+async function renderTimeline() {
+  const app = document.getElementById("app");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  const posts = await (await api("/posts")).json();
+  if (!posts.length) {
+    app.innerHTML = `<h1 class="page-title">时间轴</h1><div class="empty">暂无文章</div>`;
+    return;
+  }
+  const groups = {};
+  for (const p of posts) {
+    const y = new Date(p.created_at).getFullYear();
+    (groups[y] = groups[y] || []).push(p);
+  }
+  const years = Object.keys(groups).sort((a, b) => b - a);
+  let html = `<h1 class="page-title">时间轴</h1>`;
+  for (const y of years) {
+    html += `<h2 class="year">${y}</h2><div class="post-list">`;
+    for (const p of groups[y]) {
+      html += `<article class="post-card"><h2><a href="#/post/${p.slug}">${p.title}</a></h2><div class="meta">${fmtDate(p.created_at)}</div></article>`;
+    }
+    html += `</div>`;
+  }
+  app.innerHTML = html;
+}
+
+function renderFeed() {
+  const app = document.getElementById("app");
+  app.innerHTML = `<h1 class="page-title">动态</h1><div class="empty">还没有动态，去管理后台发点什么吧。</div>`;
+}
+
+function renderTags() {
+  const app = document.getElementById("app");
+  app.innerHTML = `<h1 class="page-title">标签</h1><div class="empty">标签功能即将上线，敬请期待。</div>`;
+}
+
+function renderFriends() {
+  const app = document.getElementById("app");
+  const friends = [
+    { name: "WorkBuddy", url: "https://www.workbuddy.cn" },
+  ];
+  let html = `<h1 class="page-title">朋友们</h1><div class="friend-list">`;
+  for (const f of friends) {
+    html += `<a class="friend" href="${f.url}" target="_blank" rel="noopener">${f.name}</a>`;
+  }
+  html += `</div>`;
+  app.innerHTML = html;
+}
+
+function renderAbout() {
+  const app = document.getElementById("app");
+  app.innerHTML = `<div class="post-detail">
+    <h1>关于</h1>
+    <p>这是一个部署在 Cloudflare 上的博客平台，使用 Pages + Workers + D1 + R2 构建，支持 Markdown 写作与图形化管理后台。</p>
+    <p>由 <strong>hujinhuan-droid</strong> 维护。</p>
+  </div>`;
+}
+
 function route() {
   const hash = location.hash || "#/";
   if (hash.startsWith("#/admin")) {
@@ -109,6 +202,11 @@ function route() {
     renderPost(hash.slice("#/post/".length));
     return;
   }
+  if (hash.startsWith("#/timeline")) return renderTimeline();
+  if (hash.startsWith("#/feed")) return renderFeed();
+  if (hash.startsWith("#/tags")) return renderTags();
+  if (hash.startsWith("#/friends")) return renderFriends();
+  if (hash.startsWith("#/about")) return renderAbout();
   renderHome();
 }
 
@@ -121,6 +219,7 @@ async function init() {
     CURRENT_USER = null;
   }
   renderNav();
+  renderSiteStats();
   window.addEventListener("hashchange", route);
   route();
 }
