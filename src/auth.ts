@@ -81,7 +81,8 @@ export async function exchangeGithubCode(code: string, env: AuthEnv): Promise<Us
 
 /** 密码登录（本地调试用）：校验 ADMIN_PASSWORD，返回管理员用户 */
 export async function passwordLogin(env: AuthEnv, password: string): Promise<UserRow | null> {
-  if (!env.ADMIN_PASSWORD || password !== env.ADMIN_PASSWORD) return null;
+  const expected = (env.ADMIN_PASSWORD || "").trim();
+  if (!expected || (password || "").trim() !== expected) return null;
   return getOrCreatePasswordAdmin(env.DB, "admin");
 }
 
