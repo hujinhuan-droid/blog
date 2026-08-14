@@ -193,6 +193,12 @@ function renderAbout() {
 }
 
 function route() {
+  // 路径式入口（/login、/admin）重定向到哈希路由，避免用户直接输入地址时只看到首页
+  const path = location.pathname;
+  if (path === "/login" || path === "/admin") {
+    location.replace("/#/admin");
+    return;
+  }
   const hash = location.hash || "#/";
   if (hash.startsWith("#/admin")) {
     renderAdmin();
