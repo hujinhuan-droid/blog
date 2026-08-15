@@ -84,7 +84,6 @@ a:hover { text-decoration: underline; }
   .post-detail pre { font-size: 12px; padding: 12px; }
   .post-card { padding: 16px; }
   .post-card h2 { font-size: 17px; }
-  .post-list { grid-template-columns: 1fr; }
   .hero-inner { padding: 28px 20px; }
   .hero-title { font-size: 26px; }
   .login-card { margin: 28px auto; padding: 0 14px; }
@@ -116,7 +115,8 @@ a:hover { text-decoration: underline; }
 .btn-sm { padding: 5px 10px; font-size: 13px; }
 
 /* 文章卡片 */
-.post-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.post-list { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 769px) { .post-list { grid-template-columns: repeat(2, 1fr); } }
 .post-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 18px 20px; box-shadow: var(--shadow);
