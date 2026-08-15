@@ -228,6 +228,12 @@ async function renderHome() {
         <div class="excerpt">${p.excerpt || ""}</div>
         ${aiNotesHtml(p.ai_notes, true)}
       </article>`);
+    // 整张卡片可点击：点标题链接时由链接自身处理，点卡片其它位置则跳转文章
+    card.style.cursor = "pointer";
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("a")) return;
+      location.hash = "#/post/" + encodeURIComponent(p.slug);
+    });
     list.appendChild(card);
   }
   app.innerHTML = "";
@@ -371,6 +377,14 @@ async function renderTimeline() {
     html += `</div>`;
   }
   app.innerHTML = html;
+  // 时间轴卡片整张可点击进入文章
+  app.querySelectorAll(".post-card").forEach((card) => {
+    card.style.cursor = "pointer";
+    card.addEventListener("click", () => {
+      const a = card.querySelector("a");
+      if (a) location.hash = a.getAttribute("href");
+    });
+  });
 }
 
 function renderFeed() {
