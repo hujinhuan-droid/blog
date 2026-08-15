@@ -5,12 +5,79 @@ let DASH_POSTS = [];
 let DASH_COMMENTED = null; // null=未加载；Set=已加载的 slug 集合
 
 
+// 后台内容容器（侧边栏布局下为 #admin-main，登录态外退化为 #app）
+function adminMain() {
+  return document.getElementById("admin-main") || document.getElementById("app");
+}
+
+// 构建后台外壳：左侧分类导航 + 右侧内容区，并把前台顶栏/页脚交给 admin-mode 隐藏
+function buildAdminShell() {
+  const app = document.getElementById("app");
+  if (app.querySelector(".admin-shell")) return;
+  const u = CURRENT_USER || {};
+  const uname = escHtml(u.username || "admin");
+  app.innerHTML = `
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <div class="admin-brand">
+          <span class="admin-logo">🤖</span>
+          <div class="admin-brand-txt">
+            <div class="admin-brand-name">AI Agent</div>
+            <div class="admin-brand-sub">管理后台</div>
+          </div>
+        </div>
+        <nav class="admin-nav">
+          <a class="admin-nav-item" href="#/admin" data-nav="overview"><span class="ico">📊</span><span>概览</span></a>
+          <a class="admin-nav-item" href="#/admin/posts" data-nav="posts"><span class="ico">📝</span><span>文章</span></a>
+          <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico">🖼️</span><span>媒体库</span></a>
+          <a class="admin-nav-item" href="#/admin/settings" data-nav="settings"><span class="ico">⚙️</span><span>设置</span></a>
+        </nav>
+        <div class="admin-side-foot">
+          <div class="admin-user">
+            <span class="admin-ava">${uname.slice(0, 1).toUpperCase()}</span>
+            <div class="admin-user-txt">
+              <div class="admin-un">${uname}</div>
+              <div class="admin-role">管理员</div>
+            </div>
+          </div>
+          <a class="admin-back" href="#/">← 返回网站</a>
+        </div>
+      </aside>
+      <div class="admin-main" id="admin-main"></div>
+    </div>`;
+}
+
+// 根据当前 hash 高亮侧边栏对应项
+function setAdminActive() {
+  const hash = location.hash || "#/admin";
+  const map = [
+    [/^#\/admin\/(edit|new|posts)/, "posts"],
+    [/^#\/admin\/media/, "media"],
+    [/^#\/admin\/settings/, "settings"],
+    [/^#\/admin(\/drill)?/, "overview"],
+  ];
+  let active = "overview";
+  for (const [re, name] of map) {
+    if (re.test(hash)) {
+      active = name;
+      break;
+    }
+  }
+  document.querySelectorAll(".admin-nav-item").forEach((a) => {
+    a.classList.toggle("active", a.getAttribute("data-nav") === active);
+  });
+}
+
 function renderAdmin() {
-  const hash = location.hash;
   if (!CURRENT_USER || CURRENT_USER.role !== "admin") {
+    document.body.classList.remove("admin-mode");
     renderLogin();
     return;
   }
+  document.body.classList.add("admin-mode");
+  buildAdminShell();
+  setAdminActive();
+  const hash = location.hash;
   if (hash.startsWith("#/admin/edit/")) {
     renderEditor(decodeURIComponent(hash.slice("#/admin/edit/".length)));
     return;
@@ -21,6 +88,14 @@ function renderAdmin() {
   }
   if (hash.startsWith("#/admin/settings")) {
     renderSettings();
+    return;
+  }
+  if (hash.startsWith("#/admin/media")) {
+    renderMediaPage();
+    return;
+  }
+  if (hash.startsWith("#/admin/posts")) {
+    renderPostsTable();
     return;
   }
   if (hash.startsWith("#/admin/drill/")) {
@@ -83,12 +158,19 @@ function renderLogin() {
 }
 
 async function renderDashboard() {
-  const app = document.getElementById("app");
+  const app = adminMain();
   app.innerHTML = `<div class="empty">加载中…</div>`;
   const res = await api("/posts");
   const posts = await res.json();
   DASH_POSTS = Array.isArray(posts) ? posts : [];
-  const wrap = el(`<div></div>`);
+  const wrap = el(`<div class="dash"></div>`);
+  const head = el(`<div class="dash-head"></div>`);
+  head.innerHTML = `<div>
+      <h1 class="dash-title">概览</h1>
+      <p class="dash-sub">站点内容总览与最近动态</p>
+    </div>
+    <a class="btn btn-primary" href="#/admin/new">＋ 新建文章</a>`;
+  wrap.appendChild(head);
   // 数据看板
   let stats = null;
   try {
@@ -117,21 +199,61 @@ async function renderDashboard() {
       };
     });
   }
-  const toolbar = el(`<div class="admin-toolbar"></div>`);
-  toolbar.appendChild(el(`<h2 style="margin:0">文章管理（${posts.length}）</h2>`));
-  const newBtn = el(`<a class="btn btn-primary" href="#/admin/new">+ 新建文章</a>`);
-  toolbar.appendChild(newBtn);
-  const reindexBtn = el(`<button class="btn" id="reindex">🧠 重建搜索索引</button>`);
-  toolbar.appendChild(reindexBtn);
-  const batchBtn = el(`<button class="btn" id="batch-notes" disabled>🤖 批量 AI 备注</button>`);
-  toolbar.appendChild(batchBtn);
-  const batchTagsBtn = el(`<button class="btn" id="batch-tags" disabled>🏷 批量 AI 分类</button>`);
-  toolbar.appendChild(batchTagsBtn);
-  toolbar.appendChild(el(`<a class="btn" href="#/admin/settings">⚙ 设置</a>`));
-  wrap.appendChild(toolbar);
+  // 最近文章
+  const recent = DASH_POSTS.slice()
+    .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
+    .slice(0, 5);
+  const sec = el(`<div class="dash-section"></div>`);
+  sec.innerHTML = `<div class="dash-section-head"><h2>最近文章</h2><a class="link-more" href="#/admin/posts">查看全部 →</a></div>`;
+  if (!recent.length) {
+    sec.appendChild(el(`<div class="empty">还没有文章，点右上角「＋ 新建文章」开始吧。</div>`));
+  } else {
+    const list = el(`<div class="mini-list"></div>`);
+    for (const p of recent) {
+      const row = el(`<a class="mini-item" href="#/admin/edit/${encodeURIComponent(p.slug)}"></a>`);
+      const tg = parseTags(p.tags);
+      row.innerHTML = `<div class="mini-main">
+          <div class="mini-title">${escHtml(p.title)}</div>
+          <div class="mini-sub">${p.visibility === "private" ? "私密" : "公开"}${tg.length ? " · " + tg.slice(0, 3).join("、") : ""} · ${fmtDate(p.updated_at)}</div>
+        </div>
+        <span class="mini-go">✎</span>`;
+      list.appendChild(row);
+    }
+    sec.appendChild(list);
+  }
+  wrap.appendChild(sec);
+
+  app.innerHTML = "";
+  app.appendChild(wrap);
+}
+
+// 文章管理：列表 + 勾选批量 AI + 重建索引
+async function renderPostsTable() {
+  const app = adminMain();
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  const res = await api("/posts");
+  const posts = await res.json();
+  DASH_POSTS = Array.isArray(posts) ? posts : [];
+  const wrap = el(`<div class="dash"></div>`);
+
+  const head = el(`<div class="dash-head"></div>`);
+  head.innerHTML = `<div>
+      <h1 class="dash-title">文章管理</h1>
+      <p class="dash-sub">共 ${posts.length} 篇 · 勾选后可批量 AI 处理</p>
+    </div>
+    <a class="btn btn-primary" href="#/admin/new">＋ 新建文章</a>`;
+  wrap.appendChild(head);
+
+  const tbar = el(`<div class="posts-toolbar"></div>`);
+  tbar.innerHTML = `
+    <button class="btn" id="reindex">🧠 重建搜索索引</button>
+    <button class="btn" id="batch-notes" disabled>🤖 批量 AI 备注</button>
+    <button class="btn" id="batch-tags" disabled>🏷 批量 AI 分类</button>
+    <a class="btn btn-ghost" href="#/admin/settings">⚙ 设置</a>`;
+  wrap.appendChild(tbar);
 
   if (!posts.length) {
-    wrap.appendChild(el(`<div class="empty">还没有文章。</div>`));
+    wrap.appendChild(el(`<div class="empty">还没有文章。<a href="#/admin/new">新建一篇</a>。</div>`));
     app.innerHTML = "";
     app.appendChild(wrap);
     return;
@@ -144,20 +266,20 @@ async function renderDashboard() {
     const tr = el(`<tr></tr>`);
     tr.innerHTML = `
       <td><input type="checkbox" class="row-sel" data-id="${p.id}" /></td>
-      <td>${p.title}</td>
-      <td>${p.visibility === "private" ? "私密" : "公开"}</td>
+      <td class="cell-title">${escHtml(p.title)}</td>
+      <td><span class="badge ${p.visibility === "private" ? "badge-lock" : "badge-public"}">${p.visibility === "private" ? "私密" : "公开"}</span></td>
       <td>${fmtDate(p.updated_at)}</td>
-      <td>
+      <td class="cell-ops">
         <a class="btn btn-sm" href="#/post/${encodeURIComponent(p.slug)}">查看</a>
         <a class="btn btn-sm" href="#/admin/edit/${encodeURIComponent(p.slug)}">编辑</a>
         <button class="btn btn-sm btn-danger" data-id="${p.id}">删除</button>
       </td>`;
-    tr.querySelector(".btn-danger").onclick = async (e) => {
+    tr.querySelector(".btn-danger").onclick = async () => {
       if (!confirm(`确定删除《${p.title}》？`)) return;
       const r = await api("/posts/" + p.id, { method: "DELETE" });
       if (r.ok) {
         toast("已删除");
-        renderDashboard();
+        renderPostsTable();
       } else toast("删除失败");
     };
     tbody.appendChild(tr);
@@ -167,7 +289,9 @@ async function renderDashboard() {
   app.innerHTML = "";
   app.appendChild(wrap);
 
-  // 批量 AI 备注：勾选单篇 / 多篇小说，服务端依次生成备注并写库
+  const batchBtn = document.getElementById("batch-notes");
+  const batchTagsBtn = document.getElementById("batch-tags");
+  const reindexBtn = document.getElementById("reindex");
   const selAll = document.getElementById("sel-all");
   const updateBatchBtn = () => {
     const n = app.querySelectorAll(".row-sel:checked").length;
@@ -193,7 +317,7 @@ async function renderDashboard() {
       const r = await res.json().catch(() => ({}));
       if (res.ok) toast(`批量完成：${r.ok} 成功 / ${r.total - r.ok} 失败`);
       else toast(r.error || "批量失败");
-      renderDashboard();
+      renderPostsTable();
     } catch (e) {
       toast("请求异常");
     } finally {
@@ -212,7 +336,7 @@ async function renderDashboard() {
       const r = await res.json().catch(() => ({}));
       if (res.ok) toast(`批量分类完成：${r.ok} 成功 / ${r.total - r.ok} 失败`);
       else toast(r.error || "批量分类失败");
-      renderDashboard();
+      renderPostsTable();
     } catch (e) {
       toast("请求异常");
     } finally {
@@ -238,9 +362,80 @@ async function renderDashboard() {
   };
 }
 
+// 媒体库整页
+async function renderMediaPage() {
+  const app = adminMain();
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  const wrap = el(`<div class="dash"></div>`);
+  wrap.innerHTML = `<div class="dash-head"><div>
+      <h1 class="dash-title">媒体库</h1>
+      <p class="dash-sub">管理已上传到 R2 的图片</p>
+    </div></div>`;
+  const tool = el(`<div class="media-toolbar"></div>`);
+  tool.innerHTML = `
+    <input type="file" id="media-file" accept="image/*" />
+    <button class="btn btn-primary" id="media-upload">上传</button>
+    <span class="muted">也可在编辑文章时通过「🖼 媒体库」按钮插入正文</span>`;
+  wrap.appendChild(tool);
+  const grid = el(`<div class="media-grid" id="media-grid"></div>`);
+  wrap.appendChild(grid);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+
+  const load = async () => {
+    grid.innerHTML = `<div class="empty">加载中…</div>`;
+    const res = await api("/media");
+    const d = await res.json().catch(() => ({ items: [] }));
+    const items = d.items || [];
+    if (!items.length) {
+      grid.innerHTML = `<div class="empty">还没有图片，先上传一张吧。</div>`;
+      return;
+    }
+    grid.innerHTML = "";
+    for (const it of items) {
+      const cell = el(`<div class="media-cell"></div>`);
+      const fname = String(it.key || it.url || "").split("/").pop();
+      cell.innerHTML = `
+        <img src="${it.url}" alt="" loading="lazy" />
+        <div class="media-meta" title="${escHtml(fname)}">${escHtml(fname)}</div>
+        <div class="media-actions">
+          <button class="btn btn-sm" data-act="copy">复制链接</button>
+          <button class="btn btn-sm btn-danger" data-act="del">删除</button>
+        </div>`;
+      cell.querySelector('[data-act="copy"]').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(it.url);
+          toast("链接已复制");
+        } catch {
+          toast(it.url);
+        }
+      };
+      cell.querySelector('[data-act="del"]').onclick = async () => {
+        if (!confirm("确定删除该图片？")) return;
+        const r = await api("/media", { method: "DELETE", body: JSON.stringify({ key: it.key }) });
+        if (r.ok) load();
+        else toast("删除失败");
+      };
+      grid.appendChild(cell);
+    }
+  };
+  document.getElementById("media-upload").onclick = async () => {
+    const f = document.getElementById("media-file").files[0];
+    if (!f) return toast("请选择文件");
+    const data = await fileToBase64(f);
+    const r = await api("/upload", { method: "POST", body: JSON.stringify({ name: f.name, type: f.type, data }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      toast("已上传");
+      load();
+    } else toast(d.error || "上传失败");
+  };
+  load();
+}
+
 // 看板统计卡片下钻：按类型过滤文章，列出标题，点标题进入编辑
 async function openDrill(type) {
-  const app = document.getElementById("app");
+  const app = adminMain();
   // 若直接访问下钻路由（如刷新），确保文章列表已加载
   if (!DASH_POSTS.length) {
     try {
@@ -310,7 +505,7 @@ async function openDrill(type) {
 }
 
 async function renderEditor(slug) {
-  const app = document.getElementById("app");
+  const app = adminMain();
   let post = null;
   if (slug) {
     app.innerHTML = `<div class="empty">加载中…</div>`;
@@ -408,7 +603,7 @@ async function renderEditor(slug) {
     </div>
     <div style="margin-top:18px; display:flex; gap:10px;">
       <button class="btn btn-primary" id="save">保存</button>
-      <a class="btn" href="#/admin">取消</a>
+      <a class="btn" href="#/admin/posts">取消</a>
     </div>`;
   app.innerHTML = "";
   app.appendChild(form);
@@ -824,7 +1019,7 @@ async function renderEditor(slug) {
     const res = post ? await api("/posts/" + post.id, opt) : await api("/posts", opt);
     if (res.ok) {
       toast("已保存");
-      location.hash = "#/admin";
+      location.hash = "#/admin/posts";
     } else {
       const r = await res.json().catch(() => ({}));
       toast(r.error || "保存失败");
@@ -966,7 +1161,7 @@ function colorVal(hex) {
 }
 
 async function renderSettings() {
-  const app = document.getElementById("app");
+  const app = adminMain();
   app.innerHTML = `<div class="empty">加载中…</div>`;
   let s = {};
   try {
@@ -977,7 +1172,7 @@ async function renderSettings() {
   form.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <h2 style="margin:0">站点设置</h2>
-      <a class="btn" href="#/admin">← 返回文章管理</a>
+      <a class="btn" href="#/admin/posts">← 返回文章管理</a>
     </div>
 
     <fieldset class="set-group">

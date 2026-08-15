@@ -600,6 +600,7 @@ function route() {
     return;
   }
   const hash = location.hash || "#/";
+  if (!hash.startsWith("#/admin")) document.body.classList.remove("admin-mode");
   if (hash.startsWith("#/admin")) {
     renderAdmin();
     return;
