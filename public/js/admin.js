@@ -1171,7 +1171,6 @@ async function renderSettings() {
   form.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
       <h2 style="margin:0">站点设置</h2>
-      <a class="btn" href="#/admin/posts">← 返回文章管理</a>
     </div>
 
     <fieldset class="set-group">
