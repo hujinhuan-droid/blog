@@ -26,6 +26,7 @@ interface Env extends AuthEnv {
   BUCKET: R2Bucket;
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   GEMINI_API_KEY?: string;
+  GEMINI_BASE_URL?: string;
 }
 
 function json(data: any, status = 200, extra: Record<string, string> = {}): Response {
@@ -48,7 +49,7 @@ async function readJson(req: Request): Promise<any> {
 }
 
 // ---------------- Gemini AI ----------------
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-flash-latest";
 
 type AiAction = "optimize" | "annotate";
 
@@ -59,28 +60,40 @@ const AI_PROMPTS: Record<AiAction, string> = {
     "你是一位资深的中文编辑与审稿人。请针对下面的 Markdown 文章，给出面向作者的「备注 / 审稿意见」，用中文分点列出：\n1) 文章优点；\n2) 可改进之处（结构、逻辑、事实、语气、错别字等）；\n3) 具体修改建议。\n不要改写全文，只给评语与建议，使用 Markdown 格式。",
 };
 
-async function callGemini(env: Env, action: AiAction, title: string, content: string): Promise<string> {
+async function callGemini(env: Env, action: AiAction, title: string, content: string, model = GEMINI_MODEL): Promise<string> {
   const key = env.GEMINI_API_KEY;
   if (!key) throw new Error("服务端未配置 GEMINI_API_KEY，请在 Cloudflare 设置该 secret");
   const userText = `标题：${title || "(无标题)"}\n\n正文：\n${content}`;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: AI_PROMPTS[action] + "\n\n" + userText }] }],
-      generationConfig: { temperature: action === "optimize" ? 0.4 : 0.6, maxOutputTokens: 4096 },
-    }),
+  const base = (env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/$/, "");
+  const url = `${base}/v1beta/models/${model}:generateContent?key=${key}`;
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: AI_PROMPTS[action] + "\n\n" + userText }] }],
+    generationConfig: { temperature: action === "optimize" ? 0.4 : 0.6, maxOutputTokens: 4096 },
   });
-  if (!resp.ok) {
+  // 503 为临时高负载，自动重试一次
+  let lastErr = "Gemini 调用失败";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    if (resp.ok) {
+      const data = (await resp.json()) as any;
+      const parts = data?.candidates?.[0]?.content?.parts ?? [];
+      const text = parts.map((p: any) => p.text || "").join("").trim();
+      if (!text) throw new Error("Gemini 返回内容为空");
+      return text;
+    }
     const t = await resp.text().catch(() => "");
-    throw new Error(`Gemini API ${resp.status}: ${t.slice(0, 300)}`);
+    lastErr = `Gemini API ${resp.status}: ${t.slice(0, 300)}`;
+    if (resp.status === 503 && attempt < 1) {
+      await new Promise((r) => setTimeout(r, 1500));
+      continue;
+    }
+    throw new Error(lastErr);
   }
-  const data = (await resp.json()) as any;
-  const parts = data?.candidates?.[0]?.content?.parts ?? [];
-  const text = parts.map((p: any) => p.text || "").join("").trim();
-  if (!text) throw new Error("Gemini 返回内容为空");
-  return text;
+  throw new Error(lastErr);
 }
 
 // ---------------- 路由 ----------------
@@ -211,9 +224,10 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const action: AiAction = body.action === "annotate" ? "annotate" : "optimize";
     const title = (body.title || "").toString();
     const content = (body.content || "").toString();
+    const model = (body.model || GEMINI_MODEL).toString();
     if (!content.trim()) return json({ error: "正文不能为空" }, 400);
     try {
-      const result = await callGemini(env, action, title, content);
+      const result = await callGemini(env, action, title, content, model);
       return json({ result });
     } catch (e: any) {
       return json({ error: e.message || "AI 调用失败" }, 502);
