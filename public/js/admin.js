@@ -776,6 +776,7 @@ async function renderEditor(slug) {
     "科技": "💡 💻 🖥️ ⌨️ 🖱️ 💾 💿 🔧 🔨 ⚙️ 📱 📷 📹 🎮 🕹️ 🤖 🛰️ 🚀 🔋 🔌 🖨️ 📡 💽",
     "符号": "✅ ❌ ⚠️ ❓ ❗ ➡️ ⬅️ ⬆️ ⬇️ 🔄 🔁 🔗 📌 📍 💯 💢 💥 🆗 🆕 🔔 📝 📚 📊 📈 📉 💬 💭 🏷️ 🔖",
     "活动": "🎉 🎊 🎁 🏆 🥇 🎯 🎲 ⚽ 🏀 🏈 ⛳ 🎸 🎤 🎧 🎬 🎨 🧩 ♟️ 🏅 🎺 🎻",
+    "更多": "😺 🐳 🦋 🌵 🍄 🌶️ 🧄 🥑 🍿 🧋 🥨 🍫 🎈 🎂 🪐 ☄️ 🔭 🧠 📣 📢 🔕 🔒 🔑 🛡️ 🌩️ 💎 🏔️ 🌋 🏝️ 🚗 ✈️ ⏰ 📅 💰 🤑 🎇 🚩 🌠 🎀 🧸",
   };
   const picker = document.getElementById("emoji-picker");
   function buildEmojiPicker() {
