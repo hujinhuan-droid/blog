@@ -204,6 +204,35 @@ function bindPostCards(root) {
   });
 }
 
+// 首页「精选」大卡：整宽、更大图标与标题，形成主次层级
+function featuredHtml(p) {
+  const icon = pickIcon(p);
+  const cat = parseTags(p.tags)[0] || "";
+  const read = calcReadTime(p);
+  return `<article class="post-card featured">
+    <div class="post-card-head">
+      <span class="post-icon" aria-hidden="true">${icon}</span>
+      <div class="post-head-body">
+        <span class="featured-tag">✨ 精选</span>
+        <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
+          p.visibility === "private" ? `<span class="badge">私密</span>` : ""
+        }</h2>
+        <div class="post-submeta">
+          ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
+          <span class="post-date">${fmtDate(p.created_at)}</span>
+          ${read ? `<span class="post-read">${read}</span>` : ""}
+        </div>
+      </div>
+    </div>
+    <div class="excerpt">${escHtml(p.excerpt || "")}</div>
+    ${aiNotesHtml(p.ai_notes, true)}
+    <div class="featured-foot">
+      <a class="btn btn-sm btn-primary" href="#/post/${encodeURIComponent(p.slug)}">阅读全文 →</a>
+      ${tagsHtml(p)}
+    </div>
+  </article>`;
+}
+
 // 写入 / 更新 <head> 中的 meta 标签（SEO 用）
 function setMeta(name, content) {
   if (!content) return;
@@ -300,9 +329,10 @@ async function renderSiteStats() {
     `<span>访客 —</span>`;
 }
 
-// 首页文章缓存 + 当前页码（用于客户端分页，避免每次切换都重新拉取）
+// 首页文章缓存 + 当前页码 + 当前分类筛选（用于客户端分页/筛选，避免每次切换都重新拉取）
 let homeAll = [];
 let homePage = 1;
+let homeCat = "";
 
 async function renderHome() {
   const app = document.getElementById("app");
@@ -315,30 +345,93 @@ async function renderHome() {
     app.innerHTML = `<div class="empty">还没有文章，去管理后台写第一篇吧。</div>`;
     return;
   }
-  const total = homeAll.length;
-  const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
+
+  // 统计：文章数 / 标签数 / 运行天数
+  const tagSet = new Set();
+  homeAll.forEach((p) => parseTags(p.tags).forEach((t) => t && tagSet.add(t)));
+  const tagCount = tagSet.size;
+  const started = Date.parse("2026-08-13");
+  const days = Math.max(1, Math.floor((Date.now() - started) / 86400000) + 1);
+  const title = SITE_SETTINGS.site_title || "AI Agent 博客";
+  const sub = SITE_SETTINGS.seo_description || SITE_SETTINGS.about_content || "记录 AI Agent 的探索、实践与思考";
+
+  app.innerHTML = `
+    <section class="hero">
+      <div class="hero-inner">
+        <p class="hero-eyebrow">欢迎来到</p>
+        <h1 class="hero-title">${escHtml(title)}</h1>
+        <p class="hero-sub">${escHtml(sub)}</p>
+        <div class="hero-stats">
+          <span><b>${homeAll.length}</b> 篇文章</span>
+          <span class="dot">·</span>
+          <span><b>${tagCount}</b> 个标签</span>
+          <span class="dot">·</span>
+          <span><b>${days}</b> 天运行</span>
+        </div>
+      </div>
+    </section>
+    <div class="cat-filter" id="catFilter"></div>
+    <div id="homeBody"></div>`;
+
+  renderCatFilter();
+  renderHomeBody();
+}
+
+// 渲染分类筛选胶囊（基于全部文章的标签频次，取前 10 + 「全部」）
+function renderCatFilter() {
+  const box = document.getElementById("catFilter");
+  if (!box) return;
+  const counts = {};
+  homeAll.forEach((p) => parseTags(p.tags).forEach((t) => { if (t) counts[t] = (counts[t] || 0) + 1; }));
+  const cats = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10).map((x) => x[0]);
+  const chips = ["", ...cats];
+  box.innerHTML = chips
+    .map((c) => `<button type="button" class="cat-chip${c === homeCat ? " active" : ""}" data-cat="${escHtml(c)}">${c ? escHtml(c) : "全部"}</button>`)
+    .join("");
+  box.querySelectorAll(".cat-chip").forEach((b) => {
+    b.onclick = () => {
+      homeCat = b.dataset.cat || "";
+      homePage = 1;
+      renderCatFilter();
+      renderHomeBody();
+      window.scrollTo(0, 0);
+    };
+  });
+}
+
+// 渲染首页主体：精选大卡（仅「全部」第 1 页）+ 两列网格 + 分页
+function renderHomeBody() {
+  const body = document.getElementById("homeBody");
+  if (!body) return;
+  const src = homeCat ? homeAll.filter((p) => parseTags(p.tags).includes(homeCat)) : homeAll;
+  const showFeatured = !homeCat && homePage === 1;
+  const rest = showFeatured ? src.slice(1) : src;
+  const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
   if (homePage > pageCount) homePage = pageCount;
   const start = (homePage - 1) * PER_PAGE;
-  const slice = homeAll.slice(start, start + PER_PAGE);
+  const slice = rest.slice(start, start + PER_PAGE);
 
-  const list = el(`<div class="post-list"></div>`);
-  list.innerHTML = slice.map(postCardHtml).join("");
-  app.innerHTML = "";
-  app.appendChild(list);
-  bindPostCards(list);
+  let html = "";
+  if (showFeatured && src[0]) html += featuredHtml(src[0]);
+  if (slice.length) {
+    html += `<div class="post-list">${slice.map(postCardHtml).join("")}</div>`;
+  } else if (!showFeatured) {
+    html += `<div class="empty">该分类下还没有文章。</div>`;
+  }
+  body.innerHTML = html;
+  bindPostCards(body);
 
-  // 分页控件
   if (pageCount > 1) {
     const pager = el(`<div class="pager"></div>`);
     pager.innerHTML = `
       <button class="btn btn-sm" id="pg-prev" ${homePage <= 1 ? "disabled" : ""}>← 上一页</button>
       <span class="muted">第 ${homePage} / ${pageCount} 页</span>
       <button class="btn btn-sm" id="pg-next" ${homePage >= pageCount ? "disabled" : ""}>下一页 →</button>`;
-    app.appendChild(pager);
+    body.appendChild(pager);
     const prev = document.getElementById("pg-prev");
     const next = document.getElementById("pg-next");
-    if (prev) prev.onclick = () => { homePage--; renderHome(); window.scrollTo(0, 0); };
-    if (next) next.onclick = () => { homePage++; renderHome(); window.scrollTo(0, 0); };
+    if (prev) prev.onclick = () => { homePage--; renderHomeBody(); window.scrollTo(0, 0); };
+    if (next) next.onclick = () => { homePage++; renderHomeBody(); window.scrollTo(0, 0); };
   }
 }
 

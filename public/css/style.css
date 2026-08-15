@@ -84,6 +84,9 @@ a:hover { text-decoration: underline; }
   .post-detail pre { font-size: 12px; padding: 12px; }
   .post-card { padding: 16px; }
   .post-card h2 { font-size: 17px; }
+  .post-list { grid-template-columns: 1fr; }
+  .hero-inner { padding: 28px 20px; }
+  .hero-title { font-size: 26px; }
   .login-card { margin: 28px auto; padding: 0 14px; }
   .page-title { font-size: 20px; }
 }
@@ -113,7 +116,7 @@ a:hover { text-decoration: underline; }
 .btn-sm { padding: 5px 10px; font-size: 13px; }
 
 /* 文章卡片 */
-.post-list { display: grid; gap: 16px; }
+.post-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 .post-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 18px 20px; box-shadow: var(--shadow);
@@ -157,6 +160,54 @@ a:hover { text-decoration: underline; }
 .post-read::before { content: "\23F1\00A0"; }
 body.dark .post-icon { box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 45%, #000); }
 body.dark .post-cat { background: color-mix(in srgb, var(--primary) 24%, #0f1729); }
+
+/* ---------- 首页 Hero 横幅 ---------- */
+.hero {
+  margin: 22px 0 18px; border-radius: 18px; overflow: hidden;
+  background:
+    radial-gradient(120% 140% at 12% 0%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%),
+    linear-gradient(135deg, var(--primary), #7c3aed 78%, #8b5cf6);
+  color: #fff; box-shadow: 0 18px 40px color-mix(in srgb, var(--primary) 28%, rgba(0,0,0,0.12));
+}
+.hero-inner { padding: 38px 34px; }
+.hero-eyebrow { margin: 0 0 6px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: .82; }
+.hero-title { margin: 0; font-size: 34px; line-height: 1.2; font-weight: 800; letter-spacing: -.01em; }
+.hero-sub { margin: 12px 0 0; max-width: 620px; font-size: 15.5px; line-height: 1.7; opacity: .92; }
+.hero-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px; font-size: 14px; }
+.hero-stats b { font-size: 17px; font-weight: 800; }
+.hero-stats .dot { opacity: .5; }
+.hero-stats span { display: inline-flex; align-items: center; }
+
+/* ---------- 首页分类筛选条 ---------- */
+.cat-filter { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 16px; }
+.cat-chip {
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  transition: .14s; font-family: inherit;
+}
+.cat-chip:hover { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+.cat-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 30%, transparent); }
+
+/* ---------- 首页精选大卡 ---------- */
+.post-card.featured {
+  grid-column: 1 / -1; padding: 24px 26px; border-width: 1px;
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--primary) 12%, rgba(0,0,0,0.08));
+}
+.post-card.featured:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--primary) 55%, var(--border)); }
+.post-card.featured .post-icon { width: 60px; height: 60px; font-size: 32px; border-radius: 18px; }
+.post-card.featured h2 { font-size: 24px; margin-bottom: 8px; }
+.post-card.featured .excerpt { font-size: 15px; color: #374151; }
+.featured-tag {
+  display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent);
+  padding: 2px 10px; border-radius: 999px; margin-bottom: 8px;
+}
+.featured-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.featured-foot .tags { margin: 0; }
+body.dark .hero { color: #fff; }
+body.dark .post-card.featured .excerpt { color: #cbd5e1; }
+body.dark .hero-stats b { color: #fff; }
 
 /* 文章详情 */
 .post-detail { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 32px; box-shadow: var(--shadow); }
