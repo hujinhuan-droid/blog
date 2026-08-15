@@ -253,7 +253,8 @@ async function renderEditor(slug) {
   let initialTags = "";
   if (post && post.tags) {
     try {
-      initialTags = (JSON.parse(post.tags) as string[]).join(", ");
+      const arr = JSON.parse(post.tags);
+      initialTags = Array.isArray(arr) ? arr.join(", ") : String(arr || "");
     } catch {
       initialTags = "";
     }
