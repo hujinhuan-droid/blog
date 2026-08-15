@@ -139,6 +139,34 @@ function tagsHtml(p) {
   return `<div class="tags">${chips}</div>`;
 }
 
+// 根据标题/标签自动挑选一个装饰性 emoji 图标（首页卡片用）
+function pickIcon(p) {
+  const tags = parseTags(p.tags).join(" ");
+  const t = ((p.title || "") + " " + tags).toLowerCase();
+  const map = [
+    [/(ai|人工智能|智能体|agent|llm|gpt|大模型|机器学习|深度学习|神经网络|提示词|prompt)/, "🤖"],
+    [/(代码|编程|程序|js|javascript|python|java|go|rust|c\+\+|前端|后端|bug|函数|算法|开发|脚本)/, "💻"],
+    [/(教程|指南|上手|入门|实战|手册|文档|搭建)/, "📚"],
+    [/(笔记|记录|总结|复盘|整理|清单)/, "📝"],
+    [/(思考|想法|观点|随笔|感悟|建议|心得)/, "💡"],
+    [/(新闻|快讯|动态|资讯|公告|发布)/, "📰"],
+    [/(安全|隐私|加密|漏洞|防护|密码)/, "🔐"],
+    [/(部署|服务器|运维|云|cloudflare|docker|k8s|域名|网络)/, "☁️"],
+    [/(生活|日常|旅行|美食|健康|摄影|运动)/, "🌿"],
+    [/(设计|ui|ux|排版|美化|视觉|配色|样式)/, "🎨"],
+  ];
+  for (const [re, icon] of map) if (re.test(t)) return icon;
+  return "📄";
+}
+
+// 估算阅读时间（优先用正文，其次摘要；无内容则返回空）
+function calcReadTime(p) {
+  const text = p.content || p.excerpt || "";
+  if (!text) return "";
+  const n = Math.max(1, Math.round(text.replace(/\s+/g, "").length / 350));
+  return `约 ${n} 分钟`;
+}
+
 // 写入 / 更新 <head> 中的 meta 标签（SEO 用）
 function setMeta(name, content) {
   if (!content) return;
@@ -258,12 +286,24 @@ async function renderHome() {
 
   const list = el(`<div class="post-list"></div>`);
   for (const p of slice) {
+    const icon = pickIcon(p);
+    const cat = parseTags(p.tags)[0] || "";
+    const read = calcReadTime(p);
     const card = el(`
       <article class="post-card">
-        <h2><a href="#/post/${encodeURIComponent(p.slug)}">${p.title}</a>${
-          p.visibility === "private" ? `<span class="badge">私密</span>` : ""
-        }</h2>
-        <div class="meta">${fmtDate(p.created_at)}</div>
+        <div class="post-card-head">
+          <span class="post-icon" aria-hidden="true">${icon}</span>
+          <div class="post-head-body">
+            <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
+              p.visibility === "private" ? `<span class="badge">私密</span>` : ""
+            }</h2>
+            <div class="post-submeta">
+              ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
+              <span class="post-date">${fmtDate(p.created_at)}</span>
+              ${read ? `<span class="post-read">${read}</span>` : ""}
+            </div>
+          </div>
+        </div>
         <div class="excerpt">${p.excerpt || ""}</div>
         ${aiNotesHtml(p.ai_notes, true)}
         ${tagsHtml(p)}

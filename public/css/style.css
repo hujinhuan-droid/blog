@@ -126,6 +126,27 @@ a:hover { text-decoration: underline; }
 .post-card .excerpt { color: #374151; }
 .badge { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: #eef2ff; color: var(--primary); margin-left: 8px; }
 
+/* 首页文章卡片：标题区装饰元素 */
+.post-card-head { display: flex; gap: 14px; align-items: flex-start; }
+.post-icon {
+  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center; font-size: 24px; line-height: 1;
+  background: linear-gradient(135deg, var(--primary), #8b5cf6);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 35%, transparent);
+  user-select: none;
+}
+.post-head-body { min-width: 0; flex: 1; }
+.post-submeta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.post-cat {
+  display: inline-block; padding: 1px 9px; border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary); font-size: 12px; font-weight: 600;
+}
+.post-date::before { content: "\1F4C5\00A0"; }
+.post-read::before { content: "\23F1\00A0"; }
+body.dark .post-icon { box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 45%, #000); }
+body.dark .post-cat { background: color-mix(in srgb, var(--primary) 24%, #0f1729); }
+
 /* 文章详情 */
 .post-detail { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px 32px; box-shadow: var(--shadow); }
 .post-detail h1 { margin-top: 0; }
