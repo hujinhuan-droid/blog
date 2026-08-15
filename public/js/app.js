@@ -210,7 +210,7 @@ async function renderHome() {
   for (const p of slice) {
     const card = el(`
       <article class="post-card">
-        <h2><a href="#/post/${p.slug}">${p.title}</a>${
+        <h2><a href="#/post/${encodeURIComponent(p.slug)}">${p.title}</a>${
           p.visibility === "private" ? `<span class="badge">私密</span>` : ""
         }</h2>
         <div class="meta">${fmtDate(p.created_at)}</div>
@@ -353,7 +353,7 @@ async function renderTimeline() {
   for (const y of years) {
     html += `<h2 class="year">${y}</h2><div class="post-list">`;
     for (const p of groups[y]) {
-      html += `<article class="post-card"><h2><a href="#/post/${p.slug}">${p.title}</a></h2><div class="meta">${fmtDate(p.created_at)}</div></article>`;
+      html += `<article class="post-card"><h2><a href="#/post/${encodeURIComponent(p.slug)}">${p.title}</a></h2><div class="meta">${fmtDate(p.created_at)}</div></article>`;
     }
     html += `</div>`;
   }
@@ -414,7 +414,7 @@ function route() {
     return;
   }
   if (hash.startsWith("#/post/")) {
-    renderPost(hash.slice("#/post/".length));
+    renderPost(decodeURIComponent(hash.slice("#/post/".length)));
     return;
   }
   if (hash.startsWith("#/timeline")) return renderTimeline();

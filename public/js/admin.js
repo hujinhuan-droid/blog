@@ -93,7 +93,7 @@ async function renderDashboard() {
       <td>${p.visibility === "private" ? "私密" : "公开"}</td>
       <td>${fmtDate(p.updated_at)}</td>
       <td>
-        <a class="btn btn-sm" href="#/post/${p.slug}">查看</a>
+        <a class="btn btn-sm" href="#/post/${encodeURIComponent(p.slug)}">查看</a>
         <a class="btn btn-sm" href="#/admin/edit/${encodeURIComponent(p.slug)}">编辑</a>
         <button class="btn btn-sm btn-danger" data-id="${p.id}">删除</button>
       </td>`;

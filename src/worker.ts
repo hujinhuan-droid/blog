@@ -156,7 +156,10 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
 
   // 文章详情（按 slug）
   if (method === "GET" && seg.length === 3 && seg[1] === "posts") {
-    const row = await getPostBySlug(env.DB, seg[2], { admin: isAdmin(user) });
+    // Cloudflare Workers 的 url.pathname 不会自动对百分号编码的段解码，
+    // 中文 slug 经 encodeURIComponent 后是 %E5%...，需在此 decode 才能匹配库里的中文 slug
+    const slug = decodeURIComponent(seg[2]);
+    const row = await getPostBySlug(env.DB, slug, { admin: isAdmin(user) });
     return row ? json(row) : json({ error: "文章不存在" }, 404);
   }
 
