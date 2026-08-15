@@ -219,4 +219,50 @@ body.dark .admin-table th { background: #11141a; }
 .comment-form input, .comment-form textarea { width: 100%; }
 .hp { display: none; }
 
+/* AI 备注区块：详情页正文底部 / 首页卡片紧凑版 */
+.ai-notes {
+  margin-top: 28px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  padding: 16px 18px;
+}
+.ai-notes-head {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary-dark);
+  letter-spacing: 0.3px;
+  margin-bottom: 10px;
+}
+.ai-notes-body { font-size: 14px; line-height: 1.75; color: var(--text); }
+.ai-notes-body > :first-child { margin-top: 0; }
+.ai-notes-body > :last-child { margin-bottom: 0; }
+/* 首页紧凑版：限制高度 + 底部渐隐 */
+.ai-notes-mini {
+  margin-top: 14px;
+  padding: 12px 14px;
+}
+.ai-notes-mini .ai-notes-head { margin-bottom: 6px; }
+.ai-notes-mini .ai-notes-body {
+  font-size: 13px;
+  line-height: 1.6;
+  max-height: 7.2em;
+  overflow: hidden;
+  position: relative;
+}
+.ai-notes-mini .ai-notes-body::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2.4em;
+  background: linear-gradient(to bottom, transparent, var(--surface));
+}
+body.dark .ai-notes {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+}
+body.dark .ai-notes-mini .ai-notes-body::after {
+  background: linear-gradient(to bottom, transparent, var(--surface));
+}
+
 body.dark .comment-item { background: #0f1729; }

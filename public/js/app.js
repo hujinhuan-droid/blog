@@ -105,6 +105,17 @@ function escHtml(s) {
     .replace(/>/g, "&gt;");
 }
 
+// 渲染 AI 备注区块：文章有 ai_notes 时才显示。
+// mini=true 用于首页卡片的紧凑版（限制高度 + 渐隐）
+function aiNotesHtml(notes, mini) {
+  if (!notes || !notes.trim()) return "";
+  return `
+    <section class="ai-notes${mini ? " ai-notes-mini" : ""}">
+      <div class="ai-notes-head">🤖 AI 备注</div>
+      <div class="ai-notes-body">${renderMarkdown(notes)}</div>
+    </section>`;
+}
+
 // 写入 / 更新 <head> 中的 meta 标签（SEO 用）
 function setMeta(name, content) {
   if (!content) return;
@@ -215,6 +226,7 @@ async function renderHome() {
         }</h2>
         <div class="meta">${fmtDate(p.created_at)}</div>
         <div class="excerpt">${p.excerpt || ""}</div>
+        ${aiNotesHtml(p.ai_notes, true)}
       </article>`);
     list.appendChild(card);
   }
@@ -251,7 +263,8 @@ async function renderPost(slug) {
     <div class="meta">${fmtDate(p.created_at)}${
       p.visibility === "private" ? " · 私密" : ""
     }</div>
-    <div class="content">${renderMarkdown(p.content)}</div>`;
+    <div class="content">${renderMarkdown(p.content)}</div>
+    ${aiNotesHtml(p.ai_notes)}`;
   app.innerHTML = "";
   app.appendChild(detail);
   attachComments(p.slug);
