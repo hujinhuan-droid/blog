@@ -8,6 +8,7 @@ export interface PostRow {
   excerpt: string;
   cover: string | null;
   visibility: string;
+  ai_notes: string | null;
   created_at: number;
   updated_at: number;
   author_id: number | null;
@@ -92,18 +93,19 @@ export async function getPostById(
 
 export async function createPost(
   db: DB,
-  data: { title: string; content: string; excerpt?: string; cover?: string; visibility?: string; author_id?: number | null }
+  data: { title: string; content: string; excerpt?: string; cover?: string; visibility?: string; author_id?: number | null; ai_notes?: string }
 ): Promise<PostRow> {
   const slug = slugify(data.title);
   const ts = now();
   const excerpt = (data.excerpt || data.content.replace(/[#>*`\-\s]/g, "").slice(0, 120)).trim();
   const visibility = data.visibility || "public";
   const cover = data.cover || null;
+  const ai_notes = data.ai_notes ?? null;
   await db
     .prepare(
-      "INSERT INTO posts (slug, title, content, excerpt, cover, visibility, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO posts (slug, title, content, excerpt, cover, visibility, ai_notes, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(slug, data.title, data.content, excerpt, cover, visibility, ts, ts, data.author_id ?? null)
+    .bind(slug, data.title, data.content, excerpt, cover, visibility, ai_notes, ts, ts, data.author_id ?? null)
     .run();
   return (await getPostBySlug(db, slug, { admin: true }))!;
 }
@@ -111,7 +113,7 @@ export async function createPost(
 export async function updatePost(
   db: DB,
   id: number,
-  data: { title?: string; content?: string; excerpt?: string; cover?: string; visibility?: string }
+  data: { title?: string; content?: string; excerpt?: string; cover?: string; visibility?: string; ai_notes?: string }
 ): Promise<PostRow | null> {
   const existing = (await db.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first()) as PostRow | null;
   if (!existing) return null;
@@ -122,12 +124,13 @@ export async function updatePost(
     (content.replace(/[#>*`\-\s]/g, "").slice(0, 120)).trim();
   const cover = data.cover !== undefined ? data.cover : existing.cover;
   const visibility = data.visibility ?? existing.visibility;
+  const ai_notes = data.ai_notes !== undefined ? data.ai_notes : existing.ai_notes;
   const ts = now();
   await db
     .prepare(
-      "UPDATE posts SET title = ?, content = ?, excerpt = ?, cover = ?, visibility = ?, updated_at = ? WHERE id = ?"
+      "UPDATE posts SET title = ?, content = ?, excerpt = ?, cover = ?, visibility = ?, ai_notes = ?, updated_at = ? WHERE id = ?"
     )
-    .bind(title, content, excerpt, cover, visibility, ts, id)
+    .bind(title, content, excerpt, cover, visibility, ai_notes, ts, id)
     .run();
   return (await getPostById(db, id, { admin: true }))!;
 }

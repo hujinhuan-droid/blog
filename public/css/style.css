@@ -125,6 +125,11 @@ a:hover { text-decoration: underline; }
 .editor-preview h3 { margin-top: 0; color: var(--muted); font-size: 13px; }
 @media (max-width: 680px) { .editor-grid { grid-template-columns: 1fr; } }
 
+/* GEMINI AI 结果区 */
+.ai-result { border: 1px solid #dbeafe; background: #eff6ff; border-radius: 10px; padding: 14px 16px; margin-bottom: 6px; }
+.ai-result-head { font-size: 13px; color: var(--primary-dark); font-weight: 600; margin-bottom: 8px; }
+.ai-result pre { white-space: pre-wrap; word-break: break-word; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; max-height: 360px; overflow: auto; font-family: inherit; font-size: 14px; line-height: 1.7; color: var(--text); margin: 0; }
+
 /* 登录卡片 */
 .login-card { max-width: 380px; margin: 60px auto; text-align: center; }
 .login-card .btn { width: 100%; justify-content: center; margin-top: 12px; }

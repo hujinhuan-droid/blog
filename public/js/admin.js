@@ -138,6 +138,14 @@ async function renderEditor(slug) {
       <textarea id="f-content" placeholder="在此用 Markdown 写作…">${post ? post.content : ""}</textarea>
       <div class="editor-preview"><h3>预览</h3><div id="preview"></div></div>
     </div>
+    <label>GEMINI AI 辅助</label>
+    <div style="display:flex; gap:10px; margin-bottom:10px;">
+      <button class="btn" id="ai-optimize">✨ AI 优化正文</button>
+      <button class="btn" id="ai-annotate">📝 AI 生成备注</button>
+    </div>
+    <div id="ai-result" class="ai-result" style="display:none;"></div>
+    <label>AI 备注（保存文章时一并存入）</label>
+    <textarea id="f-ai-notes" placeholder="点击「AI 生成备注」自动生成，或手动填写">${post && post.ai_notes ? post.ai_notes : ""}</textarea>
     <label>插入图片（上传到 R2）</label>
     <input type="file" id="f-image" accept="image/*" />
     <div style="margin-top:18px; display:flex; gap:10px;">
@@ -170,12 +178,70 @@ async function renderEditor(slug) {
     } else toast(r.error || "上传失败");
   };
 
+  // GEMINI AI：优化 / 备注
+  const aiResult = document.getElementById("ai-result");
+  const aiNotes = document.getElementById("f-ai-notes");
+  const aiCall = async (action) => {
+    const c = content.value;
+    if (!c.trim()) {
+      toast("正文为空，无法使用 AI");
+      return;
+    }
+    const btn = action === "optimize" ? document.getElementById("ai-optimize") : document.getElementById("ai-annotate");
+    const oldText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "处理中…";
+    try {
+      const res = await api("/ai/process", {
+        method: "POST",
+        body: JSON.stringify({ action, title: document.getElementById("f-title").value, content: c }),
+      });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(r.error || "AI 调用失败");
+        return;
+      }
+      if (action === "optimize") {
+        aiResult.style.display = "block";
+        aiResult.innerHTML = `<div class="ai-result-head">✨ AI 优化结果（预览，点「应用到正文」替换）</div><pre id="ai-out"></pre>
+          <div style="display:flex;gap:10px;margin-top:8px;">
+            <button class="btn btn-primary" id="ai-apply">应用到正文</button>
+            <button class="btn" id="ai-copy">复制</button>
+          </div>`;
+        document.getElementById("ai-out").textContent = r.result;
+        document.getElementById("ai-apply").onclick = () => {
+          content.value = r.result;
+          updatePreview();
+          aiResult.style.display = "none";
+          toast("已应用到正文");
+        };
+        document.getElementById("ai-copy").onclick = () => {
+          navigator.clipboard.writeText(r.result).then(() => toast("已复制"));
+        };
+      } else {
+        aiNotes.value = r.result;
+        aiResult.style.display = "block";
+        aiResult.innerHTML = `<div class="ai-result-head">📝 AI 备注已生成，已填入下方文本框（保存即存入）</div><pre id="ai-out"></pre>`;
+        document.getElementById("ai-out").textContent = r.result;
+        toast("备注已生成");
+      }
+    } catch (e) {
+      toast("请求异常");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = oldText;
+    }
+  };
+  document.getElementById("ai-optimize").onclick = () => aiCall("optimize");
+  document.getElementById("ai-annotate").onclick = () => aiCall("annotate");
+
   document.getElementById("save").onclick = async () => {
     const payload = {
       title: document.getElementById("f-title").value.trim(),
       content: content.value,
       visibility: document.getElementById("f-visibility").value,
       cover: document.getElementById("f-cover").value.trim() || undefined,
+      ai_notes: aiNotes.value.trim() || undefined,
     };
     if (!payload.title) return toast("标题不能为空");
     const opt = { method: post ? "PUT" : "POST", body: JSON.stringify(payload) };
