@@ -42,18 +42,28 @@ function renderLogin() {
       toast("请输入账号和密码");
       return;
     }
-    const res = await api("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ username: uname, password: pw }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      toast(data.error || "登录失败");
-      return;
+    const btn = document.getElementById("pwLogin");
+    btn.disabled = true;
+    btn.textContent = "登录中…";
+    try {
+      const res = await api("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: uname, password: pw }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data.error || "登录失败");
+        return;
+      }
+      CURRENT_USER = data.user;
+      renderNav();
+      renderAdmin();
+    } catch (e) {
+      toast("登录请求失败：请检查网络，或改用备用域名 ai-agent-blog.hujinhuan.workers.dev 再试");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "登录";
     }
-    CURRENT_USER = data.user;
-    renderNav();
-    renderAdmin();
   };
   document.getElementById("pwLogin").onclick = doLogin;
   app.querySelectorAll("#uname, #pw").forEach((inp) =>
