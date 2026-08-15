@@ -9,9 +9,36 @@ export interface PostRow {
   cover: string | null;
   visibility: string;
   ai_notes: string | null;
+  tags: string | null;
   created_at: number;
   updated_at: number;
   author_id: number | null;
+}
+
+/** 将 posts.tags（JSON 数组字符串，或逗号分隔兜底）解析为标签数组 */
+export function parseTags(t: string | null | undefined): string[] {
+  if (!t) return [];
+  try {
+    const a = JSON.parse(t);
+    if (Array.isArray(a)) return a.map((x) => String(x).trim()).filter(Boolean);
+  } catch {}
+  return String(t)
+    .split(/[,，]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/** 将标签数组规范化（去重、去空、去首尾空格）为 JSON 数组字符串后存储 */
+export function stringifyTags(arr: string[]): string {
+  const clean = Array.from(
+    new Set(
+      arr
+        .flatMap((x) => String(x).split(/[,，]/))
+        .map((x) => x.trim())
+        .filter(Boolean)
+    )
+  );
+  return JSON.stringify(clean);
 }
 
 export interface UserRow {
@@ -93,7 +120,7 @@ export async function getPostById(
 
 export async function createPost(
   db: DB,
-  data: { title: string; content: string; excerpt?: string; cover?: string; visibility?: string; author_id?: number | null; ai_notes?: string }
+  data: { title: string; content: string; excerpt?: string; cover?: string; visibility?: string; author_id?: number | null; ai_notes?: string; tags?: string }
 ): Promise<PostRow> {
   const slug = slugify(data.title);
   const ts = now();
@@ -101,11 +128,12 @@ export async function createPost(
   const visibility = data.visibility || "public";
   const cover = data.cover || null;
   const ai_notes = data.ai_notes ?? null;
+  const tags = data.tags ? stringifyTags(parseTags(data.tags)) : "[]";
   await db
     .prepare(
-      "INSERT INTO posts (slug, title, content, excerpt, cover, visibility, ai_notes, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO posts (slug, title, content, excerpt, cover, visibility, ai_notes, tags, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(slug, data.title, data.content, excerpt, cover, visibility, ai_notes, ts, ts, data.author_id ?? null)
+    .bind(slug, data.title, data.content, excerpt, cover, visibility, ai_notes, tags, ts, ts, data.author_id ?? null)
     .run();
   return (await getPostBySlug(db, slug, { admin: true }))!;
 }
@@ -113,7 +141,7 @@ export async function createPost(
 export async function updatePost(
   db: DB,
   id: number,
-  data: { title?: string; content?: string; excerpt?: string; cover?: string; visibility?: string; ai_notes?: string }
+  data: { title?: string; content?: string; excerpt?: string; cover?: string; visibility?: string; ai_notes?: string; tags?: string }
 ): Promise<PostRow | null> {
   const existing = (await db.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first()) as PostRow | null;
   if (!existing) return null;
@@ -125,14 +153,32 @@ export async function updatePost(
   const cover = data.cover !== undefined ? data.cover : existing.cover;
   const visibility = data.visibility ?? existing.visibility;
   const ai_notes = data.ai_notes !== undefined ? data.ai_notes : existing.ai_notes;
+  const tags = data.tags !== undefined ? stringifyTags(parseTags(data.tags)) : existing.tags;
   const ts = now();
   await db
     .prepare(
-      "UPDATE posts SET title = ?, content = ?, excerpt = ?, cover = ?, visibility = ?, ai_notes = ?, updated_at = ? WHERE id = ?"
+      "UPDATE posts SET title = ?, content = ?, excerpt = ?, cover = ?, visibility = ?, ai_notes = ?, tags = ?, updated_at = ? WHERE id = ?"
     )
-    .bind(title, content, excerpt, cover, visibility, ai_notes, ts, id)
+    .bind(title, content, excerpt, cover, visibility, ai_notes, tags, ts, id)
     .run();
   return (await getPostById(db, id, { admin: true }))!;
+}
+
+/** 统计所有文章（公开/全部）的标签及其出现次数，用于标签页云 */
+export async function listTags(
+  db: DB,
+  opts: { admin?: boolean } = {}
+): Promise<{ tag: string; count: number }[]> {
+  const posts = await listPosts(db, { admin: !!opts.admin });
+  const counter: Record<string, number> = {};
+  for (const p of posts) {
+    for (const t of parseTags(p.tags)) {
+      counter[t] = (counter[t] || 0) + 1;
+    }
+  }
+  return Object.entries(counter)
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
 export async function deletePost(db: DB, id: number): Promise<boolean> {

@@ -116,6 +116,29 @@ function aiNotesHtml(notes, mini) {
     </section>`;
 }
 
+// 将 posts.tags（JSON 数组字符串或逗号分隔）解析为标签数组
+function parseTags(t) {
+  if (!t) return [];
+  try {
+    const a = JSON.parse(t);
+    if (Array.isArray(a)) return a.map((x) => String(x).trim()).filter(Boolean);
+  } catch {}
+  return String(t)
+    .split(/[,，]/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+// 渲染文章标签区块（标签可点击进入 #/tags/<name> 筛选）
+function tagsHtml(p) {
+  const tags = parseTags(p && p.tags);
+  if (!tags.length) return "";
+  const chips = tags
+    .map((t) => `<a class="tag" href="#/tags/${encodeURIComponent(t)}">${escHtml(t)}</a>`)
+    .join("");
+  return `<div class="tags">${chips}</div>`;
+}
+
 // 写入 / 更新 <head> 中的 meta 标签（SEO 用）
 function setMeta(name, content) {
   if (!content) return;
@@ -189,9 +212,14 @@ async function renderSiteStats() {
   } catch {}
   const started = Date.parse("2026-08-13");
   const days = Math.max(1, Math.floor((Date.now() - started) / 86400000) + 1);
+  let tagCount = 0;
+  try {
+    const t = await (await api("/tags")).json();
+    tagCount = Array.isArray(t) ? t.length : 0;
+  } catch {}
   box.innerHTML =
     `<span>文章 ${count}</span>` +
-    `<span>标签 0</span>` +
+    `<span>标签 ${tagCount}</span>` +
     `<span>运行 ${days} 天</span>` +
     `<span>访客 —</span>`;
 }
@@ -227,6 +255,7 @@ async function renderHome() {
         <div class="meta">${fmtDate(p.created_at)}</div>
         <div class="excerpt">${p.excerpt || ""}</div>
         ${aiNotesHtml(p.ai_notes, true)}
+        ${tagsHtml(p)}
       </article>`);
     // 整张卡片可点击：点标题链接时由链接自身处理，点卡片其它位置则跳转文章
     card.style.cursor = "pointer";
@@ -270,7 +299,8 @@ async function renderPost(slug) {
       p.visibility === "private" ? " · 私密" : ""
     }</div>
     <div class="content">${renderMarkdown(p.content)}</div>
-    ${aiNotesHtml(p.ai_notes)}`;
+    ${aiNotesHtml(p.ai_notes)}
+    ${tagsHtml(p)}`;
   app.innerHTML = "";
   app.appendChild(detail);
   attachComments(p.slug);
@@ -372,7 +402,7 @@ async function renderTimeline() {
   for (const y of years) {
     html += `<h2 class="year">${y}</h2><div class="post-list">`;
     for (const p of groups[y]) {
-      html += `<article class="post-card"><h2><a href="#/post/${encodeURIComponent(p.slug)}">${p.title}</a></h2><div class="meta">${fmtDate(p.created_at)}</div></article>`;
+      html += `<article class="post-card"><h2><a href="#/post/${encodeURIComponent(p.slug)}">${p.title}</a></h2><div class="meta">${fmtDate(p.created_at)}</div>${tagsHtml(p)}</article>`;
     }
     html += `</div>`;
   }
@@ -393,8 +423,67 @@ function renderFeed() {
 }
 
 function renderTags() {
+  const hash = location.hash || "#/";
+  const m = hash.match(/^#\/tags\/(.+)$/);
+  if (m) {
+    renderTagPosts(decodeURIComponent(m[1]));
+    return;
+  }
+  renderTagCloud();
+}
+
+// 标签云：列出全部标签及文章数，点击进入该标签下的文章列表
+async function renderTagCloud() {
   const app = document.getElementById("app");
-  app.innerHTML = `<h1 class="page-title">标签</h1><div class="empty">标签功能即将上线，敬请期待。</div>`;
+  app.innerHTML = `<h1 class="page-title">标签</h1><div class="empty">加载中…</div>`;
+  try {
+    const cloud = await (await api("/tags")).json();
+    if (!Array.isArray(cloud) || !cloud.length) {
+      app.innerHTML = `<h1 class="page-title">标签</h1><div class="empty">还没有标签，去文章编辑器加标签或用「🏷 AI 分类」吧。</div>`;
+      return;
+    }
+    let html = `<h1 class="page-title">标签</h1><div class="tag-cloud">`;
+    for (const t of cloud) {
+      html += `<a class="tag-chip" href="#/tags/${encodeURIComponent(t.tag)}">${escHtml(t.tag)} <span class="tag-count">${t.count}</span></a>`;
+    }
+    html += `</div>`;
+    app.innerHTML = html;
+  } catch {
+    app.innerHTML = `<h1 class="page-title">标签</h1><div class="empty">标签加载失败</div>`;
+  }
+}
+
+// 某标签下的文章列表
+async function renderTagPosts(tag) {
+  const app = document.getElementById("app");
+  app.innerHTML = `<h1 class="page-title">标签</h1><div class="empty">加载中…</div>`;
+  let posts = [];
+  try {
+    posts = await (await api("/posts")).json();
+  } catch {
+    app.innerHTML = `<h1 class="page-title">标签：${escHtml(tag)}</h1><div class="empty">文章加载失败</div>`;
+    return;
+  }
+  const filtered = (Array.isArray(posts) ? posts : []).filter((p) => parseTags(p.tags).includes(tag));
+  let html = `<h1 class="page-title">标签：${escHtml(tag)} <a class="btn btn-sm" href="#/tags" style="margin-left:10px">← 全部标签</a></h1>`;
+  if (!filtered.length) {
+    html += `<div class="empty">该标签下还没有文章。</div>`;
+    app.innerHTML = html;
+    return;
+  }
+  html += `<div class="post-list">`;
+  for (const p of filtered) {
+    html += `<article class="post-card"><h2><a href="#/post/${encodeURIComponent(p.slug)}">${p.title}</a></h2><div class="meta">${fmtDate(p.created_at)}</div><div class="excerpt">${p.excerpt || ""}</div>${tagsHtml(p)}</article>`;
+  }
+  html += `</div>`;
+  app.innerHTML = html;
+  app.querySelectorAll(".post-card").forEach((card) => {
+    card.style.cursor = "pointer";
+    card.addEventListener("click", () => {
+      const a = card.querySelector("a");
+      if (a) location.hash = a.getAttribute("href");
+    });
+  });
 }
 
 function renderFriends() {

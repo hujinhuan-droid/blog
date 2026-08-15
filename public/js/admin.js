@@ -75,6 +75,8 @@ async function renderDashboard() {
   toolbar.appendChild(newBtn);
   const batchBtn = el(`<button class="btn" id="batch-notes" disabled>🤖 批量 AI 备注</button>`);
   toolbar.appendChild(batchBtn);
+  const batchTagsBtn = el(`<button class="btn" id="batch-tags" disabled>🏷 批量 AI 分类</button>`);
+  toolbar.appendChild(batchTagsBtn);
   toolbar.appendChild(el(`<a class="btn" href="#/admin/settings">⚙ 设置</a>`));
   wrap.appendChild(toolbar);
 
@@ -121,6 +123,8 @@ async function renderDashboard() {
     const n = app.querySelectorAll(".row-sel:checked").length;
     batchBtn.disabled = n === 0;
     batchBtn.textContent = n ? `🤖 批量 AI 备注(${n})` : "🤖 批量 AI 备注";
+    batchTagsBtn.disabled = n === 0;
+    batchTagsBtn.textContent = n ? `🏷 批量 AI 分类(${n})` : "🏷 批量 AI 分类";
   };
   if (selAll)
     selAll.onchange = () => {
@@ -145,6 +149,25 @@ async function renderDashboard() {
     } finally {
       batchBtn.disabled = false;
       batchBtn.textContent = old;
+    }
+  };
+  batchTagsBtn.onclick = async () => {
+    const ids = [...app.querySelectorAll(".row-sel:checked")].map((cb) => Number(cb.dataset.id));
+    if (!ids.length) return;
+    batchTagsBtn.disabled = true;
+    const old = batchTagsBtn.textContent;
+    batchTagsBtn.textContent = "分类中…";
+    try {
+      const res = await api("/ai/batch-tags", { method: "POST", body: JSON.stringify({ ids }) });
+      const r = await res.json().catch(() => ({}));
+      if (res.ok) toast(`批量分类完成：${r.ok} 成功 / ${r.total - r.ok} 失败`);
+      else toast(r.error || "批量分类失败");
+      renderDashboard();
+    } catch (e) {
+      toast("请求异常");
+    } finally {
+      batchTagsBtn.disabled = false;
+      batchTagsBtn.textContent = old;
     }
   };
 }
@@ -176,6 +199,15 @@ async function renderEditor(slug) {
   } catch {}
 
   const form = el(`<div class="form"></div>`);
+  // 已有文章的标签初始化为「逗号分隔」文本，便于编辑
+  let initialTags = "";
+  if (post && post.tags) {
+    try {
+      initialTags = (JSON.parse(post.tags) as string[]).join(", ");
+    } catch {
+      initialTags = "";
+    }
+  }
   form.innerHTML = `
     <h2>${slug ? "编辑文章" : "新建文章"}</h2>
     <label>标题</label>
@@ -187,6 +219,8 @@ async function renderEditor(slug) {
     </select>
     <label>封面图 URL（可选）</label>
     <input type="text" id="f-cover" value="${post && post.cover ? post.cover.replace(/"/g, "&quot;") : ""}" />
+    <label>标签（逗号分隔，用于文章分类；可点「🏷 AI 分类」自动生成）</label>
+    <input type="text" id="f-tags" value="${escHtml(initialTags)}" placeholder="如：睡眠, 饮食, 运动" />
     <label>正文（Markdown，支持实时预览）</label>
     <div class="editor-grid">
       <textarea id="f-content" placeholder="在此用 Markdown 写作…">${post ? post.content : ""}</textarea>
@@ -194,10 +228,11 @@ async function renderEditor(slug) {
     </div>
     <div id="ai-block">
       <label>GEMINI AI 辅助</label>
-      <div style="display:flex; gap:10px; margin-bottom:10px;">
+      <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap">
         <button class="btn" id="ai-optimize">✨ AI 优化正文</button>
         <button class="btn" id="ai-annotate">📝 AI 生成备注</button>
         <button class="btn" id="ai-moderate">🚫 AI 检查违禁词</button>
+        <button class="btn" id="ai-classify">🏷 AI 分类</button>
       </div>
     </div>
     <div id="ai-result" class="ai-result" style="display:none;"></div>
@@ -303,6 +338,40 @@ async function renderEditor(slug) {
   document.getElementById("ai-optimize").onclick = () => aiCall("optimize");
   document.getElementById("ai-annotate").onclick = () => aiCall("annotate");
 
+  // AI 分类：调用 classify 动作，返回标签数组并填入标签输入框
+  const classifyBtn = document.getElementById("ai-classify");
+  if (classifyBtn) {
+    classifyBtn.onclick = async () => {
+      const c = content.value;
+      if (!c.trim()) {
+        toast("正文为空，无法分类");
+        return;
+      }
+      const oldText = classifyBtn.textContent;
+      classifyBtn.disabled = true;
+      classifyBtn.textContent = "分类中…";
+      try {
+        const res = await api("/ai/process", {
+          method: "POST",
+          body: JSON.stringify({ action: "classify", title: document.getElementById("f-title").value, content: c, model: aiModel }),
+        });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast(r.error || "AI 调用失败");
+          return;
+        }
+        const tagsArr = Array.isArray(r.tags) ? r.tags : [];
+        document.getElementById("f-tags").value = tagsArr.join(", ");
+        toast("已生成标签：" + (tagsArr.join("、") || "（无）"));
+      } catch (e) {
+        toast("请求异常");
+      } finally {
+        classifyBtn.disabled = false;
+        classifyBtn.textContent = oldText;
+      }
+    };
+  }
+
   // 违禁词检测：调用 AI moderate 动作，解析返回的 JSON 渲染疑似违禁词列表
   const moderateBtn = document.getElementById("ai-moderate");
   if (moderateBtn) {
@@ -366,6 +435,7 @@ async function renderEditor(slug) {
       visibility: document.getElementById("f-visibility").value,
       cover: document.getElementById("f-cover").value.trim() || undefined,
       ai_notes: aiNotes.value.trim() || undefined,
+      tags: document.getElementById("f-tags").value.trim() || undefined,
     };
     if (!payload.title) return toast("标题不能为空");
     const opt = { method: post ? "PUT" : "POST", body: JSON.stringify(payload) };

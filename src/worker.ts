@@ -23,6 +23,8 @@ import {
   setSettings,
   listComments,
   createComment,
+  listTags,
+  parseTags,
 } from "./db";
 
 interface Env extends AuthEnv {
@@ -55,13 +57,19 @@ async function readJson(req: Request): Promise<any> {
 // ---------------- Gemini AI ----------------
 const GEMINI_MODEL = "gemini-flash-latest";
 
-type AiAction = "optimize" | "annotate" | "moderate";
+type AiAction = "optimize" | "annotate" | "moderate" | "classify";
 
 const AI_PROMPTS: Record<AiAction, string> = {
   optimize:
     "你是一位专业的中文技术博客编辑。请优化下面的 Markdown 文章：让表达更清晰、结构更合理、用词更准确，保持原意与原有 Markdown 格式（标题、列表、代码块、引用等）不变。只返回优化后的全文，不要任何额外解释、前后缀或代码围栏。",
   annotate:
     "你是一位资深的中文编辑与审稿人。请针对下面的 Markdown 文章，给出面向作者的「备注 / 审稿意见」，用中文分点列出：\n1) 文章优点；\n2) 可改进之处（结构、逻辑、事实、语气、错别字等）；\n3) 具体修改建议。\n不要改写全文，只给评语与建议，使用 Markdown 格式。",
+  classify:
+    "你是中文内容分类助手。请根据下面的文章标题与正文，提炼 1–5 个最能概括文章主题的中文标签，要求：\n" +
+    "1) 每个标签 2–6 个汉字；\n" +
+    "2) 使用通用、可复用的分类词（如：睡眠、饮食、运动、情志、节气、穴位、养生常识、误区辟谣、食疗、功法）；\n" +
+    "3) 覆盖文章主要主题，避免过细或重复。\n" +
+    "只返回一个 JSON 数组（不要任何额外解释或代码围栏），例如 [\"睡眠\",\"情志\",\"养生常识\"]。",
   moderate:
     "你是中文养生/健康类内容的合规审核助手。请审查下面文章，识别「违禁词 / 违规表述」，重点包括：\n" +
     "1) 夸大或绝对化疗效的词（如 治愈、根治、包治百病、百分百、保证、无副作用、最佳、第一）；\n" +
@@ -90,8 +98,8 @@ async function callGemini(
   const body = JSON.stringify({
     contents: [{ parts: [{ text: system + "\n\n" + userText }] }],
     generationConfig: {
-      temperature: action === "optimize" ? 0.4 : action === "moderate" ? 0.2 : 0.6,
-      maxOutputTokens: action === "optimize" ? 4096 : 2048,
+      temperature: action === "optimize" ? 0.4 : action === "moderate" ? 0.2 : action === "classify" ? 0.3 : 0.6,
+      maxOutputTokens: action === "optimize" ? 4096 : action === "classify" ? 256 : 2048,
     },
   });
   // 503/429 为临时高负载或限流，自动重试（指数退避），最多 3 次
@@ -128,6 +136,22 @@ async function callGemini(
   throw new Error(lastErr);
 }
 
+// 从模型返回文本中稳健提取 JSON 数组（兼容代码围栏 ```json、前后多余文字、纯数组）
+function extractJsonArray(text: string): string[] {
+  if (!text) return [];
+  let s = text.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  const start = s.indexOf("[");
+  const end = s.lastIndexOf("]");
+  if (start >= 0 && end > start) s = s.slice(start, end + 1);
+  try {
+    const a = JSON.parse(s);
+    if (Array.isArray(a)) return a.map((x) => String(x).trim()).filter(Boolean);
+  } catch {}
+  return [];
+}
+
 // ---------------- 路由 ----------------
 
 async function handleApi(req: Request, env: Env, path: string[], method: string): Promise<Response> {
@@ -142,6 +166,11 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
   // 站点设置（公开读取，供读者端渲染）
   if (method === "GET" && seg.length === 2 && seg[1] === "settings") {
     return json(await getSettings(env.DB));
+  }
+
+  // 标签云（公开读取；管理员可见全部文章标签，读者仅公开）
+  if (method === "GET" && seg.length === 2 && seg[1] === "tags") {
+    return json(await listTags(env.DB, { admin: isAdmin(user) }));
   }
 
   // 站点设置（管理员写入，白名单校验）
@@ -205,6 +234,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       cover: body.cover,
       visibility: body.visibility,
       author_id: user!.id,
+      tags: body.tags,
     });
     return json(row, 201);
   }
@@ -294,7 +324,13 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
     const body = await readJson(req);
     const action: AiAction =
-      body.action === "annotate" ? "annotate" : body.action === "moderate" ? "moderate" : "optimize";
+      body.action === "annotate"
+        ? "annotate"
+        : body.action === "moderate"
+        ? "moderate"
+        : body.action === "classify"
+        ? "classify"
+        : "optimize";
     const title = (body.title || "").toString();
     const content = (body.content || "").toString();
     const model = (body.model || GEMINI_MODEL).toString();
@@ -309,6 +345,12 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     }
     try {
       const result = await callGemini(env, action, title, content, model, extra);
+      // 分类：解析模型返回的 JSON 数组，直接返回标签列表
+      if (action === "classify") {
+        const tags = extractJsonArray(result);
+        if (!tags.length) return json({ error: "AI 未返回有效标签" }, 502);
+        return json({ tags });
+      }
       return json({ result });
     } catch (e: any) {
       return json({ error: e.message || "AI 调用失败" }, 502);
@@ -341,6 +383,45 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
         const notes = await callGemini(env, "annotate", post.title, post.content, model);
         await updatePost(env.DB, id, { ai_notes: notes });
         results.push({ id, ok: true, title: post.title });
+      } catch (e: any) {
+        results.push({ id, ok: false, error: e.message || "AI 调用失败" });
+      }
+    }
+    const okCount = results.filter((r) => r.ok).length;
+    return json({ ok: okCount, total: results.length, results });
+  }
+
+  // 批量 AI 分类（管理员）：对多篇文章依次生成标签并写库，避免前端串行多次调用
+  if (method === "POST" && seg.length === 3 && seg[1] === "ai" && seg[2] === "batch-tags") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const ids: number[] = Array.isArray(body.ids)
+      ? body.ids.map((x: any) => Number(x)).filter((x: number) => Number.isInteger(x) && x > 0)
+      : [];
+    if (!ids.length) return json({ error: "未选择文章" }, 400);
+    if (ids.length > 30) return json({ error: "单次最多处理 30 篇" }, 400);
+    const settings = await getSettings(env.DB);
+    const model = (settings.ai_model || GEMINI_MODEL).toString();
+    const results: any[] = [];
+    for (const id of ids) {
+      const post = await getPostById(env.DB, id, { admin: true });
+      if (!post) {
+        results.push({ id, ok: false, error: "文章不存在" });
+        continue;
+      }
+      if (!post.content || !post.content.trim()) {
+        results.push({ id, ok: false, error: "正文为空" });
+        continue;
+      }
+      try {
+        const raw = await callGemini(env, "classify", post.title, post.content, model);
+        const tags = extractJsonArray(raw);
+        if (!tags.length) {
+          results.push({ id, ok: false, error: "AI 未返回有效标签" });
+          continue;
+        }
+        await updatePost(env.DB, id, { tags: JSON.stringify(tags) });
+        results.push({ id, ok: true, title: post.title, tags });
       } catch (e: any) {
         results.push({ id, ok: false, error: e.message || "AI 调用失败" });
       }
