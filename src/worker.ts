@@ -19,6 +19,8 @@ import {
   createPost,
   updatePost,
   deletePost,
+  getSettings,
+  setSettings,
 } from "./db";
 
 interface Env extends AuthEnv {
@@ -104,6 +106,36 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
 
   // 健康检查
   if (method === "GET" && seg.length === 2 && seg[1] === "health") {
+    return json({ ok: true });
+  }
+
+  // 站点设置（公开读取，供读者端渲染）
+  if (method === "GET" && seg.length === 2 && seg[1] === "settings") {
+    return json(await getSettings(env.DB));
+  }
+
+  // 站点设置（管理员写入，白名单校验）
+  if (method === "PUT" && seg.length === 2 && seg[1] === "settings") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return json({ error: "无效数据" }, 400);
+    }
+    const clean: Record<string, string> = {};
+    for (const k of [
+      "site_title",
+      "site_subtitle",
+      "footer_text",
+      "nav",
+      "theme_primary",
+      "theme_dark",
+      "ai_model",
+      "ai_enabled",
+      "about_content",
+    ]) {
+      if (body[k] !== undefined && body[k] !== null) clean[k] = String(body[k]);
+    }
+    await setSettings(env.DB, clean);
     return json({ ok: true });
   }
 

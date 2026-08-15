@@ -14,6 +14,10 @@ function renderAdmin() {
     renderEditor(null);
     return;
   }
+  if (hash.startsWith("#/admin/settings")) {
+    renderSettings();
+    return;
+  }
   renderDashboard();
 }
 
@@ -69,6 +73,7 @@ async function renderDashboard() {
   toolbar.appendChild(el(`<h2 style="margin:0">文章管理（${posts.length}）</h2>`));
   const newBtn = el(`<a class="btn btn-primary" href="#/admin/new">+ 新建文章</a>`);
   toolbar.appendChild(newBtn);
+  toolbar.appendChild(el(`<a class="btn" href="#/admin/settings">⚙ 设置</a>`));
   wrap.appendChild(toolbar);
 
   if (!posts.length) {
@@ -121,6 +126,17 @@ async function renderEditor(slug) {
     }
   }
 
+  // 读取设置：决定是否显示 AI 按钮、使用哪个模型
+  let aiEnabled = true;
+  let aiModel = "gemini-flash-latest";
+  try {
+    const ss = await (await api("/settings")).json();
+    if (ss && typeof ss === "object") {
+      aiEnabled = ss.ai_enabled !== "0";
+      if (ss.ai_model) aiModel = ss.ai_model;
+    }
+  } catch {}
+
   const form = el(`<div class="form"></div>`);
   form.innerHTML = `
     <h2>${slug ? "编辑文章" : "新建文章"}</h2>
@@ -138,10 +154,12 @@ async function renderEditor(slug) {
       <textarea id="f-content" placeholder="在此用 Markdown 写作…">${post ? post.content : ""}</textarea>
       <div class="editor-preview"><h3>预览</h3><div id="preview"></div></div>
     </div>
-    <label>GEMINI AI 辅助</label>
-    <div style="display:flex; gap:10px; margin-bottom:10px;">
-      <button class="btn" id="ai-optimize">✨ AI 优化正文</button>
-      <button class="btn" id="ai-annotate">📝 AI 生成备注</button>
+    <div id="ai-block">
+      <label>GEMINI AI 辅助</label>
+      <div style="display:flex; gap:10px; margin-bottom:10px;">
+        <button class="btn" id="ai-optimize">✨ AI 优化正文</button>
+        <button class="btn" id="ai-annotate">📝 AI 生成备注</button>
+      </div>
     </div>
     <div id="ai-result" class="ai-result" style="display:none;"></div>
     <label>AI 备注（保存文章时一并存入）</label>
@@ -154,6 +172,12 @@ async function renderEditor(slug) {
     </div>`;
   app.innerHTML = "";
   app.appendChild(form);
+
+  // 设置中关闭了 AI 助手则隐藏编辑器里的 AI 区块
+  if (!aiEnabled) {
+    const blk = document.getElementById("ai-block");
+    if (blk) blk.style.display = "none";
+  }
 
   const content = document.getElementById("f-content");
   const preview = document.getElementById("preview");
@@ -194,7 +218,7 @@ async function renderEditor(slug) {
     try {
       const res = await api("/ai/process", {
         method: "POST",
-        body: JSON.stringify({ action, title: document.getElementById("f-title").value, content: c }),
+        body: JSON.stringify({ action, title: document.getElementById("f-title").value, content: c, model: aiModel }),
       });
       const r = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -263,4 +287,149 @@ function fileToBase64(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// ---------------- 站点设置 ----------------
+
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+const DEFAULT_MENUS = [
+  { label: "文章", hash: "#/" },
+  { label: "时间轴", hash: "#/timeline" },
+  { label: "动态", hash: "#/feed" },
+  { label: "标签", hash: "#/tags" },
+  { label: "朋友们", hash: "#/friends" },
+  { label: "关于", hash: "#/about" },
+];
+
+function navToText(jsonStr) {
+  let arr = DEFAULT_MENUS;
+  if (jsonStr) {
+    try {
+      const p = JSON.parse(jsonStr);
+      if (Array.isArray(p) && p.length) arr = p;
+    } catch {}
+  }
+  return arr.map((m) => `${m.label}|${m.hash}`).join("\n");
+}
+
+function textToNav(text) {
+  const arr = [];
+  for (const line of String(text || "").split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    const i = t.indexOf("|");
+    if (i < 0) continue;
+    const label = t.slice(0, i).trim();
+    const hash = t.slice(i + 1).trim();
+    if (label && hash) arr.push({ label, hash });
+  }
+  return arr.length ? arr : DEFAULT_MENUS;
+}
+
+function colorVal(hex) {
+  if (!hex) return "#2563eb";
+  return hex.startsWith("#") ? hex : "#" + hex;
+}
+
+async function renderSettings() {
+  const app = document.getElementById("app");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  let s = {};
+  try {
+    s = await (await api("/settings")).json();
+  } catch {}
+
+  const form = el(`<div class="form settings-form"></div>`);
+  form.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <h2 style="margin:0">站点设置</h2>
+      <a class="btn" href="#/admin">← 返回文章管理</a>
+    </div>
+
+    <fieldset class="set-group">
+      <legend>① 站点信息</legend>
+      <label>站点名称</label>
+      <input type="text" id="s-site_title" value="${escHtml(s.site_title || "")}" placeholder="AI Agent Blog" />
+      <label>站点副标题 / 简介</label>
+      <input type="text" id="s-site_subtitle" value="${escHtml(s.site_subtitle || "")}" placeholder="记录 AI 与工程实践" />
+      <label>页脚版权文案</label>
+      <input type="text" id="s-footer_text" value="${escHtml(s.footer_text || "")}" placeholder="© AI Agent Blog · Powered by Cloudflare" />
+    </fieldset>
+
+    <fieldset class="set-group">
+      <legend>② 导航菜单</legend>
+      <p class="muted">每行一个菜单，格式：标签|链接（链接以 #/ 开头）。</p>
+      <textarea id="s-nav" style="min-height:140px">${escHtml(navToText(s.nav))}</textarea>
+    </fieldset>
+
+    <fieldset class="set-group">
+      <legend>③ 外观主题</legend>
+      <label>主色调</label>
+      <div style="display:flex;gap:10px;align-items:center">
+        <input type="color" id="s-theme_primary" value="${colorVal(s.theme_primary)}" />
+        <span id="s-theme_primary_txt" class="muted">${escHtml(s.theme_primary || "#2563eb")}</span>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="s-theme_dark" ${s.theme_dark === "1" ? "checked" : ""} /> 启用深色模式
+      </label>
+    </fieldset>
+
+    <fieldset class="set-group">
+      <legend>④ AI 助手</legend>
+      <label>默认模型</label>
+      <input type="text" id="s-ai_model" value="${escHtml(s.ai_model || "gemini-flash-latest")}" placeholder="gemini-flash-latest" />
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="s-ai_enabled" ${s.ai_enabled !== "0" ? "checked" : ""} /> 在编辑器中显示 AI 按钮
+      </label>
+    </fieldset>
+
+    <fieldset class="set-group">
+      <legend>⑤ 关于页内容</legend>
+      <label>关于页正文（支持 Markdown）</label>
+      <textarea id="s-about_content" style="min-height:160px">${escHtml(s.about_content || "")}</textarea>
+    </fieldset>
+
+    <div style="margin-top:18px;display:flex;gap:10px;align-items:center">
+      <button class="btn btn-primary" id="save-settings">保存设置</button>
+      <span id="settings-msg" class="muted"></span>
+    </div>`;
+  app.innerHTML = "";
+  app.appendChild(form);
+
+  const colorInput = document.getElementById("s-theme_primary");
+  colorInput.oninput = () => {
+    document.getElementById("s-theme_primary_txt").textContent = colorInput.value;
+  };
+
+  document.getElementById("save-settings").onclick = async () => {
+    const payload = {
+      site_title: document.getElementById("s-site_title").value.trim(),
+      site_subtitle: document.getElementById("s-site_subtitle").value.trim(),
+      footer_text: document.getElementById("s-footer_text").value.trim(),
+      nav: JSON.stringify(textToNav(document.getElementById("s-nav").value)),
+      theme_primary: document.getElementById("s-theme_primary").value,
+      theme_dark: document.getElementById("s-theme_dark").checked ? "1" : "0",
+      ai_model: document.getElementById("s-ai_model").value.trim() || "gemini-flash-latest",
+      ai_enabled: document.getElementById("s-ai_enabled").checked ? "1" : "0",
+      about_content: document.getElementById("s-about_content").value,
+    };
+    const res = await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
+    const r = await res.json().catch(() => ({}));
+    const msg = document.getElementById("settings-msg");
+    if (res.ok) {
+      msg.textContent = "已保存 ✓";
+      // 实时应用到当前页面
+      applySettings(payload);
+      toast("设置已保存");
+    } else {
+      msg.textContent = r.error || "保存失败";
+    }
+  };
 }

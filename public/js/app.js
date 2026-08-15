@@ -1,8 +1,8 @@
 // 前端路由 + 读者端视图 + 导航 + 站点统计
 let CURRENT_USER = null;
 
-// 顶部主导航（与底部站点统计平行对齐）
-const MENUS = [
+// 顶部主导航（可被站点设置中的自定义菜单覆盖）
+let MENUS = [
   { label: "文章", hash: "#/" },
   { label: "时间轴", hash: "#/timeline" },
   { label: "动态", hash: "#/feed" },
@@ -10,6 +10,55 @@ const MENUS = [
   { label: "朋友们", hash: "#/friends" },
   { label: "关于", hash: "#/about" },
 ];
+
+// 站点设置（由 /api/settings 填充，供各页面读取）
+let SITE_SETTINGS = {};
+let SITE_ABOUT = "";
+
+function darken(hex, f) {
+  const n = parseInt(hex.replace("#", ""), 16);
+  const r = Math.round(((n >> 16) & 255) * f);
+  const g = Math.round(((n >> 8) & 255) * f);
+  const b = Math.round((n & 255) * f);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// 应用站点设置到页面（站点名 / 页脚 / 导航 / 主题色 / 深色模式 / 关于页）
+function applySettings(s) {
+  if (!s || typeof s !== "object") return;
+  SITE_SETTINGS = s;
+  if (s.site_title) {
+    const b = document.querySelector(".brand");
+    if (b) b.textContent = s.site_title;
+    document.title = s.site_title;
+  }
+  if (s.footer_text) {
+    const c = document.querySelector(".copyright");
+    if (c) c.textContent = s.footer_text;
+  }
+  if (s.nav) {
+    try {
+      const arr = JSON.parse(s.nav);
+      if (Array.isArray(arr) && arr.length) {
+        MENUS = arr
+          .filter((x) => x && x.label && x.hash)
+          .map((x) => ({ label: String(x.label), hash: String(x.hash) }));
+        renderNav();
+      }
+    } catch {}
+  }
+  if (s.theme_primary) {
+    const c = String(s.theme_primary).trim();
+    if (/^#?[0-9a-fA-F]{6}$/.test(c)) {
+      const hex = c.startsWith("#") ? c : "#" + c;
+      document.documentElement.style.setProperty("--primary", hex);
+      document.documentElement.style.setProperty("--primary-dark", darken(hex, 0.8));
+    }
+  }
+  if (s.theme_dark === "1") document.body.classList.add("dark");
+  else document.body.classList.remove("dark");
+  SITE_ABOUT = s.about_content || "";
+}
 
 function api(path, opts) {
   return fetch("/api" + path, Object.assign({ headers: { "content-type": "application/json" } }, opts));
@@ -44,7 +93,10 @@ function renderNav() {
   nav.innerHTML = "";
   const menu = el(`<div class="menu"></div>`);
   for (const m of MENUS) {
-    menu.appendChild(el(`<a class="menu-link" href="${m.hash}">${m.label}</a>`));
+    const link = el(`<a class="menu-link" href="${m.hash}">${m.label}</a>`);
+    // 手机端点菜单项后自动收起下拉
+    link.onclick = () => document.querySelector(".topbar")?.classList.remove("open");
+    menu.appendChild(link);
   }
   nav.appendChild(menu);
 
@@ -185,11 +237,20 @@ function renderFriends() {
 
 function renderAbout() {
   const app = document.getElementById("app");
+  const about =
+    SITE_ABOUT ||
+    "这是一个部署在 Cloudflare 上的博客平台，使用 Pages + Workers + D1 + R2 构建，支持 Markdown 写作与图形化管理后台。\n\n由 **hujinhuan-droid** 维护。";
   app.innerHTML = `<div class="post-detail">
     <h1>关于</h1>
-    <p>这是一个部署在 Cloudflare 上的博客平台，使用 Pages + Workers + D1 + R2 构建，支持 Markdown 写作与图形化管理后台。</p>
-    <p>由 <strong>hujinhuan-droid</strong> 维护。</p>
+    <div class="content">${renderMarkdown(about)}</div>
   </div>`;
+}
+
+// 手机端汉堡菜单开关
+function bindNavToggle() {
+  const toggle = document.getElementById("navToggle");
+  if (!toggle) return;
+  toggle.onclick = () => document.querySelector(".topbar")?.classList.toggle("open");
 }
 
 function route() {
@@ -225,8 +286,18 @@ async function init() {
     CURRENT_USER = null;
   }
   renderNav();
+  bindNavToggle();
   renderSiteStats();
-  window.addEventListener("hashchange", route);
+  // 拉取站点设置并应用到页面
+  try {
+    const sr = await api("/settings");
+    const sd = await sr.json();
+    if (sd && typeof sd === "object") applySettings(sd);
+  } catch {}
+  window.addEventListener("hashchange", () => {
+    document.querySelector(".topbar")?.classList.remove("open");
+    route();
+  });
   route();
 }
 

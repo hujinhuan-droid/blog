@@ -206,3 +206,41 @@ export async function getUserBySession(db: DB, token: string | undefined): Promi
 export async function deleteSession(db: DB, token: string): Promise<void> {
   await db.prepare("DELETE FROM sessions WHERE token = ?").bind(token).run();
 }
+
+// ---------------- 站点设置（键值对） ----------------
+
+// 允许通过接口写入的设置键（白名单，避免任意键污染）
+export const SETTING_KEYS = [
+  "site_title",
+  "site_subtitle",
+  "footer_text",
+  "nav",
+  "theme_primary",
+  "theme_dark",
+  "ai_model",
+  "ai_enabled",
+  "about_content",
+] as const;
+
+export type SettingKey = (typeof SETTING_KEYS)[number];
+
+export async function getSettings(db: DB): Promise<Record<string, string>> {
+  const r = await db.prepare("SELECT key, value FROM settings").all();
+  const out: Record<string, string> = {};
+  for (const row of ((r.results as any[]) || []) as { key: string; value: string }[]) {
+    out[row.key] = row.value;
+  }
+  return out;
+}
+
+export async function setSettings(db: DB, values: Record<string, string>): Promise<void> {
+  for (const [k, v] of Object.entries(values)) {
+    if (!SETTING_KEYS.includes(k as SettingKey)) continue;
+    await db
+      .prepare(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+      )
+      .bind(k, v)
+      .run();
+  }
+}
