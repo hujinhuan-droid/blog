@@ -167,6 +167,43 @@ function calcReadTime(p) {
   return `约 ${n} 分钟`;
 }
 
+// 统一的文章卡片 HTML：首页 / 时间轴 / 搜索 / 标签页共用，保证视觉一致
+function postCardHtml(p) {
+  const icon = pickIcon(p);
+  const cat = parseTags(p.tags)[0] || "";
+  const read = calcReadTime(p);
+  return `<article class="post-card">
+    <div class="post-card-head">
+      <span class="post-icon" aria-hidden="true">${icon}</span>
+      <div class="post-head-body">
+        <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
+          p.visibility === "private" ? `<span class="badge">私密</span>` : ""
+        }</h2>
+        <div class="post-submeta">
+          ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
+          <span class="post-date">${fmtDate(p.created_at)}</span>
+          ${read ? `<span class="post-read">${read}</span>` : ""}
+        </div>
+      </div>
+    </div>
+    <div class="excerpt">${escHtml(p.excerpt || "")}</div>
+    ${aiNotesHtml(p.ai_notes, true)}
+    ${tagsHtml(p)}
+  </article>`;
+}
+
+// 给一组文章卡片绑定点击行为：整卡可点进入文章，但点内嵌链接（如标签）不拦截
+function bindPostCards(root) {
+  root.querySelectorAll(".post-card").forEach((card) => {
+    card.style.cursor = "pointer";
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("a")) return;
+      const a = card.querySelector("a");
+      if (a) location.hash = a.getAttribute("href");
+    });
+  });
+}
+
 // 写入 / 更新 <head> 中的 meta 标签（SEO 用）
 function setMeta(name, content) {
   if (!content) return;
@@ -285,39 +322,10 @@ async function renderHome() {
   const slice = homeAll.slice(start, start + PER_PAGE);
 
   const list = el(`<div class="post-list"></div>`);
-  for (const p of slice) {
-    const icon = pickIcon(p);
-    const cat = parseTags(p.tags)[0] || "";
-    const read = calcReadTime(p);
-    const card = el(`
-      <article class="post-card">
-        <div class="post-card-head">
-          <span class="post-icon" aria-hidden="true">${icon}</span>
-          <div class="post-head-body">
-            <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
-              p.visibility === "private" ? `<span class="badge">私密</span>` : ""
-            }</h2>
-            <div class="post-submeta">
-              ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
-              <span class="post-date">${fmtDate(p.created_at)}</span>
-              ${read ? `<span class="post-read">${read}</span>` : ""}
-            </div>
-          </div>
-        </div>
-        <div class="excerpt">${p.excerpt || ""}</div>
-        ${aiNotesHtml(p.ai_notes, true)}
-        ${tagsHtml(p)}
-      </article>`);
-    // 整张卡片可点击：点标题链接时由链接自身处理，点卡片其它位置则跳转文章
-    card.style.cursor = "pointer";
-    card.addEventListener("click", (e) => {
-      if (e.target.closest("a")) return;
-      location.hash = "#/post/" + encodeURIComponent(p.slug);
-    });
-    list.appendChild(card);
-  }
+  list.innerHTML = slice.map(postCardHtml).join("");
   app.innerHTML = "";
   app.appendChild(list);
+  bindPostCards(list);
 
   // 分页控件
   if (pageCount > 1) {
@@ -479,19 +487,12 @@ async function renderTimeline() {
   for (const y of years) {
     html += `<h2 class="year">${y}</h2><div class="post-list">`;
     for (const p of groups[y]) {
-      html += `<article class="post-card"><h2><a href="#/post/${encodeURIComponent(p.slug)}">${p.title}</a></h2><div class="meta">${fmtDate(p.created_at)}</div>${tagsHtml(p)}</article>`;
+      html += postCardHtml(p);
     }
     html += `</div>`;
   }
   app.innerHTML = html;
-  // 时间轴卡片整张可点击进入文章
-  app.querySelectorAll(".post-card").forEach((card) => {
-    card.style.cursor = "pointer";
-    card.addEventListener("click", () => {
-      const a = card.querySelector("a");
-      if (a) location.hash = a.getAttribute("href");
-    });
-  });
+  bindPostCards(app);
 }
 
 function renderFeed() {
@@ -522,18 +523,10 @@ async function renderSearch() {
     return;
   }
   html += `<div class="post-list">`;
-  for (const p of results) {
-    html += `<article class="post-card"><h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a></h2><div class="meta">${fmtDate(p.created_at)}</div><div class="excerpt">${escHtml(p.excerpt || "")}</div>${tagsHtml(p)}</article>`;
-  }
+  html += results.map(postCardHtml).join("");
   html += `</div>`;
   app.innerHTML = html;
-  app.querySelectorAll(".post-card").forEach((card) => {
-    card.style.cursor = "pointer";
-    card.addEventListener("click", () => {
-      const a = card.querySelector("a");
-      if (a) location.hash = a.getAttribute("href");
-    });
-  });
+  bindPostCards(app);
 }
 
 function renderTags() {
@@ -586,18 +579,10 @@ async function renderTagPosts(tag) {
     return;
   }
   html += `<div class="post-list">`;
-  for (const p of filtered) {
-    html += `<article class="post-card"><h2><a href="#/post/${encodeURIComponent(p.slug)}">${p.title}</a></h2><div class="meta">${fmtDate(p.created_at)}</div><div class="excerpt">${p.excerpt || ""}</div>${tagsHtml(p)}</article>`;
-  }
+  html += filtered.map(postCardHtml).join("");
   html += `</div>`;
   app.innerHTML = html;
-  app.querySelectorAll(".post-card").forEach((card) => {
-    card.style.cursor = "pointer";
-    card.addEventListener("click", () => {
-      const a = card.querySelector("a");
-      if (a) location.hash = a.getAttribute("href");
-    });
-  });
+  bindPostCards(app);
 }
 
 function renderFriends() {
