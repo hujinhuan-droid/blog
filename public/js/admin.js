@@ -603,9 +603,40 @@ async function renderEditor(slug) {
     <div style="margin-top:18px; display:flex; gap:10px;">
       <button class="btn btn-primary" id="save">保存</button>
       <a class="btn" href="#/admin/posts">取消</a>
-    </div>`;
+    </div>
+    ${slug ? `<div id="comment-admin" class="comment-admin"></div>` : ""}`;
   app.innerHTML = "";
   app.appendChild(form);
+
+  // 评论管理：仅编辑已有文章时，拉取其评论并支持删除
+  if (slug) {
+    const loadCommentAdmin = async () => {
+      const box = document.getElementById("comment-admin");
+      if (!box) return;
+      box.innerHTML = `<h2 style="margin-top:22px">评论管理</h2><div id="comment-admin-list"><div class="empty">加载中…</div></div>`;
+      const list = document.getElementById("comment-admin-list");
+      try {
+        const res = await api("/comments?post=" + encodeURIComponent(slug));
+        const cs = await res.json();
+        if (!Array.isArray(cs) || !cs.length) { list.innerHTML = '<div class="empty">这篇文章还没有评论。</div>'; return; }
+        list.innerHTML = cs.map((c) => `
+          <div class="comment-admin-item">
+            <div class="ca-head"><span class="ca-author">${escHtml(c.author)}</span><span class="ca-date">${fmtDate(c.created_at)}</span></div>
+            <div class="ca-body">${escHtml(c.content)}</div>
+            <button class="btn btn-sm btn-danger ca-del" data-cid="${c.id}">删除</button>
+          </div>`).join("");
+        list.querySelectorAll(".ca-del").forEach((btn) => {
+          btn.onclick = async () => {
+            if (!confirm("确定删除这条评论？")) return;
+            const r = await api("/comments/" + btn.dataset.cid, { method: "DELETE" });
+            if (r.ok) { toast("评论已删除"); loadCommentAdmin(); }
+            else toast("删除失败");
+          };
+        });
+      } catch { list.innerHTML = '<div class="empty">评论加载失败</div>'; }
+    };
+    loadCommentAdmin();
+  }
 
   // 设置中关闭了 AI 助手则隐藏编辑器里的 AI 区块
   if (!aiEnabled) {

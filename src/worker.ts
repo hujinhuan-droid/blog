@@ -686,6 +686,15 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     return json(row, 201);
   }
 
+  // 删除评论（管理员）
+  if (method === "DELETE" && seg.length === 3 && seg[1] === "comments") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const id = Number(seg[2]);
+    if (!id) return json({ error: "缺少评论 id" }, 400);
+    await env.DB.prepare("DELETE FROM comments WHERE id = ?").bind(id).run();
+    return json({ ok: true });
+  }
+
   return json({ error: "Not Found" }, 404);
 }
 

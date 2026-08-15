@@ -738,3 +738,21 @@ body.dark .mini-item:hover { background: #161b22; }
 body.dark .badge-public { background: color-mix(in srgb, #22c55e 22%, #0f1729); }
 body.dark .badge-lock { background: color-mix(in srgb, #f59e0b 22%, #0f1729); }
 body.dark .btn-ghost { background: transparent; }
+
+/* 文章编辑页 - 评论管理区块 */
+.comment-admin { margin-top: 8px; }
+.comment-admin h2 { font-size: 18px; margin: 0 0 10px; }
+.comment-admin-list { display: flex; flex-direction: column; gap: 10px; }
+.comment-admin-item {
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;
+  background: var(--surface); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.ca-head { display: flex; align-items: center; gap: 10px; }
+.ca-author { font-weight: 600; color: var(--text); }
+.ca-date { color: var(--muted); font-size: 12px; }
+.ca-body { color: #374151; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.comment-admin-item .ca-del { align-self: flex-end; }
+body.dark .comment-admin-item { background: #0f1729; border-color: #1f2a3d; }
+body.dark .ca-author { color: #e5e7eb; }
+body.dark .ca-body { color: #cbd5e1; }
