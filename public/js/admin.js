@@ -27,6 +27,7 @@ function buildAdminShell() {
           </div>
         </div>
         <nav class="admin-nav">
+          <a class="admin-nav-item admin-nav-home" href="#/" data-nav="home"><span class="ico">🏠</span><span>返回首页</span></a>
           <a class="admin-nav-item" href="#/admin" data-nav="overview"><span class="ico">📊</span><span>概览</span></a>
           <a class="admin-nav-item" href="#/admin/posts" data-nav="posts"><span class="ico">📝</span><span>文章</span></a>
           <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico">🖼️</span><span>媒体库</span></a>
@@ -40,21 +41,28 @@ function buildAdminShell() {
               <div class="admin-role">管理员</div>
             </div>
           </div>
-          <a class="admin-back" href="#/">← 返回网站</a>
         </div>
       </aside>
-      <div class="admin-main" id="admin-main"></div>
+      <div class="admin-content">
+        <header class="admin-topbar">
+          <span class="admin-top-title" id="admin-top-title">概览</span>
+          <a class="admin-home-btn" href="#/" title="返回网站首页">🏠 返回首页</a>
+        </header>
+        <div class="admin-main" id="admin-main"></div>
+      </div>
     </div>`;
 }
 
-// 根据当前 hash 高亮侧边栏对应项
+// 根据当前 hash 高亮侧边栏对应项，并更新顶部面包屑
 function setAdminActive() {
   const hash = location.hash || "#/admin";
   const map = [
-    [/^#\/admin\/(edit|new|posts)/, "posts"],
+    [/^#\/admin\/(edit|new)/, "posts"],
+    [/^#\/admin\/posts/, "posts"],
+    [/^#\/admin\/drill/, "posts"],
     [/^#\/admin\/media/, "media"],
     [/^#\/admin\/settings/, "settings"],
-    [/^#\/admin(\/drill)?/, "overview"],
+    [/^#\/admin(\/)?$/, "overview"],
   ];
   let active = "overview";
   for (const [re, name] of map) {
@@ -66,6 +74,17 @@ function setAdminActive() {
   document.querySelectorAll(".admin-nav-item").forEach((a) => {
     a.classList.toggle("active", a.getAttribute("data-nav") === active);
   });
+  const titleEl = document.getElementById("admin-top-title");
+  if (titleEl) {
+    let crumb = "概览";
+    if (/^#\/admin\/edit\//.test(hash)) crumb = "编辑文章";
+    else if (/^#\/admin\/new/.test(hash)) crumb = "新建文章";
+    else if (/^#\/admin\/posts/.test(hash)) crumb = "文章";
+    else if (/^#\/admin\/drill/.test(hash)) crumb = "文章列表";
+    else if (/^#\/admin\/media/.test(hash)) crumb = "媒体库";
+    else if (/^#\/admin\/settings/.test(hash)) crumb = "设置";
+    titleEl.textContent = crumb;
+  }
 }
 
 function renderAdmin() {
@@ -561,10 +580,20 @@ async function renderEditor(slug) {
     <div class="editor-toolbar" id="editor-toolbar">
       <button type="button" class="fmt-btn" data-act="bold" title="加粗"><b>B</b></button>
       <button type="button" class="fmt-btn" data-act="italic" title="斜体"><i>I</i></button>
-      <button type="button" class="fmt-btn" data-act="h" title="标题">H</button>
+      <button type="button" class="fmt-btn" data-act="strike" title="删除线"><s>S</s></button>
+      <div class="fmt-dropdown">
+        <button type="button" class="fmt-btn" data-act="h" title="标题">H▾</button>
+        <div class="fmt-menu" id="h-menu">
+          <button type="button" class="fmt-menu-item" data-h="1">H1 一级标题</button>
+          <button type="button" class="fmt-menu-item" data-h="2">H2 二级标题</button>
+          <button type="button" class="fmt-menu-item" data-h="3">H3 三级标题</button>
+          <button type="button" class="fmt-menu-item" data-h="4">H4 四级标题</button>
+        </div>
+      </div>
       <button type="button" class="fmt-btn" data-act="quote" title="引用">❝</button>
       <button type="button" class="fmt-btn" data-act="ul" title="无序列表">•</button>
       <button type="button" class="fmt-btn" data-act="ol" title="有序列表">1.</button>
+      <button type="button" class="fmt-btn" data-act="task" title="任务列表">☑</button>
       <button type="button" class="fmt-btn" data-act="link" title="链接">🔗</button>
       <button type="button" class="fmt-btn" data-act="code" title="行内代码">&lt;/&gt;</button>
       <button type="button" class="fmt-btn" data-act="codeblock" title="代码块">▦</button>
@@ -676,16 +705,28 @@ async function renderEditor(slug) {
     ta.dispatchEvent(new Event("input"));
   }
   function prefixLine(ta, prefix) {
-    const s = ta.selectionStart;
-    const lineStart = ta.value.slice(0, s).lastIndexOf("\n") + 1;
-    ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
-    ta.selectionStart = ta.selectionEnd = s + prefix.length;
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const val = ta.value;
+    const start = val.slice(0, s).lastIndexOf("\n") + 1;
+    // 选区结束不在行尾时，把整行都纳入（含结尾换行前的部分）
+    let end = e;
+    if (e < val.length && val.slice(e, e + 1) !== "\n") end = val.indexOf("\n", e);
+    if (end === -1) end = val.length;
+    const block = val.slice(start, end);
+    const newBlock = block.split("\n").map((ln) => prefix + ln).join("\n");
+    ta.value = val.slice(0, start) + newBlock + val.slice(end);
+    ta.selectionStart = start;
+    ta.selectionEnd = start + newBlock.length;
     ta.focus();
     ta.dispatchEvent(new Event("input"));
+  }
+  function applyHeading(level) {
+    prefixLine(ta, "#".repeat(level) + " ");
   }
   const ACTIONS = {
     bold: () => wrapSelection(ta, "**", "**", "加粗文字"),
     italic: () => wrapSelection(ta, "*", "*", "斜体文字"),
+    strike: () => wrapSelection(ta, "~~", "~~", "删除线文字"),
     code: () => wrapSelection(ta, "`", "`", "代码"),
     link: () => wrapSelection(ta, "[", "](https://)", "链接文字"),
     codeblock: () => wrapSelection(ta, "\n```js\n", "\n```\n", "// 在此粘贴代码"),
@@ -695,18 +736,34 @@ async function renderEditor(slug) {
     quote: () => prefixLine(ta, "> "),
     ul: () => prefixLine(ta, "- "),
     ol: () => prefixLine(ta, "1. "),
+    task: () => prefixLine(ta, "- [ ] "),
     hr: () => insertAtCursor(ta, "\n---\n"),
   };
   const toolbar = document.getElementById("editor-toolbar");
+  function toggleHMenu() {
+    const m = document.getElementById("h-menu");
+    if (m) m.classList.toggle("show");
+  }
   if (toolbar) {
     toolbar.querySelectorAll(".fmt-btn").forEach((btn) => {
       btn.onclick = () => {
         const act = btn.dataset.act;
         if (act === "emoji") { toggleEmojiPicker(); return; }
         if (act === "image") { document.getElementById("f-toolbar-image").click(); return; }
+        if (act === "h") { toggleHMenu(); return; }
         ACTIONS[act] && ACTIONS[act]();
       };
     });
+    // 标题下拉菜单项
+    const hMenu = document.getElementById("h-menu");
+    if (hMenu) {
+      hMenu.querySelectorAll(".fmt-menu-item").forEach((mi) => {
+        mi.onclick = () => {
+          applyHeading(Number(mi.dataset.h));
+          hMenu.classList.remove("show");
+        };
+      });
+    }
   }
 
   // 表情选择器（分类）
@@ -732,7 +789,7 @@ async function renderEditor(slug) {
     const renderCat = (cat) => {
       grid.innerHTML = EMOJI_CATS[cat].split(" ").map((e) => `<button type="button" class="emoji-item">${e}</button>`).join("");
       grid.querySelectorAll(".emoji-item").forEach((b) => {
-        b.onclick = () => { insertAtCursor(ta, b.textContent); picker.style.display = "none"; };
+        b.onclick = () => { insertAtCursor(ta, b.textContent); };
       });
     };
     renderCat(cats[0]);
@@ -751,6 +808,10 @@ async function renderEditor(slug) {
   form.addEventListener("click", (ev) => {
     if (picker && picker.style.display !== "none" && !picker.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="emoji"]'))) {
       picker.style.display = "none";
+    }
+    const hm = document.getElementById("h-menu");
+    if (hm && hm.classList.contains("show") && !hm.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="h"]'))) {
+      hm.classList.remove("show");
     }
   });
 

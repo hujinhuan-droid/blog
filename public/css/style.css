@@ -599,6 +599,25 @@ body.dark .emoji-picker { background: #11141a; }
 body.dark .emoji-item:hover { background: #0f1729; }
 body.dark .code-block .copy-btn { background: #21252b; color: #cbd5e1; }
 
+/* 工具栏标题下拉菜单 */
+.fmt-dropdown { position: relative; display: inline-block; }
+.fmt-menu {
+  display: none; position: absolute; top: 38px; left: 0; z-index: 40;
+  min-width: 150px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.14);
+}
+.fmt-menu.show { display: block; }
+.fmt-menu-item {
+  display: block; width: 100%; text-align: left; padding: 8px 11px;
+  font-size: 13.5px; color: var(--text); border: none; background: transparent;
+  border-radius: 7px; cursor: pointer;
+}
+.fmt-menu-item:hover { background: color-mix(in srgb, var(--primary) 12%, var(--bg)); }
+body.dark .fmt-menu { background: #11141a; border-color: #1f2a3d; }
+body.dark .fmt-menu-item { color: #e5e7eb; }
+body.dark .fmt-menu-item:hover { background: color-mix(in srgb, var(--primary) 22%, #0f1729); }
+
 /* ========== 后台管理重排版（侧边栏 + 内容区） ========== */
 body.admin-mode .topbar, body.admin-mode .footer { display: none; }
 body.admin-mode #app.container { max-width: none; margin: 0; padding: 0; }
@@ -738,6 +757,33 @@ body.dark .mini-item:hover { background: #161b22; }
 body.dark .badge-public { background: color-mix(in srgb, #22c55e 22%, #0f1729); }
 body.dark .badge-lock { background: color-mix(in srgb, #f59e0b 22%, #0f1729); }
 body.dark .btn-ghost { background: transparent; }
+
+/* 后台内容区：顶部条 + 面包屑 + 返回首页 */
+.admin-content { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 100vh; }
+.admin-topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 13px 26px; border-bottom: 1px solid var(--border);
+  background: var(--surface); position: sticky; top: 0; z-index: 20;
+}
+.admin-top-title { font-weight: 700; font-size: 16px; color: var(--text); }
+.admin-home-btn {
+  font-size: 13px; padding: 8px 15px; border-radius: 9px; text-decoration: none; white-space: nowrap;
+  color: var(--primary); border: 1px solid color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+.admin-home-btn:hover { background: color-mix(in srgb, var(--primary) 16%, var(--surface)); }
+.admin-nav-home { color: var(--primary); }
+.admin-nav-home .ico { color: var(--primary); }
+body.dark .admin-content { background: #0b1220; }
+body.dark .admin-topbar { background: #0f1729; border-color: #1f2a3d; }
+body.dark .admin-top-title { color: #e5e7eb; }
+body.dark .admin-home-btn { background: color-mix(in srgb, var(--primary) 14%, #0f1729); border-color: color-mix(in srgb, var(--primary) 40%, #1f2a3d); }
+body.dark .admin-nav-home { color: #93c5fd; }
+body.dark .admin-nav-home .ico { color: #93c5fd; }
+@media (max-width: 768px) {
+  .admin-content { min-height: auto; }
+  .admin-topbar { padding: 11px 16px; position: static; }
+}
 
 /* 文章编辑页 - 评论管理区块 */
 .comment-admin { margin-top: 8px; }
