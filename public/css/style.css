@@ -813,3 +813,48 @@ body.dark .admin-nav-home .ico { color: #93c5fd; }
 body.dark .comment-admin-item { background: #0f1729; border-color: #1f2a3d; }
 body.dark .ca-author { color: #e5e7eb; }
 body.dark .ca-body { color: #cbd5e1; }
+
+/* ---------- 顶栏：主题切换 + 手机预览 ---------- */
+.topbar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.theme-switch {
+  display: flex; align-items: center; gap: 2px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px;
+}
+.theme-opt {
+  width: 30px; height: 28px; border: none; background: transparent; border-radius: 999px;
+  cursor: pointer; font-size: 14px; line-height: 1; opacity: 0.55; transition: 0.12s;
+}
+.theme-opt:hover { opacity: 1; }
+.theme-opt.active { background: var(--surface); opacity: 1; box-shadow: var(--shadow); }
+.phone-toggle {
+  width: 34px; height: 30px; border: 1px solid var(--border); background: var(--bg);
+  border-radius: 999px; cursor: pointer; font-size: 15px; line-height: 1; color: var(--text);
+  transition: 0.12s;
+}
+.phone-toggle:hover { border-color: var(--primary); }
+.phone-toggle.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, var(--bg)); }
+
+/* ---------- 手机预览外壳 ---------- */
+body.phone-preview { min-height: 100vh; background: #1c1c1e; }
+.phone-frame {
+  position: relative; width: 390px; max-width: 100%; margin: 26px auto;
+  background: var(--surface); border-radius: 46px; overflow: hidden;
+  box-shadow: 0 0 0 12px #0b0b0d, 0 24px 70px rgba(0,0,0,0.45);
+  display: flex; flex-direction: column; min-height: 82vh;
+}
+.phone-notch {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 150px; height: 26px; background: #0b0b0d; border-radius: 0 0 16px 16px; z-index: 60;
+}
+.phone-statusbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 26px 4px; font-size: 12px; font-weight: 600; color: var(--text);
+  background: var(--surface);
+}
+.phone-frame .topbar {
+  position: sticky; top: 0; height: auto; z-index: 40; border-radius: 0;
+}
+.phone-frame .topbar .wrap { height: auto; padding-top: 8px; padding-bottom: 8px; }
+.phone-frame .container { width: 100%; flex: 1; border-radius: 0; }
+.phone-frame .footer { width: 100%; border-radius: 0; }
+body.dark.phone-preview { background: #000; }
