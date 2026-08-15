@@ -225,6 +225,8 @@ export const SETTING_KEYS = [
   "seo_title",
   "seo_description",
   "seo_keywords",
+  "moderation_enabled",
+  "banned_words",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];

@@ -170,7 +170,15 @@ a:hover { text-decoration: underline; }
 /* GEMINI AI 结果区 */
 .ai-result { border: 1px solid #dbeafe; background: #eff6ff; border-radius: 10px; padding: 14px 16px; margin-bottom: 6px; }
 .ai-result-head { font-size: 13px; color: var(--primary-dark); font-weight: 600; margin-bottom: 8px; }
+.ai-result-head.ok { color: #15803d; }
+.ai-result-head.warn { color: #c2410c; }
 .ai-result pre { white-space: pre-wrap; word-break: break-word; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; max-height: 360px; overflow: auto; font-family: inherit; font-size: 14px; line-height: 1.7; color: var(--text); margin: 0; }
+.mod-list { margin: 0; padding-left: 18px; }
+.mod-list li { margin-bottom: 12px; }
+.mod-list .ctx { color: var(--muted); font-size: 13px; margin: 2px 0; }
+.mod-list .sug { color: #15803d; font-size: 13px; }
+.row-sel, #sel-all { width: 16px; height: 16px; cursor: pointer; }
+.admin-table td:first-child, .admin-table th:first-child { text-align: center; }
 
 /* 登录卡片 */
 .login-card { max-width: 380px; margin: 60px auto; text-align: center; }

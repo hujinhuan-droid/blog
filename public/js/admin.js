@@ -73,6 +73,8 @@ async function renderDashboard() {
   toolbar.appendChild(el(`<h2 style="margin:0">文章管理（${posts.length}）</h2>`));
   const newBtn = el(`<a class="btn btn-primary" href="#/admin/new">+ 新建文章</a>`);
   toolbar.appendChild(newBtn);
+  const batchBtn = el(`<button class="btn" id="batch-notes" disabled>🤖 批量 AI 备注</button>`);
+  toolbar.appendChild(batchBtn);
   toolbar.appendChild(el(`<a class="btn" href="#/admin/settings">⚙ 设置</a>`));
   wrap.appendChild(toolbar);
 
@@ -84,11 +86,12 @@ async function renderDashboard() {
   }
 
   const table = el(`<table class="admin-table"></table>`);
-  table.innerHTML = `<thead><tr><th>标题</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>`;
+  table.innerHTML = `<thead><tr><th style="width:36px"><input type="checkbox" id="sel-all" /></th><th>标题</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead>`;
   const tbody = el(`<tbody></tbody>`);
   for (const p of posts) {
     const tr = el(`<tr></tr>`);
     tr.innerHTML = `
+      <td><input type="checkbox" class="row-sel" data-id="${p.id}" /></td>
       <td>${p.title}</td>
       <td>${p.visibility === "private" ? "私密" : "公开"}</td>
       <td>${fmtDate(p.updated_at)}</td>
@@ -111,6 +114,39 @@ async function renderDashboard() {
   wrap.appendChild(table);
   app.innerHTML = "";
   app.appendChild(wrap);
+
+  // 批量 AI 备注：勾选单篇 / 多篇小说，服务端依次生成备注并写库
+  const selAll = document.getElementById("sel-all");
+  const updateBatchBtn = () => {
+    const n = app.querySelectorAll(".row-sel:checked").length;
+    batchBtn.disabled = n === 0;
+    batchBtn.textContent = n ? `🤖 批量 AI 备注(${n})` : "🤖 批量 AI 备注";
+  };
+  if (selAll)
+    selAll.onchange = () => {
+      app.querySelectorAll(".row-sel").forEach((cb) => (cb.checked = selAll.checked));
+      updateBatchBtn();
+    };
+  app.querySelectorAll(".row-sel").forEach((cb) => (cb.onchange = updateBatchBtn));
+  batchBtn.onclick = async () => {
+    const ids = [...app.querySelectorAll(".row-sel:checked")].map((cb) => Number(cb.dataset.id));
+    if (!ids.length) return;
+    batchBtn.disabled = true;
+    const old = batchBtn.textContent;
+    batchBtn.textContent = "处理中…";
+    try {
+      const res = await api("/ai/batch-notes", { method: "POST", body: JSON.stringify({ ids }) });
+      const r = await res.json().catch(() => ({}));
+      if (res.ok) toast(`批量完成：${r.ok} 成功 / ${r.total - r.ok} 失败`);
+      else toast(r.error || "批量失败");
+      renderDashboard();
+    } catch (e) {
+      toast("请求异常");
+    } finally {
+      batchBtn.disabled = false;
+      batchBtn.textContent = old;
+    }
+  };
 }
 
 async function renderEditor(slug) {
@@ -126,14 +162,16 @@ async function renderEditor(slug) {
     }
   }
 
-  // 读取设置：决定是否显示 AI 按钮、使用哪个模型
+  // 读取设置：决定是否显示 AI 按钮、使用哪个模型、是否启用违禁词检测
   let aiEnabled = true;
   let aiModel = "gemini-flash-latest";
+  let moderationEnabled = true;
   try {
     const ss = await (await api("/settings")).json();
     if (ss && typeof ss === "object") {
       aiEnabled = ss.ai_enabled !== "0";
       if (ss.ai_model) aiModel = ss.ai_model;
+      moderationEnabled = ss.moderation_enabled !== "0";
     }
   } catch {}
 
@@ -159,6 +197,7 @@ async function renderEditor(slug) {
       <div style="display:flex; gap:10px; margin-bottom:10px;">
         <button class="btn" id="ai-optimize">✨ AI 优化正文</button>
         <button class="btn" id="ai-annotate">📝 AI 生成备注</button>
+        <button class="btn" id="ai-moderate">🚫 AI 检查违禁词</button>
       </div>
     </div>
     <div id="ai-result" class="ai-result" style="display:none;"></div>
@@ -177,6 +216,11 @@ async function renderEditor(slug) {
   if (!aiEnabled) {
     const blk = document.getElementById("ai-block");
     if (blk) blk.style.display = "none";
+  }
+  // 未启用违禁词检测则隐藏对应按钮（AI 总开关关闭时整块已隐藏）
+  if (aiEnabled && !moderationEnabled) {
+    const mBtn = document.getElementById("ai-moderate");
+    if (mBtn) mBtn.style.display = "none";
   }
 
   const content = document.getElementById("f-content");
@@ -258,6 +302,62 @@ async function renderEditor(slug) {
   };
   document.getElementById("ai-optimize").onclick = () => aiCall("optimize");
   document.getElementById("ai-annotate").onclick = () => aiCall("annotate");
+
+  // 违禁词检测：调用 AI moderate 动作，解析返回的 JSON 渲染疑似违禁词列表
+  const moderateBtn = document.getElementById("ai-moderate");
+  if (moderateBtn) {
+    moderateBtn.onclick = async () => {
+      const c = content.value;
+      if (!c.trim()) {
+        toast("正文为空，无法检测");
+        return;
+      }
+      const oldText = moderateBtn.textContent;
+      moderateBtn.disabled = true;
+      moderateBtn.textContent = "检测中…";
+      try {
+        const res = await api("/ai/process", {
+          method: "POST",
+          body: JSON.stringify({ action: "moderate", title: document.getElementById("f-title").value, content: c, model: aiModel }),
+        });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast(r.error || "检测失败");
+          return;
+        }
+        let data = null;
+        try {
+          data = JSON.parse(r.result);
+        } catch {
+          data = null;
+        }
+        aiResult.style.display = "block";
+        if (data && data.clean) {
+          aiResult.innerHTML = `<div class="ai-result-head ok">✅ 未检测到明显违禁词</div>`;
+        } else if (data && Array.isArray(data.items) && data.items.length) {
+          const items = data.items
+            .map(
+              (it) => `<li>
+                <b>${escHtml(it.word || "")}</b> <span class="muted">（${escHtml(it.reason || "")}）</span>
+                <div class="ctx">上下文：${escHtml(it.context || "")}</div>
+                <div class="sug">建议：${escHtml(it.suggestion || "")}</div>
+              </li>`
+            )
+            .join("");
+          aiResult.innerHTML = `<div class="ai-result-head warn">🚫 检测到 ${data.items.length} 处疑似违禁词</div><ul class="mod-list">${items}</ul>`;
+        } else {
+          aiResult.innerHTML = `<div class="ai-result-head">AI 返回：</div><pre id="ai-out"></pre>`;
+          const pre = document.getElementById("ai-out");
+          if (pre) pre.textContent = r.result;
+        }
+      } catch (e) {
+        toast("请求异常");
+      } finally {
+        moderateBtn.disabled = false;
+        moderateBtn.textContent = oldText;
+      }
+    };
+  }
 
   document.getElementById("save").onclick = async () => {
     const payload = {
@@ -415,6 +515,16 @@ async function renderSettings() {
       <input type="text" id="s-seo_keywords" value="${escHtml(s.seo_keywords || "")}" placeholder="AI, 博客, Cloudflare, 工程实践" />
     </fieldset>
 
+    <fieldset class="set-group">
+      <legend>⑧ 健康管理</legend>
+      <p class="muted">内容合规与 AI 批处理相关设置。开启后，文章编辑器会出现「AI 检查违禁词」按钮。</p>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="s-moderation_enabled" ${s.moderation_enabled !== "0" ? "checked" : ""} /> 启用 AI 违禁词检测
+      </label>
+      <label style="margin-top:14px">自定义重点排查词（可选，每行一个 / 逗号分隔）</label>
+      <textarea id="s-banned_words" style="min-height:90px" placeholder="如：治愈、根治、包治百病、降血压、抗癌…">${escHtml(s.banned_words || "")}</textarea>
+    </fieldset>
+
     <div style="margin-top:18px;display:flex;gap:10px;align-items:center">
       <button class="btn btn-primary" id="save-settings">保存设置</button>
       <span id="settings-msg" class="muted"></span>
@@ -443,6 +553,8 @@ async function renderSettings() {
       seo_title: document.getElementById("s-seo_title").value.trim(),
       seo_description: document.getElementById("s-seo_description").value.trim(),
       seo_keywords: document.getElementById("s-seo_keywords").value.trim(),
+      moderation_enabled: document.getElementById("s-moderation_enabled").checked ? "1" : "0",
+      banned_words: document.getElementById("s-banned_words").value,
     };
     const res = await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
     const r = await res.json().catch(() => ({}));
