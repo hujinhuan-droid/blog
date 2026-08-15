@@ -671,8 +671,7 @@ function initTheme() {
       <button type="button" class="theme-opt" data-mode="light" title="浅色模式">☀️</button>
       <button type="button" class="theme-opt" data-mode="dark" title="深色模式">🌙</button>
       <button type="button" class="theme-opt" data-mode="system" title="跟随系统">🖥️</button>
-    </div>
-    <button type="button" class="phone-toggle" id="phoneToggle" title="手机预览效果">📱</button>`;
+    </div>`;
   const navToggle = document.getElementById("navToggle");
   wrap.insertBefore(box, navToggle);
 
@@ -695,30 +694,6 @@ function initTheme() {
     try { cur = localStorage.getItem("blog-theme") || "system"; } catch {}
     if (cur === "system") applyTheme("system");
   });
-
-  // ---------- 手机预览效果 ----------
-  const pt = document.getElementById("phoneToggle");
-  pt.onclick = () => {
-    const active = document.body.classList.toggle("phone-preview");
-    pt.classList.toggle("active", active);
-    if (active) {
-      const frame = document.createElement("div");
-      frame.className = "phone-frame";
-      frame.innerHTML = '<div class="phone-notch"></div><div class="phone-statusbar"><span>9:41</span><span>📶 🔋</span></div>';
-      const kids = [document.querySelector(".topbar"), document.querySelector(".container"), document.querySelector(".footer")];
-      kids.forEach((k) => k && frame.appendChild(k));
-      document.body.appendChild(frame);
-    } else {
-      const frame = document.querySelector(".phone-frame");
-      if (frame) {
-        [".topbar", ".container", ".footer"].forEach((sel) => {
-          const k = frame.querySelector(sel);
-          if (k) document.body.appendChild(k);
-        });
-        frame.remove();
-      }
-    }
-  };
 }
 
 async function init() {
