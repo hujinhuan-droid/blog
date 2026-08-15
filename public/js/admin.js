@@ -23,6 +23,10 @@ function renderAdmin() {
     renderSettings();
     return;
   }
+  if (hash.startsWith("#/admin/drill/")) {
+    openDrill(decodeURIComponent(hash.slice("#/admin/drill/".length)) || "all");
+    return;
+  }
   renderDashboard();
 }
 
@@ -106,9 +110,11 @@ async function renderDashboard() {
       <div class="stat-card clickable" data-drill="ai" title="点击查看使用过 AI 的文章"><div class="stat-num">${stats.aiUsage}</div><div class="stat-lbl">AI 调用</div></div>
       <div class="stat-chart"><div class="stat-chart-title">近 7 天发布</div><div class="bars">${bars}</div></div>`;
     wrap.appendChild(panel);
-    // 统计卡片点击下钻到文章标题列表
+    // 统计卡片点击下钻到文章标题列表（走正式路由，保证返回/导航按钮可用）
     panel.querySelectorAll(".stat-card.clickable").forEach((card) => {
-      card.onclick = () => openDrill(card.getAttribute("data-drill"));
+      card.onclick = () => {
+        location.hash = "#/admin/drill/" + card.getAttribute("data-drill");
+      };
     });
   }
   const toolbar = el(`<div class="admin-toolbar"></div>`);
@@ -235,6 +241,16 @@ async function renderDashboard() {
 // 看板统计卡片下钻：按类型过滤文章，列出标题，点标题进入编辑
 async function openDrill(type) {
   const app = document.getElementById("app");
+  // 若直接访问下钻路由（如刷新），确保文章列表已加载
+  if (!DASH_POSTS.length) {
+    try {
+      const pr = await api("/posts");
+      const arr = pr.ok ? await pr.json() : [];
+      DASH_POSTS = Array.isArray(arr) ? arr : [];
+    } catch {
+      DASH_POSTS = [];
+    }
+  }
   const TITLES = {
     all: "全部文章",
     public: "公开文章",
