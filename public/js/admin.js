@@ -1,5 +1,10 @@
 // 管理后台（依赖 app.js 中的全局：CURRENT_USER / api / toast / el / fmtDate / renderMarkdown / renderNav）
 
+// 看板下钻用的缓存：文章列表 & 有评论的文章 slug 集合
+let DASH_POSTS = [];
+let DASH_COMMENTED = null; // null=未加载；Set=已加载的 slug 集合
+
+
 function renderAdmin() {
   const hash = location.hash;
   if (!CURRENT_USER || CURRENT_USER.role !== "admin") {
@@ -78,6 +83,7 @@ async function renderDashboard() {
   app.innerHTML = `<div class="empty">加载中…</div>`;
   const res = await api("/posts");
   const posts = await res.json();
+  DASH_POSTS = Array.isArray(posts) ? posts : [];
   const wrap = el(`<div></div>`);
   // 数据看板
   let stats = null;
@@ -92,14 +98,18 @@ async function renderDashboard() {
       .join("");
     const panel = el(`<div class="stats-panel"></div>`);
     panel.innerHTML = `
-      <div class="stat-card"><div class="stat-num">${stats.total}</div><div class="stat-lbl">文章</div></div>
-      <div class="stat-card"><div class="stat-num">${stats.public}</div><div class="stat-lbl">公开</div></div>
-      <div class="stat-card"><div class="stat-num">${stats.private}</div><div class="stat-lbl">私密</div></div>
-      <div class="stat-card"><div class="stat-num">${stats.comments}</div><div class="stat-lbl">评论</div></div>
-      <div class="stat-card"><div class="stat-num">${stats.tags}</div><div class="stat-lbl">标签</div></div>
-      <div class="stat-card"><div class="stat-num">${stats.aiUsage}</div><div class="stat-lbl">AI 调用</div></div>
+      <div class="stat-card clickable" data-drill="all" title="点击查看全部文章"><div class="stat-num">${stats.total}</div><div class="stat-lbl">文章</div></div>
+      <div class="stat-card clickable" data-drill="public" title="点击查看公开文章"><div class="stat-num">${stats.public}</div><div class="stat-lbl">公开</div></div>
+      <div class="stat-card clickable" data-drill="private" title="点击查看私密文章"><div class="stat-num">${stats.private}</div><div class="stat-lbl">私密</div></div>
+      <div class="stat-card clickable" data-drill="comments" title="点击查看有评论的文章"><div class="stat-num">${stats.comments}</div><div class="stat-lbl">评论</div></div>
+      <div class="stat-card clickable" data-drill="tags" title="点击查看已打标签的文章"><div class="stat-num">${stats.tags}</div><div class="stat-lbl">标签</div></div>
+      <div class="stat-card clickable" data-drill="ai" title="点击查看使用过 AI 的文章"><div class="stat-num">${stats.aiUsage}</div><div class="stat-lbl">AI 调用</div></div>
       <div class="stat-chart"><div class="stat-chart-title">近 7 天发布</div><div class="bars">${bars}</div></div>`;
     wrap.appendChild(panel);
+    // 统计卡片点击下钻到文章标题列表
+    panel.querySelectorAll(".stat-card.clickable").forEach((card) => {
+      card.onclick = () => openDrill(card.getAttribute("data-drill"));
+    });
   }
   const toolbar = el(`<div class="admin-toolbar"></div>`);
   toolbar.appendChild(el(`<h2 style="margin:0">文章管理（${posts.length}）</h2>`));
@@ -220,6 +230,67 @@ async function renderDashboard() {
       reindexBtn.textContent = old;
     }
   };
+}
+
+// 看板统计卡片下钻：按类型过滤文章，列出标题，点标题进入编辑
+async function openDrill(type) {
+  const app = document.getElementById("app");
+  const TITLES = {
+    all: "全部文章",
+    public: "公开文章",
+    private: "私密文章",
+    comments: "有评论的文章",
+    tags: "已打标签的文章",
+    ai: "使用过 AI 的文章",
+  };
+  let list = DASH_POSTS.slice();
+  if (type === "public") list = list.filter((p) => p.visibility === "public");
+  else if (type === "private") list = list.filter((p) => p.visibility !== "public");
+  else if (type === "tags") list = list.filter((p) => parseTags(p.tags).length > 0);
+  else if (type === "ai") list = list.filter((p) => p.ai_notes && String(p.ai_notes).trim());
+  else if (type === "comments") {
+    app.innerHTML = `<div class="empty">加载中…</div>`;
+    if (!DASH_COMMENTED) {
+      try {
+        const cr = await api("/comments");
+        const arr = cr.ok ? await cr.json() : [];
+        DASH_COMMENTED = new Set((Array.isArray(arr) ? arr : []).map((c) => c.post_slug).filter(Boolean));
+      } catch {
+        DASH_COMMENTED = new Set();
+      }
+    }
+    list = list.filter((p) => DASH_COMMENTED.has(p.slug));
+  }
+  // 按更新时间倒序
+  list.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+
+  const wrap = el(`<div></div>`);
+  const head = el(`<div class="admin-toolbar"></div>`);
+  head.appendChild(el(`<a class="btn" href="#/admin">← 返回看板</a>`));
+  head.appendChild(el(`<h2 style="margin:0">${TITLES[type] || "文章"}（${list.length}）</h2>`));
+  wrap.appendChild(head);
+
+  if (!list.length) {
+    wrap.appendChild(el(`<div class="empty">没有符合条件的文章。</div>`));
+    app.innerHTML = "";
+    app.appendChild(wrap);
+    return;
+  }
+
+  const ul = el(`<div class="drill-list"></div>`);
+  for (const p of list) {
+    const row = el(`<a class="drill-item" href="#/admin/edit/${encodeURIComponent(p.slug)}"></a>`);
+    const sub = [];
+    sub.push(p.visibility === "private" ? "私密" : "公开");
+    const tg = parseTags(p.tags);
+    if (tg.length) sub.push("标签：" + tg.slice(0, 3).join("、"));
+    if (type === "ai" && p.ai_notes) sub.push("已生成 AI 备注");
+    row.innerHTML = `<span class="drill-title">${p.title}</span><span class="drill-sub">${sub.join(" · ")} · ${fmtDate(p.updated_at)}</span>`;
+    ul.appendChild(row);
+  }
+  wrap.appendChild(ul);
+  app.innerHTML = "";
+  app.appendChild(wrap);
 }
 
 async function renderEditor(slug) {

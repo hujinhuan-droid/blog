@@ -659,7 +659,12 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
   if (method === "GET" && seg.length === 2 && seg[1] === "comments") {
     const url = new URL(req.url);
     const slug = url.searchParams.get("post");
-    if (!slug) return json({ error: "缺少 post 参数" }, 400);
+    if (!slug) {
+      // 管理员可在不下钻时获取全部评论（用于看板「评论」卡片下钻）
+      if (!isAdmin(user)) return json({ error: "需要 post 参数或管理员权限" }, 400);
+      const rows = (await env.DB.prepare("SELECT * FROM comments ORDER BY created_at DESC").all()) as any;
+      return json(rows.results || []);
+    }
     const rows = await listComments(env.DB, slug);
     return json(rows);
   }
