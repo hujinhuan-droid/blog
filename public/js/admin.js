@@ -27,7 +27,6 @@ function buildAdminShell() {
           </div>
         </div>
         <nav class="admin-nav">
-          <a class="admin-nav-item admin-nav-home" href="#/" data-nav="home"><span class="ico">🏠</span><span>返回首页</span></a>
           <a class="admin-nav-item" href="#/admin" data-nav="overview"><span class="ico">📊</span><span>概览</span></a>
           <a class="admin-nav-item" href="#/admin/posts" data-nav="posts"><span class="ico">📝</span><span>文章</span></a>
           <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico">🖼️</span><span>媒体库</span></a>
