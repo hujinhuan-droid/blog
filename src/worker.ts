@@ -111,7 +111,14 @@ async function callGemini(
       return text;
     }
     const t = await resp.text().catch(() => "");
+    // 配额型 429（"exceeded your current quota"）：重试无效，直接给出清晰中文提示，避免无意义等待
+    if (resp.status === 429 && /quota/i.test(t)) {
+      throw new Error(
+        "Gemini API 配额已用完（HTTP 429）。当前 key 的免费额度已耗尽：请到 Google AI Studio 开启计费以提升额度，或等待每日额度重置后再试。后端地址：https://aistudio.google.com/apikey"
+      );
+    }
     lastErr = `Gemini API ${resp.status}: ${t.slice(0, 300)}`;
+    // 503 高负载 / 限流型 429：短暂退避后自动重试（最多 3 次）
     if ((resp.status === 503 || resp.status === 429) && attempt < maxAttempts - 1) {
       await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
       continue;
