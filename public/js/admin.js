@@ -248,8 +248,7 @@ async function renderPostsTable() {
   tbar.innerHTML = `
     <button class="btn" id="reindex">🧠 重建搜索索引</button>
     <button class="btn" id="batch-notes" disabled>🤖 批量 AI 备注</button>
-    <button class="btn" id="batch-tags" disabled>🏷 批量 AI 分类</button>
-    <a class="btn btn-ghost" href="#/admin/settings">⚙ 设置</a>`;
+    <button class="btn" id="batch-tags" disabled>🏷 批量 AI 分类</button>`;
   wrap.appendChild(tbar);
 
   if (!posts.length) {
