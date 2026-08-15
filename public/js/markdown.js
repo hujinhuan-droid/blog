@@ -37,9 +37,11 @@ function renderMarkdown(src) {
   while (i < lines.length) {
     const line = lines[i];
 
-    // 代码块
+    // 代码块（保留语言，支持复制按钮 + 语法高亮）
     if (/^```/.test(line)) {
       flushPara();
+      const langMatch = line.match(/^```\s*([\w+#.-]*)/);
+      const lang = langMatch && langMatch[1] ? langMatch[1] : "";
       const buf = [];
       i++;
       while (i < lines.length && !/^```/.test(lines[i])) {
@@ -47,7 +49,9 @@ function renderMarkdown(src) {
         i++;
       }
       i++; // 跳过结束 ```
-      html += `<pre><code>${escapeHtml(buf.join("\n"))}</code></pre>\n`;
+      const cls = lang ? ` class="language-${lang}"` : "";
+      const langLabel = lang ? `<span class="code-lang">${lang}</span>` : "";
+      html += `<div class="code-block">${langLabel}<button class="copy-btn" type="button" onclick="copyCode(this)">复制</button><pre><code${cls}>${escapeHtml(buf.join("\n"))}</code></pre></div>\n`;
       continue;
     }
 
@@ -117,3 +121,32 @@ function renderMarkdown(src) {
   flushPara();
   return html;
 }
+
+// 代码块复制按钮（全局，供 onclick 调用）
+window.copyCode = function (btn) {
+  const code = btn.parentElement.querySelector("code");
+  if (!code) return;
+  const text = code.textContent;
+  const ok = () => { btn.textContent = "已复制"; setTimeout(() => (btn.textContent = "复制"), 1500); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(ok).catch(() => fallbackCopy(text, ok));
+  } else fallbackCopy(text, ok);
+};
+function fallbackCopy(text, ok) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); ok(); } catch (e) {}
+  document.body.removeChild(ta);
+}
+
+// 渲染后调用：对已插入的代码块做语法高亮（依赖 highlight.js，未加载则跳过）
+window.highlightCode = function (root) {
+  if (!window.hljs || !root) return;
+  root.querySelectorAll("pre code").forEach((b) => {
+    try { window.hljs.highlightElement(b); } catch (e) {}
+  });
+};

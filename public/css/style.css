@@ -469,3 +469,65 @@ body.dark .modal-head, body.dark .media-cell { border-color: #1f2a3d; }
 .related-item:hover { background: var(--primary); color: #fff; }
 body.dark .related { border-color: #1f2a3d; }
 body.dark .related-item { background: color-mix(in srgb, var(--primary) 16%, #0f1729); }
+
+/* ---------- 正文编辑器增强：工具栏 / 代码块 / 表情 / 拖拽 ---------- */
+.editor-toolbar {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 8px 10px; margin-bottom: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+}
+.fmt-btn {
+  min-width: 34px; height: 32px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); cursor: pointer;
+  font-size: 14px; line-height: 1; transition: background .12s, border-color .12s;
+}
+.fmt-btn:hover { background: color-mix(in srgb, var(--primary) 12%, var(--bg)); border-color: var(--primary); }
+.toolbar-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+
+.editor-grid.dropzone-active { outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: 8px; }
+.editor-grid.dropzone-active #f-content { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+
+.emoji-picker {
+  display: flex; flex-wrap: wrap; gap: 4px; max-width: 380px;
+  padding: 8px; margin-top: 8px; max-height: 184px; overflow: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  position: relative; z-index: 5;
+}
+.emoji-item {
+  width: 32px; height: 32px; border: none; background: transparent; cursor: pointer;
+  font-size: 18px; border-radius: 6px;
+}
+.emoji-item:hover { background: var(--bg); }
+
+/* 代码块 */
+.code-block { position: relative; margin: 16px 0; }
+.code-block pre {
+  margin: 0; border-radius: 10px; overflow: auto;
+  background: #282c34; border: 1px solid #1c2128;
+}
+.code-block code {
+  display: block; padding: 14px 16px; font-size: 13.5px; line-height: 1.6;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  color: #abb2bf;
+}
+.code-block .code-lang {
+  position: absolute; top: 8px; left: 12px; z-index: 2;
+  font-size: 11px; color: #7f8a9a; font-family: monospace; letter-spacing: .5px;
+}
+.copy-btn {
+  position: absolute; top: 8px; right: 10px; z-index: 2;
+  font-size: 12px; padding: 3px 10px; cursor: pointer;
+  border: 1px solid #3a4250; border-radius: 6px;
+  background: #21252b; color: #cbd5e1;
+}
+.copy-btn:hover { background: #2c313a; color: #fff; }
+.editor-preview .code-block pre { max-height: 320px; }
+
+/* 深色模式适配 */
+body.dark .editor-toolbar { background: #11141a; }
+body.dark .fmt-btn { background: #0f1729; color: #e5e7eb; }
+body.dark .fmt-btn:hover { background: color-mix(in srgb, var(--primary) 22%, #0f1729); }
+body.dark .emoji-picker { background: #11141a; }
+body.dark .emoji-item:hover { background: #0f1729; }
+body.dark .code-block .copy-btn { background: #21252b; color: #cbd5e1; }

@@ -363,11 +363,28 @@ async function renderEditor(slug) {
     <textarea id="f-excerpt" style="min-height:70px" placeholder="留空则自动截取正文前 120 字">${post && post.excerpt ? post.excerpt : ""}</textarea>
     <label>标签（逗号分隔，用于文章分类；可点「🏷 AI 分类」自动生成）</label>
     <input type="text" id="f-tags" value="${escHtml(initialTags)}" placeholder="如：睡眠, 饮食, 运动" />
-    <label>正文（Markdown，支持实时预览）</label>
-    <div class="editor-grid">
-      <textarea id="f-content" placeholder="在此用 Markdown 写作…">${post ? post.content : ""}</textarea>
+    <label>正文（Markdown，支持工具栏、代码高亮、表情、拖拽图片）</label>
+    <div class="editor-toolbar" id="editor-toolbar">
+      <button type="button" class="fmt-btn" data-act="bold" title="加粗"><b>B</b></button>
+      <button type="button" class="fmt-btn" data-act="italic" title="斜体"><i>I</i></button>
+      <button type="button" class="fmt-btn" data-act="h" title="标题">H</button>
+      <button type="button" class="fmt-btn" data-act="quote" title="引用">❝</button>
+      <button type="button" class="fmt-btn" data-act="ul" title="无序列表">•</button>
+      <button type="button" class="fmt-btn" data-act="ol" title="有序列表">1.</button>
+      <button type="button" class="fmt-btn" data-act="link" title="链接">🔗</button>
+      <button type="button" class="fmt-btn" data-act="code" title="行内代码">&lt;/&gt;</button>
+      <button type="button" class="fmt-btn" data-act="codeblock" title="代码块">▦</button>
+      <button type="button" class="fmt-btn" data-act="hr" title="分割线">―</button>
+      <span class="toolbar-sep"></span>
+      <button type="button" class="fmt-btn" data-act="emoji" title="插入表情">😊</button>
+      <button type="button" class="fmt-btn" data-act="image" title="上传并插入图片">🖼</button>
+    </div>
+    <div class="editor-grid" id="editor-grid">
+      <textarea id="f-content" placeholder="在此用 Markdown 写作…（可直接把图片拖进来）">${post ? post.content : ""}</textarea>
       <div class="editor-preview"><h3>预览</h3><div id="preview"></div></div>
     </div>
+    <input type="file" id="f-toolbar-image" accept="image/*" style="display:none" />
+    <div class="emoji-picker" id="emoji-picker" style="display:none"></div>
     <div id="ai-block">
       <label>GEMINI AI 辅助</label>
       <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap">
@@ -407,9 +424,123 @@ async function renderEditor(slug) {
 
   const content = document.getElementById("f-content");
   const preview = document.getElementById("preview");
-  const updatePreview = () => (preview.innerHTML = renderMarkdown(content.value));
+  const updatePreview = () => { preview.innerHTML = renderMarkdown(content.value); window.highlightCode(preview); };
   content.addEventListener("input", updatePreview);
   updatePreview();
+
+  // ---- 正文增强：工具栏 / 表情 / 图片拖拽上传 ----
+  const ta = content;
+
+  function insertAtCursor(ta, text) {
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    ta.value = ta.value.slice(0, s) + text + ta.value.slice(e);
+    ta.selectionStart = ta.selectionEnd = s + text.length;
+    ta.focus();
+    ta.dispatchEvent(new Event("input"));
+  }
+  function wrapSelection(ta, before, after, placeholder) {
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const sel = ta.value.slice(s, e) || placeholder || "";
+    ta.value = ta.value.slice(0, s) + before + sel + after + ta.value.slice(e);
+    const start = s + before.length;
+    ta.selectionStart = start;
+    ta.selectionEnd = start + sel.length;
+    ta.focus();
+    ta.dispatchEvent(new Event("input"));
+  }
+  function prefixLine(ta, prefix) {
+    const s = ta.selectionStart;
+    const lineStart = ta.value.slice(0, s).lastIndexOf("\n") + 1;
+    ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
+    ta.selectionStart = ta.selectionEnd = s + prefix.length;
+    ta.focus();
+    ta.dispatchEvent(new Event("input"));
+  }
+  const ACTIONS = {
+    bold: () => wrapSelection(ta, "**", "**", "加粗文字"),
+    italic: () => wrapSelection(ta, "*", "*", "斜体文字"),
+    code: () => wrapSelection(ta, "`", "`", "代码"),
+    link: () => wrapSelection(ta, "[", "](https://)", "链接文字"),
+    codeblock: () => wrapSelection(ta, "\n```js\n", "\n```\n", "// 在此粘贴代码"),
+    h: () => prefixLine(ta, "## "),
+    quote: () => prefixLine(ta, "> "),
+    ul: () => prefixLine(ta, "- "),
+    ol: () => prefixLine(ta, "1. "),
+    hr: () => insertAtCursor(ta, "\n---\n"),
+  };
+  const toolbar = document.getElementById("editor-toolbar");
+  if (toolbar) {
+    toolbar.querySelectorAll(".fmt-btn").forEach((btn) => {
+      btn.onclick = () => {
+        const act = btn.dataset.act;
+        if (act === "emoji") { toggleEmojiPicker(); return; }
+        if (act === "image") { document.getElementById("f-toolbar-image").click(); return; }
+        ACTIONS[act] && ACTIONS[act]();
+      };
+    });
+  }
+
+  // 表情选择器
+  const EMOJIS = "😀 😁 😂 🤣 😊 😍 🥰 😘 😎 🤔 😅 😉 🙃 😇 🤩 🥳 😴 😭 😡 👍 👎 👏 🙌 💪 🤝 ✌️ 🤞 💡 🔥 ⭐ ✨ 💯 ✅ ❌ ⚠️ 📌 💬 📝 📚 💻 🖥️ ⌨️ 🐛 🚀 ⚙️ 📊 📈 🎯 🏷️ 🖼️ 📷 🔗 ❤️ 🧡 💛 💚 💙 💜 ⏰ 🌟 🍀 🌈 🎉 🤖 🧠 ⚡ 💥".split(" ");
+  const picker = document.getElementById("emoji-picker");
+  function buildEmojiPicker() {
+    if (picker.dataset.built) return;
+    picker.innerHTML = EMOJIS.map((e) => `<button type="button" class="emoji-item">${e}</button>`).join("");
+    picker.dataset.built = "1";
+    picker.querySelectorAll(".emoji-item").forEach((b) => {
+      b.onclick = () => { insertAtCursor(ta, b.textContent); picker.style.display = "none"; };
+    });
+  }
+  function toggleEmojiPicker() {
+    buildEmojiPicker();
+    picker.style.display = picker.style.display === "none" ? "flex" : "none";
+  }
+  form.addEventListener("click", (ev) => {
+    if (picker && picker.style.display !== "none" && !picker.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="emoji"]'))) {
+      picker.style.display = "none";
+    }
+  });
+
+  // 工具栏图片上传
+  const toolbarImg = document.getElementById("f-toolbar-image");
+  if (toolbarImg) {
+    toolbarImg.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      await uploadAndInsert(ta, file);
+      toolbarImg.value = "";
+    };
+  }
+
+  // 图片拖拽上传到正文（拖到编辑区任意位置）
+  const grid = document.getElementById("editor-grid");
+  if (grid) {
+    ["dragenter", "dragover"].forEach((ev) =>
+      grid.addEventListener(ev, (e) => { e.preventDefault(); grid.classList.add("dropzone-active"); })
+    );
+    ["dragleave", "drop"].forEach((ev) =>
+      grid.addEventListener(ev, (e) => {
+        e.preventDefault();
+        if (ev === "dragleave" && e.relatedTarget && grid.contains(e.relatedTarget)) return;
+        grid.classList.remove("dropzone-active");
+      })
+    );
+    grid.addEventListener("drop", async (e) => {
+      const files = [...(e.dataTransfer ? e.dataTransfer.files : [])].filter((f) => f.type.startsWith("image/"));
+      for (const f of files) await uploadAndInsert(ta, f);
+    });
+  }
+
+  async function uploadAndInsert(ta, file) {
+    toast("上传中…");
+    const data = await fileToBase64(file);
+    const res = await api("/upload", { method: "POST", body: JSON.stringify({ name: file.name, type: file.type, data }) });
+    const r = await res.json().catch(() => ({}));
+    if (res.ok) {
+      insertAtCursor(ta, `\n![${file.name}](${r.url})\n`);
+      toast("图片已插入");
+    } else toast(r.error || "上传失败");
+  }
 
   // 图片上传
   document.getElementById("f-image").onchange = async (e) => {

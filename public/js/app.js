@@ -314,6 +314,7 @@ async function renderPost(slug) {
     ${tagsHtml(p)}`;
   app.innerHTML = "";
   app.appendChild(detail);
+  window.highlightCode(detail);
   loadRelated(p.slug);
   attachComments(p.slug);
 }
@@ -581,6 +582,7 @@ function renderAbout() {
     <h1>关于</h1>
     <div class="content">${renderMarkdown(about)}</div>
   </div>`;
+  window.highlightCode(app);
 }
 
 // 手机端汉堡菜单开关
