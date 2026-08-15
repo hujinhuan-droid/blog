@@ -354,6 +354,7 @@ async function renderPost(slug) {
   const detail = el(`<div class="post-detail"></div>`);
   detail.innerHTML = `
     <h1>${p.title}</h1>
+    <button type="button" class="tts-btn" id="ttsBtn">🔊 朗读</button>
     <div class="meta">${fmtDate(p.created_at)}${
       p.visibility === "private" ? " · 私密" : ""
     }</div>
@@ -365,6 +366,22 @@ async function renderPost(slug) {
   window.highlightCode(detail);
   loadRelated(p.slug);
   attachComments(p.slug);
+  // 文章朗读（浏览器内置语音合成，零配额、纯前端）
+  const ttsBtn = document.getElementById("ttsBtn");
+  if (ttsBtn && "speechSynthesis" in window) {
+    let speaking = false;
+    ttsBtn.onclick = () => {
+      if (speaking) { window.speechSynthesis.cancel(); return; }
+      const txt = (detail.querySelector(".content")?.innerText || "").trim();
+      if (!txt) return;
+      const u = new SpeechSynthesisUtterance(txt);
+      u.lang = "zh-CN"; u.rate = 1; u.pitch = 1;
+      u.onend = () => { speaking = false; ttsBtn.classList.remove("active"); ttsBtn.textContent = "🔊 朗读"; };
+      u.onerror = u.onend;
+      window.speechSynthesis.speak(u);
+      speaking = true; ttsBtn.classList.add("active"); ttsBtn.textContent = "⏹ 停止";
+    };
+  }
 }
 
 // 文章底部「相关文章」：调用 /api/related（向量相似度 top3，无向量时按标签兜底）
@@ -723,6 +740,7 @@ async function init() {
   } catch {}
   initTheme();
   window.addEventListener("hashchange", () => {
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch {}
     document.querySelector(".topbar")?.classList.remove("open");
     route();
   });

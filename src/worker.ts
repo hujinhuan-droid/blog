@@ -188,6 +188,26 @@ async function genCoverImage(env: Env, prompt: string): Promise<string> {
   return `/api/files/${key}`;
 }
 
+// 用 Workers AI 文本模型生成文本（写作用途，独立于 Gemini 配额）
+async function callWorkersText(env: Env, system: string, userText: string): Promise<string> {
+  if (!env.AI) throw new Error("未配置 Workers AI 绑定（ai），无法使用 AI 写作助手");
+  const model = "@cf/meta/llama-3.1-8b-instruct";
+  const out: any = await env.AI.run(model, {
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: userText },
+    ],
+    max_tokens: 1200,
+    temperature: 0.7,
+  });
+  let gen = "";
+  if (typeof out === "string") gen = out;
+  else if (out && out.response) gen = out.response;
+  else if (out && typeof out.result === "string") gen = out.result;
+  else if (out && out.text) gen = out.text;
+  return (gen || "").trim();
+}
+
 // 余弦相似度
 function cosine(a: number[], b: number[]): number {
   if (!a || !b || a.length !== b.length) return 0;
@@ -523,6 +543,34 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       return json({ url });
     } catch (e: any) {
       return json({ error: e.message || "配图生成失败" }, 502);
+    }
+  }
+
+  // AI 写作助手（管理员）：用 Workers AI 文本模型做 续写/扩写/缩写/润色/换语气/按指令
+  if (method === "POST" && seg.length === 3 && seg[1] === "ai" && seg[2] === "compose") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const task = (body.task || "continue").toString();
+    const text = (body.text || "").toString();
+    const instruction = (body.instruction || "").toString();
+    if (task !== "instruction" && !text.trim()) return json({ error: "请提供正文内容" }, 400);
+    if (task === "instruction" && !instruction.trim()) return json({ error: "请填写写作指令" }, 400);
+    const prompts: Record<string, string> = {
+      continue: "你是中文写作助手。请基于下面的正文，自然地续写后续内容（1–2 段），保持原文风格与 Markdown 格式，只返回续写部分，不要重复原文，不要任何额外解释或前后缀。",
+      expand: "你是中文写作助手。请在不改变原意的前提下，把下面这段内容扩写得更充实（补充细节、例子、解释），保持 Markdown 格式，只返回扩写后的全文，不要任何额外解释。",
+      shorten: "你是中文写作助手。请把下面这段内容精简压缩，保留核心信息与 Markdown 格式，只返回精简后的内容，不要任何额外解释。",
+      polish: "你是中文写作助手与编辑。请润色下面这段内容，让表达更流畅、准确、专业，修正错别字与语病，保持原意与 Markdown 格式，只返回润色后的全文，不要任何额外解释。",
+      tone: "你是中文写作助手。请把下面这段内容改写为更生动、有感染力的口语化语气（适合博客/自媒体），保持原意与 Markdown 格式，只返回改写后的全文，不要任何额外解释。",
+      instruction: `请按以下要求处理正文：${instruction}\n只返回处理后的结果，保持 Markdown 格式，不要任何额外解释或前后缀。`,
+    };
+    const sys = prompts[task] || prompts.continue;
+    const userText = task === "instruction" ? text : `标题：${(body.title || "(无标题)")}\n\n正文：\n${text}`;
+    try {
+      const gen = await callWorkersText(env, sys, userText);
+      if (!gen) return json({ error: "AI 未返回内容" }, 502);
+      return json({ result: gen });
+    } catch (e: any) {
+      return json({ error: e.message || "AI 调用失败" }, 502);
     }
   }
 

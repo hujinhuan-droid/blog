@@ -602,6 +602,7 @@ async function renderEditor(slug) {
       <span class="toolbar-sep"></span>
       <button type="button" class="fmt-btn" data-act="emoji" title="插入表情">😊</button>
       <button type="button" class="fmt-btn" data-act="image" title="上传并插入图片">🖼</button>
+      <button type="button" class="fmt-btn" data-act="aiwrite" title="AI 写作助手">🤖</button>
     </div>
     <div class="editor-grid" id="editor-grid">
       <textarea id="f-content" placeholder="在此用 Markdown 写作…（可直接把图片拖进来）">${post ? post.content : ""}</textarea>
@@ -609,6 +610,7 @@ async function renderEditor(slug) {
     </div>
     <input type="file" id="f-toolbar-image" accept="image/*" style="display:none" />
     <div class="emoji-picker" id="emoji-picker" style="display:none"></div>
+    <div class="ai-compose" id="ai-compose" style="display:none"></div>
     <div id="ai-block">
       <label>GEMINI AI 辅助</label>
       <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap">
@@ -749,6 +751,7 @@ async function renderEditor(slug) {
         const act = btn.dataset.act;
         if (act === "emoji") { toggleEmojiPicker(); return; }
         if (act === "image") { document.getElementById("f-toolbar-image").click(); return; }
+        if (act === "aiwrite") { toggleAiCompose(); return; }
         if (act === "h") { toggleHMenu(); return; }
         ACTIONS[act] && ACTIONS[act]();
       };
@@ -805,9 +808,71 @@ async function renderEditor(slug) {
     buildEmojiPicker();
     picker.style.display = picker.style.display === "none" ? "flex" : "none";
   }
+  // AI 写作助手面板
+  const composeEl = document.getElementById("ai-compose");
+  function buildAiCompose() {
+    if (composeEl.dataset.built) return;
+    composeEl.innerHTML = `
+      <div class="ai-compose-row">
+        <select id="ai-task" class="ai-compose-sel">
+          <option value="continue">✍️ 续写</option>
+          <option value="expand">📝 扩写</option>
+          <option value="shorten">✂️ 缩写</option>
+          <option value="polish">✨ 润色</option>
+          <option value="tone">🗣️ 换语气</option>
+          <option value="instruction">🎯 按指令</option>
+        </select>
+        <button type="button" class="btn btn-primary" id="ai-gen">生成</button>
+      </div>
+      <textarea id="ai-instr" class="ai-compose-instr" placeholder="选「按指令」时填写，例如：把这段改成悬念开头"></textarea>
+      <div id="ai-compose-out" class="ai-compose-out"></div>`;
+    composeEl.dataset.built = "1";
+    const sel = composeEl.querySelector("#ai-task");
+    const instr = composeEl.querySelector("#ai-instr");
+    const out = composeEl.querySelector("#ai-compose-out");
+    const genBtn = composeEl.querySelector("#ai-gen");
+    sel.onchange = () => { instr.style.display = sel.value === "instruction" ? "block" : "none"; };
+    genBtn.onclick = async () => {
+      const task = sel.value;
+      const s = ta.selectionStart, e = ta.selectionEnd;
+      const selText = ta.value.slice(s, e);
+      const text = selText || ta.value;
+      if (!text.trim() && task !== "instruction") { out.textContent = "请先选中正文，或确保编辑器有内容。"; return; }
+      const titleEl = document.getElementById("f-title");
+      genBtn.disabled = true; genBtn.textContent = "生成中…"; out.textContent = "";
+      try {
+        const r = await api("/ai/compose", { method: "POST", body: JSON.stringify({ task, text, instruction: instr.value, title: titleEl ? titleEl.value : "" }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { out.textContent = "❌ " + (d.error || "生成失败"); }
+        else {
+          const result = d.result || "";
+          if (task === "continue") {
+            insertAtCursor(ta, result);
+          } else if (selText) {
+            ta.value = ta.value.slice(0, s) + result + ta.value.slice(e);
+            ta.selectionStart = ta.selectionEnd = s + result.length;
+            ta.focus(); ta.dispatchEvent(new Event("input"));
+          } else {
+            ta.value = result;
+            ta.focus(); ta.dispatchEvent(new Event("input"));
+          }
+          out.innerHTML = `<div class="ai-compose-head">✅ 已插入正文</div><pre class="ai-compose-preview"></pre>`;
+          out.querySelector("pre").textContent = result;
+        }
+      } catch (err) { out.textContent = "❌ 请求失败：" + err.message; }
+      finally { genBtn.disabled = false; genBtn.textContent = "生成"; }
+    };
+  }
+  function toggleAiCompose() {
+    buildAiCompose();
+    composeEl.style.display = composeEl.style.display === "none" ? "block" : "none";
+  }
   form.addEventListener("click", (ev) => {
     if (picker && picker.style.display !== "none" && !picker.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="emoji"]'))) {
       picker.style.display = "none";
+    }
+    if (composeEl && composeEl.style.display !== "none" && !composeEl.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="aiwrite"]'))) {
+      composeEl.style.display = "none";
     }
     const hm = document.getElementById("h-menu");
     if (hm && hm.classList.contains("show") && !hm.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="h"]'))) {

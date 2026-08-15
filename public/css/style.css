@@ -858,3 +858,36 @@ body.phone-preview { min-height: 100vh; background: #1c1c1e; }
 .phone-frame .container { width: 100%; flex: 1; border-radius: 0; }
 .phone-frame .footer { width: 100%; border-radius: 0; }
 body.dark.phone-preview { background: #000; }
+
+/* ---------- 编辑器 AI 写作助手面板 ---------- */
+.ai-compose {
+  display: block; margin-top: 8px; padding: 10px; width: 100%; max-width: 520px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  position: relative; z-index: 6;
+}
+.ai-compose-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ai-compose-sel {
+  flex: 1; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--bg); color: var(--text); font-size: 14px;
+}
+.ai-compose-instr {
+  display: none; width: 100%; min-height: 52px; margin-bottom: 8px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);
+  font-family: inherit; font-size: 14px; resize: vertical;
+}
+.ai-compose-out { font-size: 13px; color: var(--muted); }
+.ai-compose-head { color: #16a34a; font-weight: 600; margin-bottom: 6px; }
+.ai-compose-preview {
+  white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+  font-family: inherit; font-size: 14px; line-height: 1.6; color: var(--text); margin: 0;
+}
+
+/* ---------- 文章页 TTS 朗读 ---------- */
+.tts-btn {
+  display: inline-flex; align-items: center; gap: 6px; margin: 10px 0 4px;
+  padding: 7px 14px; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--bg); color: var(--text); cursor: pointer; font-size: 14px; transition: 0.12s;
+}
+.tts-btn:hover { border-color: var(--primary); color: var(--primary); }
+.tts-btn.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, var(--bg)); color: var(--primary); }
