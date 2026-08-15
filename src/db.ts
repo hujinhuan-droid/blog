@@ -10,6 +10,7 @@ export interface PostRow {
   visibility: string;
   ai_notes: string | null;
   tags: string | null;
+  embedding: string | null;
   created_at: number;
   updated_at: number;
   author_id: number | null;
@@ -120,7 +121,7 @@ export async function getPostById(
 
 export async function createPost(
   db: DB,
-  data: { title: string; content: string; excerpt?: string; cover?: string; visibility?: string; author_id?: number | null; ai_notes?: string; tags?: string }
+  data: { title: string; content: string; excerpt?: string; cover?: string; visibility?: string; author_id?: number | null; ai_notes?: string; tags?: string; embedding?: number[] | string }
 ): Promise<PostRow> {
   const slug = slugify(data.title);
   const ts = now();
@@ -129,11 +130,12 @@ export async function createPost(
   const cover = data.cover || null;
   const ai_notes = data.ai_notes ?? null;
   const tags = data.tags ? stringifyTags(parseTags(data.tags)) : "[]";
+  const embedding = data.embedding ? (Array.isArray(data.embedding) ? JSON.stringify(data.embedding) : String(data.embedding)) : null;
   await db
     .prepare(
-      "INSERT INTO posts (slug, title, content, excerpt, cover, visibility, ai_notes, tags, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO posts (slug, title, content, excerpt, cover, visibility, ai_notes, tags, embedding, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(slug, data.title, data.content, excerpt, cover, visibility, ai_notes, tags, ts, ts, data.author_id ?? null)
+    .bind(slug, data.title, data.content, excerpt, cover, visibility, ai_notes, tags, embedding, ts, ts, data.author_id ?? null)
     .run();
   return (await getPostBySlug(db, slug, { admin: true }))!;
 }
@@ -141,7 +143,7 @@ export async function createPost(
 export async function updatePost(
   db: DB,
   id: number,
-  data: { title?: string; content?: string; excerpt?: string; cover?: string; visibility?: string; ai_notes?: string; tags?: string }
+  data: { title?: string; content?: string; excerpt?: string; cover?: string; visibility?: string; ai_notes?: string; tags?: string; embedding?: number[] | string }
 ): Promise<PostRow | null> {
   const existing = (await db.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first()) as PostRow | null;
   if (!existing) return null;
@@ -154,12 +156,15 @@ export async function updatePost(
   const visibility = data.visibility ?? existing.visibility;
   const ai_notes = data.ai_notes !== undefined ? data.ai_notes : existing.ai_notes;
   const tags = data.tags !== undefined ? stringifyTags(parseTags(data.tags)) : existing.tags;
+  const embedding = data.embedding !== undefined
+    ? (Array.isArray(data.embedding) ? JSON.stringify(data.embedding) : String(data.embedding))
+    : existing.embedding;
   const ts = now();
   await db
     .prepare(
-      "UPDATE posts SET title = ?, content = ?, excerpt = ?, cover = ?, visibility = ?, ai_notes = ?, tags = ?, updated_at = ? WHERE id = ?"
+      "UPDATE posts SET title = ?, content = ?, excerpt = ?, cover = ?, visibility = ?, ai_notes = ?, tags = ?, embedding = ?, updated_at = ? WHERE id = ?"
     )
-    .bind(title, content, excerpt, cover, visibility, ai_notes, tags, ts, id)
+    .bind(title, content, excerpt, cover, visibility, ai_notes, tags, embedding, ts, id)
     .run();
   return (await getPostById(db, id, { admin: true }))!;
 }
@@ -296,6 +301,19 @@ export async function setSettings(db: DB, values: Record<string, string>): Promi
       .bind(k, v)
       .run();
   }
+}
+
+// 轻量计数器（如 AI 调用量统计）
+export async function getMeta(db: DB, k: string): Promise<number> {
+  const r = (await db.prepare("SELECT v FROM meta WHERE k = ?").bind(k).first()) as { v: number } | null;
+  return r ? Number(r.v) || 0 : 0;
+}
+
+export async function incMeta(db: DB, k: string, by = 1): Promise<void> {
+  await db
+    .prepare("INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = v + ?")
+    .bind(k, by, by)
+    .run();
 }
 
 // ---------------- 评论 ----------------

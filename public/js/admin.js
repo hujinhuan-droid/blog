@@ -69,10 +69,34 @@ async function renderDashboard() {
   const res = await api("/posts");
   const posts = await res.json();
   const wrap = el(`<div></div>`);
+  // 数据看板
+  let stats = null;
+  try {
+    const sr = await api("/stats");
+    if (sr.ok) stats = await sr.json();
+  } catch {}
+  if (stats) {
+    const maxc = Math.max(1, ...stats.recent7.map((d) => d.count));
+    const bars = stats.recent7
+      .map((d) => `<div class="bar" title="${d.date}: ${d.count} 篇" style="height:${Math.round((d.count / maxc) * 60) + 4}px"><span>${d.count}</span></div>`)
+      .join("");
+    const panel = el(`<div class="stats-panel"></div>`);
+    panel.innerHTML = `
+      <div class="stat-card"><div class="stat-num">${stats.total}</div><div class="stat-lbl">文章</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.public}</div><div class="stat-lbl">公开</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.private}</div><div class="stat-lbl">私密</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.comments}</div><div class="stat-lbl">评论</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.tags}</div><div class="stat-lbl">标签</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.aiUsage}</div><div class="stat-lbl">AI 调用</div></div>
+      <div class="stat-chart"><div class="stat-chart-title">近 7 天发布</div><div class="bars">${bars}</div></div>`;
+    wrap.appendChild(panel);
+  }
   const toolbar = el(`<div class="admin-toolbar"></div>`);
   toolbar.appendChild(el(`<h2 style="margin:0">文章管理（${posts.length}）</h2>`));
   const newBtn = el(`<a class="btn btn-primary" href="#/admin/new">+ 新建文章</a>`);
   toolbar.appendChild(newBtn);
+  const reindexBtn = el(`<button class="btn" id="reindex">🧠 重建搜索索引</button>`);
+  toolbar.appendChild(reindexBtn);
   const batchBtn = el(`<button class="btn" id="batch-notes" disabled>🤖 批量 AI 备注</button>`);
   toolbar.appendChild(batchBtn);
   const batchTagsBtn = el(`<button class="btn" id="batch-tags" disabled>🏷 批量 AI 分类</button>`);
@@ -170,6 +194,22 @@ async function renderDashboard() {
       batchTagsBtn.textContent = old;
     }
   };
+  reindexBtn.onclick = async () => {
+    reindexBtn.disabled = true;
+    const old = reindexBtn.textContent;
+    reindexBtn.textContent = "重建中…";
+    try {
+      const r = await api("/ai/embed-all", { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) toast(`搜索索引已重建：${d.ok} 成功 / ${d.fail} 失败`);
+      else toast(d.error || "重建失败");
+    } catch {
+      toast("请求异常");
+    } finally {
+      reindexBtn.disabled = false;
+      reindexBtn.textContent = old;
+    }
+  };
 }
 
 async function renderEditor(slug) {
@@ -217,8 +257,12 @@ async function renderEditor(slug) {
       <option value="public" ${post && post.visibility === "public" ? "selected" : ""}>公开</option>
       <option value="private" ${post && post.visibility === "private" ? "selected" : ""}>仅自己可见</option>
     </select>
-    <label>封面图 URL（可选）</label>
+    <label>封面图 URL（可选，可点「🎨 AI 配图」自动生成）</label>
     <input type="text" id="f-cover" value="${post && post.cover ? post.cover.replace(/"/g, "&quot;") : ""}" />
+    <label>AI 配图提示词（可选，留空则根据标题+标签自动生成）</label>
+    <input type="text" id="f-cover-prompt" placeholder="如：水墨风格的晨练插画" />
+    <label>摘要（列表页展示，可点「📋 AI 摘要」自动生成；留空则自动截取正文前 120 字）</label>
+    <textarea id="f-excerpt" style="min-height:70px" placeholder="留空则自动截取正文前 120 字">${post && post.excerpt ? post.excerpt : ""}</textarea>
     <label>标签（逗号分隔，用于文章分类；可点「🏷 AI 分类」自动生成）</label>
     <input type="text" id="f-tags" value="${escHtml(initialTags)}" placeholder="如：睡眠, 饮食, 运动" />
     <label>正文（Markdown，支持实时预览）</label>
@@ -231,6 +275,8 @@ async function renderEditor(slug) {
       <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap">
         <button class="btn" id="ai-optimize">✨ AI 优化正文</button>
         <button class="btn" id="ai-annotate">📝 AI 生成备注</button>
+        <button class="btn" id="ai-summarize">📋 AI 摘要/SEO</button>
+        <button class="btn" id="ai-cover">🎨 AI 配图</button>
         <button class="btn" id="ai-moderate">🚫 AI 检查违禁词</button>
         <button class="btn" id="ai-classify">🏷 AI 分类</button>
       </div>
@@ -239,7 +285,10 @@ async function renderEditor(slug) {
     <label>AI 备注（保存文章时一并存入）</label>
     <textarea id="f-ai-notes" placeholder="点击「AI 生成备注」自动生成，或手动填写">${post && post.ai_notes ? post.ai_notes : ""}</textarea>
     <label>插入图片（上传到 R2）</label>
-    <input type="file" id="f-image" accept="image/*" />
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+      <input type="file" id="f-image" accept="image/*" />
+      <button class="btn" id="open-media" type="button">🖼 媒体库</button>
+    </div>
     <div style="margin-top:18px; display:flex; gap:10px;">
       <button class="btn btn-primary" id="save">保存</button>
       <a class="btn" href="#/admin">取消</a>
@@ -372,6 +421,81 @@ async function renderEditor(slug) {
     };
   }
 
+  // AI 摘要/SEO：调用 summarize 动作，填充摘要文本框并提示 SEO 信息
+  const summarizeBtn = document.getElementById("ai-summarize");
+  if (summarizeBtn) {
+    summarizeBtn.onclick = async () => {
+      const c = content.value;
+      if (!c.trim()) {
+        toast("正文为空，无法生成摘要");
+        return;
+      }
+      const oldText = summarizeBtn.textContent;
+      summarizeBtn.disabled = true;
+      summarizeBtn.textContent = "生成中…";
+      try {
+        const res = await api("/ai/process", {
+          method: "POST",
+          body: JSON.stringify({ action: "summarize", title: document.getElementById("f-title").value, content: c, model: aiModel }),
+        });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast(r.error || "生成失败");
+          return;
+        }
+        if (r.excerpt) document.getElementById("f-excerpt").value = r.excerpt;
+        aiResult.style.display = "block";
+        aiResult.innerHTML = `<div class="ai-result-head">📋 AI 摘要已生成，已填入摘要框${
+          r.seo_keywords ? `；建议 SEO 关键词：${escHtml(r.seo_keywords)}` : ""
+        }</div>`;
+        toast("摘要已生成");
+      } catch (e) {
+        toast("请求异常");
+      } finally {
+        summarizeBtn.disabled = false;
+        summarizeBtn.textContent = oldText;
+      }
+    };
+  }
+
+  // AI 配图：调用 FLUX 生成封面，写入 R2 后填入封面 URL
+  const coverBtn = document.getElementById("ai-cover");
+  if (coverBtn) {
+    coverBtn.onclick = async () => {
+      const oldText = coverBtn.textContent;
+      coverBtn.disabled = true;
+      coverBtn.textContent = "生成中…";
+      try {
+        const tagsVal = document.getElementById("f-tags").value.trim();
+        const promptVal = document.getElementById("f-cover-prompt").value.trim();
+        const res = await api("/ai/cover", {
+          method: "POST",
+          body: JSON.stringify({ title: document.getElementById("f-title").value, tags: tagsVal, prompt: promptVal }),
+        });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast(r.error || "配图失败");
+          return;
+        }
+        document.getElementById("f-cover").value = r.url;
+        aiResult.style.display = "block";
+        aiResult.innerHTML = `<div class="ai-result-head">🎨 配图已生成</div><img src="${r.url}" alt="cover" style="max-width:240px;border-radius:8px;margin-top:8px" />`;
+        toast("配图已生成并填入封面");
+      } catch (e) {
+        toast("请求异常");
+      } finally {
+        coverBtn.disabled = false;
+        coverBtn.textContent = oldText;
+      }
+    };
+  }
+
+  // 媒体库：列出 / 上传 / 插入 / 删除 R2 图片
+  const mediaBtn = document.getElementById("open-media");
+  if (mediaBtn) {
+    mediaBtn.onclick = () => openMediaLibrary(content);
+  }
+
   // 违禁词检测：调用 AI moderate 动作，解析返回的 JSON 渲染疑似违禁词列表
   const moderateBtn = document.getElementById("ai-moderate");
   if (moderateBtn) {
@@ -434,6 +558,7 @@ async function renderEditor(slug) {
       content: content.value,
       visibility: document.getElementById("f-visibility").value,
       cover: document.getElementById("f-cover").value.trim() || undefined,
+      excerpt: document.getElementById("f-excerpt").value.trim() || undefined,
       ai_notes: aiNotes.value.trim() || undefined,
       tags: document.getElementById("f-tags").value.trim() || undefined,
     };
@@ -457,6 +582,81 @@ function fileToBase64(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// 媒体库弹窗：上传 / 列表 / 插入正文 / 设为封面 / 删除
+function openMediaLibrary(content) {
+  const app = document.getElementById("app");
+  const overlay = el(`<div class="modal-overlay"></div>`);
+  const modal = el(`<div class="modal media-modal"></div>`);
+  modal.innerHTML = `
+    <div class="modal-head"><h3>媒体库</h3><button class="btn btn-sm" id="media-close">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+        <input type="file" id="media-file" accept="image/*" />
+        <button class="btn btn-primary" id="media-upload">上传</button>
+      </div>
+      <div class="media-grid" id="media-grid"><div class="empty">加载中…</div></div>
+    </div>`;
+  overlay.appendChild(modal);
+  app.appendChild(overlay);
+  const close = () => overlay.remove();
+  modal.querySelector("#media-close").onclick = close;
+  overlay.onclick = (e) => {
+    if (e.target === overlay) close();
+  };
+
+  const grid = modal.querySelector("#media-grid");
+  const load = async () => {
+    grid.innerHTML = `<div class="empty">加载中…</div>`;
+    const res = await api("/media");
+    const d = await res.json().catch(() => ({ items: [] }));
+    const items = d.items || [];
+    if (!items.length) {
+      grid.innerHTML = `<div class="empty">还没有图片，先上传一张吧。</div>`;
+      return;
+    }
+    grid.innerHTML = "";
+    for (const it of items) {
+      const cell = el(`<div class="media-cell"></div>`);
+      cell.innerHTML = `
+        <img src="${it.url}" alt="" loading="lazy" />
+        <div class="media-actions">
+          <button class="btn btn-sm" data-act="insert">插入</button>
+          <button class="btn btn-sm" data-act="cover">封面</button>
+          <button class="btn btn-sm btn-danger" data-act="del">删除</button>
+        </div>`;
+      cell.querySelector('[data-act="insert"]').onclick = () => {
+        content.value += `\n![image](${it.url})\n`;
+        content.dispatchEvent(new Event("input"));
+        toast("已插入正文");
+      };
+      cell.querySelector('[data-act="cover"]').onclick = () => {
+        const cov = document.getElementById("f-cover");
+        if (cov) cov.value = it.url;
+        toast("已设为封面");
+      };
+      cell.querySelector('[data-act="del"]').onclick = async () => {
+        if (!confirm("确定删除该图片？")) return;
+        const r = await api("/media", { method: "DELETE", body: JSON.stringify({ key: it.key }) });
+        if (r.ok) load();
+        else toast("删除失败");
+      };
+      grid.appendChild(cell);
+    }
+  };
+  modal.querySelector("#media-upload").onclick = async () => {
+    const f = modal.querySelector("#media-file").files[0];
+    if (!f) return toast("请选择文件");
+    const data = await fileToBase64(f);
+    const r = await api("/upload", { method: "POST", body: JSON.stringify({ name: f.name, type: f.type, data }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) {
+      toast("已上传");
+      load();
+    } else toast(d.error || "上传失败");
+  };
+  load();
 }
 
 // ---------------- 站点设置 ----------------

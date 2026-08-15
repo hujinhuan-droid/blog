@@ -25,11 +25,14 @@ import {
   createComment,
   listTags,
   parseTags,
+  getMeta,
+  incMeta,
 } from "./db";
 
 interface Env extends AuthEnv {
   DB: DB;
   BUCKET: R2Bucket;
+  AI: any;
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   GEMINI_API_KEY?: string;
   GEMINI_BASE_URL?: string;
@@ -57,7 +60,7 @@ async function readJson(req: Request): Promise<any> {
 // ---------------- Gemini AI ----------------
 const GEMINI_MODEL = "gemini-flash-latest";
 
-type AiAction = "optimize" | "annotate" | "moderate" | "classify";
+type AiAction = "optimize" | "annotate" | "moderate" | "classify" | "summarize";
 
 const AI_PROMPTS: Record<AiAction, string> = {
   optimize:
@@ -70,6 +73,10 @@ const AI_PROMPTS: Record<AiAction, string> = {
     "2) 使用通用、可复用的分类词（如：睡眠、饮食、运动、情志、节气、穴位、养生常识、误区辟谣、食疗、功法）；\n" +
     "3) 覆盖文章主要主题，避免过细或重复。\n" +
     "只返回一个 JSON 数组（不要任何额外解释或代码围栏），例如 [\"睡眠\",\"情志\",\"养生常识\"]。",
+  summarize:
+    "你是中文内容运营助手。请为下面的文章生成用于列表展示与搜索引擎优化（SEO）的元数据，严格只返回如下 JSON（不要任何额外解释、前后缀或代码围栏）：\n" +
+    "{\"excerpt\":\"80–140 字的中文摘要，概括文章核心观点，适合作为列表页简介\",\"seo_description\":\"120 字以内的 SEO 描述，自然流畅、包含核心关键词\",\"seo_keywords\":\"6–10 个中文关键词，用中文逗号分隔\"}\n" +
+    "示例：{\"excerpt\":\"本文介绍...\",\"seo_description\":\"...\",\"seo_keywords\":\"睡眠, 养生, 作息\"}",
   moderate:
     "你是中文养生/健康类内容的合规审核助手。请审查下面文章，识别「违禁词 / 违规表述」，重点包括：\n" +
     "1) 夸大或绝对化疗效的词（如 治愈、根治、包治百病、百分百、保证、无副作用、最佳、第一）；\n" +
@@ -116,6 +123,7 @@ async function callGemini(
       const parts = data?.candidates?.[0]?.content?.parts ?? [];
       const text = parts.map((p: any) => p.text || "").join("").trim();
       if (!text) throw new Error("Gemini 返回内容为空");
+      try { await incMeta(env.DB, "ai_usage_count"); } catch {}
       return text;
     }
     const t = await resp.text().catch(() => "");
@@ -150,6 +158,61 @@ function extractJsonArray(text: string): string[] {
     if (Array.isArray(a)) return a.map((x) => String(x).trim()).filter(Boolean);
   } catch {}
   return [];
+}
+
+// 用 Workers AI 生成文本向量（语义搜索 / 相关文章），返回 number[] 或 null
+async function embedText(env: Env, text: string): Promise<number[] | null> {
+  if (!env.AI) return null;
+  try {
+    const out: any = await env.AI.run("@cf/baai/bge-base-en-v1.5", { text: String(text || "").slice(0, 8000) });
+    // 返回结构：{ data: [ number[] ], shape, pooling, usage }，data[0] 即为向量
+    const emb: any = (out && Array.isArray(out.data) && Array.isArray(out.data[0]) && out.data[0].length)
+      ? out.data[0]
+      : (out && Array.isArray(out.embedding) ? out.embedding : null);
+    if (Array.isArray(emb)) return emb as number[];
+  } catch {}
+  return null;
+}
+
+// 用 Workers AI FLUX 生成封面图，上传 R2，返回可访问 URL
+async function genCoverImage(env: Env, prompt: string): Promise<string> {
+  if (!env.AI) throw new Error("未配置 Workers AI 绑定（ai），无法生成配图");
+  const out: any = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", { prompt: String(prompt || "").slice(0, 1000) });
+  let b64 = (out && (out.image || (out.data && out.data.image))) || "";
+  if (typeof b64 !== "string") b64 = "";
+  if (b64.startsWith("data:")) b64 = b64.slice(b64.indexOf(",") + 1);
+  if (!b64) throw new Error("图像模型未返回图片");
+  const binary = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const key = `covers/${crypto.randomUUID()}.png`;
+  await env.BUCKET.put(key, binary, { httpMetadata: { contentType: "image/png" } });
+  return `/api/files/${key}`;
+}
+
+// 余弦相似度
+function cosine(a: number[], b: number[]): number {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+// 对外安全的文章卡片字段（去掉 embedding 等大字段）
+function cardOf(p: any): any {
+  return {
+    id: p.id,
+    slug: p.slug,
+    title: p.title,
+    excerpt: p.excerpt,
+    cover: p.cover,
+    tags: p.tags,
+    visibility: p.visibility,
+    created_at: p.created_at,
+  };
 }
 
 // ---------------- 路由 ----------------
@@ -227,6 +290,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
     const body = await readJson(req);
     if (!body.title) return json({ error: "标题不能为空" }, 400);
+    const emb = await embedText(env, (body.title || "") + "\n" + (body.content || ""));
     const row = await createPost(env.DB, {
       title: body.title,
       content: body.content || "",
@@ -235,6 +299,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       visibility: body.visibility,
       author_id: user!.id,
       tags: body.tags,
+      embedding: emb || undefined,
     });
     return json(row, 201);
   }
@@ -246,7 +311,10 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     if (method === "PUT") {
       if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
       const body = await readJson(req);
-      const row = await updatePost(env.DB, id, body);
+      const existing = await getPostById(env.DB, id, { admin: true });
+      if (!existing) return json({ error: "文章不存在" }, 404);
+      const emb = await embedText(env, (body.title ?? existing.title) + "\n" + (body.content ?? existing.content));
+      const row = await updatePost(env.DB, id, { ...body, embedding: emb || undefined });
       return row ? json(row) : json({ error: "文章不存在" }, 404);
     }
     if (method === "DELETE") {
@@ -330,6 +398,8 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
         ? "moderate"
         : body.action === "classify"
         ? "classify"
+        : body.action === "summarize"
+        ? "summarize"
         : "optimize";
     const title = (body.title || "").toString();
     const content = (body.content || "").toString();
@@ -350,6 +420,15 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
         const tags = extractJsonArray(result);
         if (!tags.length) return json({ error: "AI 未返回有效标签" }, 502);
         return json({ tags });
+      }
+      // 摘要/SEO：解析模型返回的 JSON，返回 excerpt / seo_description / seo_keywords
+      if (action === "summarize") {
+        let data: any = null;
+        try { data = JSON.parse(result); } catch {}
+        if (data && data.excerpt) {
+          return json({ excerpt: data.excerpt, seo_description: data.seo_description || "", seo_keywords: data.seo_keywords || "" });
+        }
+        return json({ excerpt: result, seo_description: "", seo_keywords: "" });
       }
       return json({ result });
     } catch (e: any) {
@@ -428,6 +507,142 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     }
     const okCount = results.filter((r) => r.ok).length;
     return json({ ok: okCount, total: results.length, results });
+  }
+
+  // 单篇 AI 配图（管理员）：Workers AI FLUX 生成封面 → R2 → 返回 URL
+  if (method === "POST" && seg.length === 3 && seg[1] === "ai" && seg[2] === "cover") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const title = (body.title || "").toString();
+    const tags = Array.isArray(body.tags) ? body.tags.join("、") : (body.tags || "").toString();
+    const prompt =
+      (body.prompt && body.prompt.trim()) ||
+      `极简扁平插画风格的中文养生博客封面，主题：「${title}」，相关标签：${tags}。柔和自然色调，水墨与植物元素，大量留白，无文字，适合作为文章头图。`;
+    try {
+      const url = await genCoverImage(env, prompt);
+      return json({ url });
+    } catch (e: any) {
+      return json({ error: e.message || "配图生成失败" }, 502);
+    }
+  }
+
+  // 批量重建语义搜索向量（管理员）：为全部文章生成 embedding 写库
+  if (method === "POST" && seg.length === 3 && seg[1] === "ai" && seg[2] === "embed-all") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const posts = await listPosts(env.DB, { admin: true });
+    let ok = 0, fail = 0;
+    for (const p of posts) {
+      try {
+        const emb = await embedText(env, (p.title || "") + "\n" + (p.content || ""));
+        if (emb) {
+          await updatePost(env.DB, p.id, { embedding: JSON.stringify(emb) });
+          ok++;
+        } else fail++;
+      } catch {
+        fail++;
+      }
+    }
+    return json({ ok, fail, total: posts.length });
+  }
+
+  // 数据看板统计（管理员）
+  if (method === "GET" && seg.length === 2 && seg[1] === "stats") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const posts = await listPosts(env.DB, { admin: true });
+    const total = posts.length;
+    const publicCount = posts.filter((p) => p.visibility === "public").length;
+    const cRow = (await env.DB.prepare("SELECT COUNT(*) c FROM comments").first()) as any;
+    const comments = cRow ? Number(cRow.c) || 0 : 0;
+    const tagList = await listTags(env.DB, { admin: true });
+    const aiUsage = await getMeta(env.DB, "ai_usage_count");
+    const since = Date.now() - 7 * 86400000;
+    const rows = (await env.DB
+      .prepare("SELECT DATE(created_at/1000,'unixepoch') d, COUNT(*) c FROM posts WHERE created_at >= ? GROUP BY d ORDER BY d")
+      .bind(since)
+      .all()) as any;
+    const byDay: Record<string, number> = {};
+    for (const r of rows.results || []) byDay[r.d] = r.c;
+    const recent7: { date: string; count: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000);
+      const key = d.toISOString().slice(0, 10);
+      recent7.push({ date: key, count: byDay[key] || 0 });
+    }
+    return json({ total, public: publicCount, private: total - publicCount, comments, tags: tagList.length, aiUsage, recent7 });
+  }
+
+  // 语义搜索（公开）：向量检索 + 关键词兜底
+  if (method === "GET" && seg.length === 2 && seg[1] === "search") {
+    const q = new URL(req.url).searchParams.get("q") || "";
+    const query = q.trim();
+    if (!query) return json({ results: [] });
+    const all = await listPosts(env.DB, { admin: false });
+    const qEmb = await embedText(env, query);
+    const ql = query.toLowerCase();
+    const results = all
+      .map((p: any) => {
+        const kwMatch = ((p.title || "") + " " + (p.content || "") + " " + (p.tags || "")).toLowerCase().includes(ql) ? 0.6 : 0;
+        let emb: number[] | null = null;
+        try { emb = p.embedding ? JSON.parse(p.embedding) : null; } catch {}
+        const vec = emb && qEmb ? cosine(qEmb, emb) : 0;
+        const score = emb && qEmb ? Math.max(kwMatch, 0.4 + 0.6 * vec) : kwMatch;
+        return { p, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 20)
+      .map((x) => cardOf(x.p));
+    return json({ results });
+  }
+
+  // 相关文章（公开）：基于当前文章向量，返回 top3
+  if (method === "GET" && seg.length === 2 && seg[1] === "related") {
+    const slug = new URL(req.url).searchParams.get("slug") || "";
+    if (!slug) return json({ results: [] });
+    const cur = await getPostBySlug(env.DB, decodeURIComponent(slug), { admin: false });
+    if (!cur) return json({ results: [] });
+    const all = await listPosts(env.DB, { admin: false });
+    let curEmb: number[] | null = null;
+    try { curEmb = cur.embedding ? JSON.parse(cur.embedding) : null; } catch {}
+    let scored: { p: any; score: number }[];
+    if (curEmb) {
+      scored = all
+        .filter((p: any) => p.slug !== cur.slug)
+        .map((p: any) => {
+          let emb: number[] | null = null;
+          try { emb = p.embedding ? JSON.parse(p.embedding) : null; } catch {}
+          return { p, score: emb ? cosine(curEmb!, emb) : 0 };
+        })
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+    } else {
+      const curTags = parseTags(cur.tags);
+      scored = all
+        .filter((p: any) => p.slug !== cur.slug)
+        .map((p: any) => ({ p, score: curTags.filter((t: string) => parseTags(p.tags).includes(t)).length }))
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3);
+    }
+    return json({ results: scored.map((x) => cardOf(x.p)) });
+  }
+
+  // 媒体库（管理员）：列出 / 删除 R2 对象
+  if (method === "GET" && seg.length === 2 && seg[1] === "media") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const listed = await env.BUCKET.list({ limit: 1000 });
+    const items = (listed.objects || [])
+      .map((o: any) => ({ key: o.key, url: `/api/files/${o.key}`, size: o.size, uploaded: o.uploaded ? o.uploaded.getTime() : null }))
+      .sort((a: any, b: any) => (b.uploaded || 0) - (a.uploaded || 0));
+    return json({ items });
+  }
+  if (method === "DELETE" && seg.length === 2 && seg[1] === "media") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    if (!body.key) return json({ error: "缺少 key" }, 400);
+    await env.BUCKET.delete(body.key);
+    return json({ ok: true });
   }
 
   // 读取 R2 图片

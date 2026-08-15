@@ -20,6 +20,10 @@ database_id = "52993bdf-7465-41ae-9522-67da70599d75"
 binding = "BUCKET"
 bucket_name = "ai-agent-blog-images"
 
+# Workers AI（AI 配图 FLUX / 语义搜索向量嵌入）
+[ai]
+binding = "AI"
+
 # 环境变量（密钥请用 `wrangler secret put` 设置，不要写进此文件）
 [vars]
 APP_URL = "https://hujinhuan.cc.cd"

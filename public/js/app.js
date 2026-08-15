@@ -177,6 +177,17 @@ function renderNav() {
   }
   nav.appendChild(menu);
 
+  // 站内搜索框
+  const search = el(`<div class="nav-search"><input id="nav-search" type="search" placeholder="搜索文章…" aria-label="搜索" /></div>`);
+  const searchInput = search.querySelector("input");
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const q = searchInput.value.trim();
+      if (q) location.hash = "#/search?q=" + encodeURIComponent(q);
+    }
+  });
+  nav.appendChild(search);
+
   const right = el(`<div class="nav-right"></div>`);
   if (CURRENT_USER) {
     const u = CURRENT_USER;
@@ -303,7 +314,32 @@ async function renderPost(slug) {
     ${tagsHtml(p)}`;
   app.innerHTML = "";
   app.appendChild(detail);
+  loadRelated(p.slug);
   attachComments(p.slug);
+}
+
+// 文章底部「相关文章」：调用 /api/related（向量相似度 top3，无向量时按标签兜底）
+function loadRelated(slug) {
+  const app = document.getElementById("app");
+  const box = el(`<section class="related"></section>`);
+  box.innerHTML = `<h2 class="related-title">相关文章</h2><div class="related-list"><div class="empty">加载中…</div></div>`;
+  app.appendChild(box);
+  const list = box.querySelector(".related-list");
+  api("/related?slug=" + encodeURIComponent(slug))
+    .then((r) => r.json())
+    .then((d) => {
+      const rs = d.results || [];
+      if (!rs.length) {
+        list.innerHTML = `<div class="empty">暂无相关推荐。</div>`;
+        return;
+      }
+      list.innerHTML = rs
+        .map((p) => `<a class="related-item" href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>`)
+        .join("");
+    })
+    .catch(() => {
+      list.innerHTML = `<div class="empty">相关推荐加载失败</div>`;
+    });
 }
 
 // 文章底部评论区（受 comments_enabled 开关控制）
@@ -422,6 +458,43 @@ function renderFeed() {
   app.innerHTML = `<h1 class="page-title">动态</h1><div class="empty">还没有动态，去管理后台发点什么吧。</div>`;
 }
 
+// 搜索结果页：调用 /api/search（语义 + 关键词兜底），展示匹配文章
+async function renderSearch() {
+  const app = document.getElementById("app");
+  const m = (location.hash || "").match(/^#\/search\?q=(.+)$/);
+  const q = m ? decodeURIComponent(m[1]) : "";
+  app.innerHTML = `<h1 class="page-title">搜索</h1><div class="empty">加载中…</div>`;
+  if (!q) {
+    app.innerHTML = `<h1 class="page-title">搜索</h1><div class="empty">请输入关键词。</div>`;
+    return;
+  }
+  let results = [];
+  try {
+    const r = await api("/search?q=" + encodeURIComponent(q));
+    const d = await r.json();
+    results = d.results || [];
+  } catch {}
+  let html = `<h1 class="page-title">搜索：“${escHtml(q)}” <a class="btn btn-sm" href="#/" style="margin-left:10px">← 返回</a></h1>`;
+  if (!results.length) {
+    html += `<div class="empty">没有找到相关文章。</div>`;
+    app.innerHTML = html;
+    return;
+  }
+  html += `<div class="post-list">`;
+  for (const p of results) {
+    html += `<article class="post-card"><h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a></h2><div class="meta">${fmtDate(p.created_at)}</div><div class="excerpt">${escHtml(p.excerpt || "")}</div>${tagsHtml(p)}</article>`;
+  }
+  html += `</div>`;
+  app.innerHTML = html;
+  app.querySelectorAll(".post-card").forEach((card) => {
+    card.style.cursor = "pointer";
+    card.addEventListener("click", () => {
+      const a = card.querySelector("a");
+      if (a) location.hash = a.getAttribute("href");
+    });
+  });
+}
+
 function renderTags() {
   const hash = location.hash || "#/";
   const m = hash.match(/^#\/tags\/(.+)$/);
@@ -535,6 +608,7 @@ function route() {
   }
   if (hash.startsWith("#/timeline")) return renderTimeline();
   if (hash.startsWith("#/feed")) return renderFeed();
+  if (hash.startsWith("#/search")) return renderSearch();
   if (hash.startsWith("#/tags")) return renderTags();
   if (hash.startsWith("#/friends")) return renderFriends();
   if (hash.startsWith("#/about")) return renderAbout();
