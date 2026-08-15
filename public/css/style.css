@@ -470,6 +470,43 @@ body.dark .modal-head, body.dark .media-cell { border-color: #1f2a3d; }
 body.dark .related { border-color: #1f2a3d; }
 body.dark .related-item { background: color-mix(in srgb, var(--primary) 16%, #0f1729); }
 
+/* ---------- 表格 / 目录 TOC / 表情分类 ---------- */
+.table-wrap { overflow-x: auto; margin: 16px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }
+th { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); font-weight: 600; }
+tbody tr:nth-child(even) { background: color-mix(in srgb, var(--primary) 3%, var(--surface)); }
+
+.toc {
+  margin: 18px 0; padding: 12px 16px;
+  border: 1px solid var(--border); border-left: 3px solid var(--primary); border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+.toc-title { font-weight: 600; margin-bottom: 8px; color: var(--primary); }
+.toc ul { list-style: none; margin: 0; padding: 0; }
+.toc li { margin: 4px 0; }
+.toc li a { color: var(--text); }
+.toc li a:hover { color: var(--primary); }
+.toc .toc-l1 { padding-left: 0; }
+.toc .toc-l2 { padding-left: 14px; }
+.toc .toc-l3 { padding-left: 28px; }
+.toc .toc-l4, .toc .toc-l5, .toc .toc-l6 { padding-left: 42px; }
+
+.emoji-picker { flex-direction: column; align-items: stretch; }
+.emoji-tabs { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; margin-bottom: 8px; }
+.emoji-tab {
+  font-size: 12px; padding: 3px 9px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--text);
+}
+.emoji-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.emoji-grid { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
+
+/* 深色模式适配 */
+body.dark table th { background: color-mix(in srgb, var(--primary) 14%, #0f1729); }
+body.dark table tbody tr:nth-child(even) { background: #0f1729; }
+body.dark .toc { background: color-mix(in srgb, var(--primary) 10%, #0f1729); }
+body.dark .emoji-tab { background: #0f1729; color: #e5e7eb; }
+
 /* ---------- 正文编辑器增强：工具栏 / 代码块 / 表情 / 拖拽 ---------- */
 .editor-toolbar {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
@@ -502,27 +539,36 @@ body.dark .related-item { background: color-mix(in srgb, var(--primary) 16%, #0f
 
 /* 代码块 */
 .code-block { position: relative; margin: 16px 0; }
+.code-block .code-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 5px 10px; background: #21252b; border: 1px solid #1c2128; border-bottom: none;
+  border-radius: 10px 10px 0 0;
+}
 .code-block pre {
-  margin: 0; border-radius: 10px; overflow: auto;
+  margin: 0; border-radius: 0 0 10px 10px; overflow: auto;
   background: #282c34; border: 1px solid #1c2128;
 }
 .code-block code {
-  display: block; padding: 14px 16px; font-size: 13.5px; line-height: 1.6;
+  display: block; padding: 12px 14px; font-size: 13.5px; line-height: 1.6;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   color: #abb2bf;
 }
-.code-block .code-lang {
-  position: absolute; top: 8px; left: 12px; z-index: 2;
-  font-size: 11px; color: #7f8a9a; font-family: monospace; letter-spacing: .5px;
-}
-.copy-btn {
-  position: absolute; top: 8px; right: 10px; z-index: 2;
+.code-block .code-lang { color: #7f8a9a; font-size: 11px; font-family: monospace; letter-spacing: .5px; }
+.code-tools { display: flex; gap: 6px; }
+.copy-btn, .code-toggle {
   font-size: 12px; padding: 3px 10px; cursor: pointer;
-  border: 1px solid #3a4250; border-radius: 6px;
-  background: #21252b; color: #cbd5e1;
+  border: 1px solid #3a4250; border-radius: 6px; background: #2c313a; color: #cbd5e1;
 }
-.copy-btn:hover { background: #2c313a; color: #fff; }
+.copy-btn:hover, .code-toggle:hover { background: #3a4250; color: #fff; }
+.code-block.collapsed pre { max-height: 5em; overflow: hidden; }
 .editor-preview .code-block pre { max-height: 320px; }
+/* 行号 */
+.code-line { display: block; }
+.code-line .ln {
+  display: inline-block; width: 2.2em; margin-right: .9em; text-align: right;
+  color: #5c6675; user-select: none; border-right: 1px solid #3a4250; padding-right: .4em;
+}
+.code-line .lc { white-space: pre; }
 
 /* 深色模式适配 */
 body.dark .editor-toolbar { background: #11141a; }

@@ -374,7 +374,9 @@ async function renderEditor(slug) {
       <button type="button" class="fmt-btn" data-act="link" title="链接">🔗</button>
       <button type="button" class="fmt-btn" data-act="code" title="行内代码">&lt;/&gt;</button>
       <button type="button" class="fmt-btn" data-act="codeblock" title="代码块">▦</button>
+      <button type="button" class="fmt-btn" data-act="table" title="表格">▤</button>
       <button type="button" class="fmt-btn" data-act="hr" title="分割线">―</button>
+      <button type="button" class="fmt-btn" data-act="toc" title="目录">☰</button>
       <span class="toolbar-sep"></span>
       <button type="button" class="fmt-btn" data-act="emoji" title="插入表情">😊</button>
       <button type="button" class="fmt-btn" data-act="image" title="上传并插入图片">🖼</button>
@@ -462,6 +464,8 @@ async function renderEditor(slug) {
     code: () => wrapSelection(ta, "`", "`", "代码"),
     link: () => wrapSelection(ta, "[", "](https://)", "链接文字"),
     codeblock: () => wrapSelection(ta, "\n```js\n", "\n```\n", "// 在此粘贴代码"),
+    table: () => insertAtCursor(ta, "\n| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n| 单元格 | 单元格 | 单元格 |\n| 单元格 | 单元格 | 单元格 |\n"),
+    toc: () => insertAtCursor(ta, "\n[TOC]\n"),
     h: () => prefixLine(ta, "## "),
     quote: () => prefixLine(ta, "> "),
     ul: () => prefixLine(ta, "- "),
@@ -480,15 +484,39 @@ async function renderEditor(slug) {
     });
   }
 
-  // 表情选择器
-  const EMOJIS = "😀 😁 😂 🤣 😊 😍 🥰 😘 😎 🤔 😅 😉 🙃 😇 🤩 🥳 😴 😭 😡 👍 👎 👏 🙌 💪 🤝 ✌️ 🤞 💡 🔥 ⭐ ✨ 💯 ✅ ❌ ⚠️ 📌 💬 📝 📚 💻 🖥️ ⌨️ 🐛 🚀 ⚙️ 📊 📈 🎯 🏷️ 🖼️ 📷 🔗 ❤️ 🧡 💛 💚 💙 💜 ⏰ 🌟 🍀 🌈 🎉 🤖 🧠 ⚡ 💥".split(" ");
+  // 表情选择器（分类）
+  const EMOJI_CATS = {
+    "笑脸": "😀 😁 😂 🤣 😊 😍 🥰 😘 😎 🤔 😅 😉 🙃 😇 🤩 🥳 😴 😭 😡 🤯 😱 🤤 🥺 😏 😶 😐 😬 🙄 😪 🤗 😋 😜 🤓 😈 👿 💀 ☠️ 🤡",
+    "手势": "👍 👎 👏 🙌 💪 🤝 ✌️ 🤞 🤟 🤙 👌 👈 👉 ☝️ ✋ 🖐️ 🖖 🫶 🙏 👋 🤘 🤛 🤜 👊",
+    "人物": "🧑 👩 👨 👧 👦 👵 👴 👶 🧑‍💻 🧑‍🔬 🧑‍🎨 🧑‍🚀 🦸 🦹 🧙 🧚 🧛 🧜 🧝 👮 💂 🎅",
+    "动物": "🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐨 🐯 🦁 🐮 🐷 🐸 🐵 🐔 🐧 🦄 🐝 🦋 🐢 🐙 🦖 🐠 🐬 🦔",
+    "自然": "🌟 ⭐ 🌈 🍀 🌿 🌸 🌺 🍁 🌊 🔥 💧 ⚡ ☀️ 🌙 ☁️ ❄️ 🌍 🌕 🌑 💫 🌱 🍃 🌻",
+    "食物": "🍎 🍊 🍋 🍉 🍇 🍓 🍒 🍑 🥭 🍍 🍔 🍟 🍕 🌮 🍜 🍣 🍰 🍩 🍪 ☕ 🍵 🍺 🍻 🍷 🥤 🍦",
+    "科技": "💡 💻 🖥️ ⌨️ 🖱️ 💾 💿 🔧 🔨 ⚙️ 📱 📷 📹 🎮 🕹️ 🤖 🛰️ 🚀 🔋 🔌 🖨️ 📡 💽",
+    "符号": "✅ ❌ ⚠️ ❓ ❗ ➡️ ⬅️ ⬆️ ⬇️ 🔄 🔁 🔗 📌 📍 💯 💢 💥 🆗 🆕 🔔 📝 📚 📊 📈 📉 💬 💭 🏷️ 🔖",
+    "活动": "🎉 🎊 🎁 🏆 🥇 🎯 🎲 ⚽ 🏀 🏈 ⛳ 🎸 🎤 🎧 🎬 🎨 🧩 ♟️ 🏅 🎺 🎻",
+  };
   const picker = document.getElementById("emoji-picker");
   function buildEmojiPicker() {
     if (picker.dataset.built) return;
-    picker.innerHTML = EMOJIS.map((e) => `<button type="button" class="emoji-item">${e}</button>`).join("");
+    const cats = Object.keys(EMOJI_CATS);
+    const tabs = cats.map((c, idx) => `<button type="button" class="emoji-tab${idx === 0 ? " active" : ""}" data-cat="${c}">${c}</button>`).join("");
+    picker.innerHTML = `<div class="emoji-tabs">${tabs}</div><div class="emoji-grid"></div>`;
     picker.dataset.built = "1";
-    picker.querySelectorAll(".emoji-item").forEach((b) => {
-      b.onclick = () => { insertAtCursor(ta, b.textContent); picker.style.display = "none"; };
+    const grid = picker.querySelector(".emoji-grid");
+    const renderCat = (cat) => {
+      grid.innerHTML = EMOJI_CATS[cat].split(" ").map((e) => `<button type="button" class="emoji-item">${e}</button>`).join("");
+      grid.querySelectorAll(".emoji-item").forEach((b) => {
+        b.onclick = () => { insertAtCursor(ta, b.textContent); picker.style.display = "none"; };
+      });
+    };
+    renderCat(cats[0]);
+    picker.querySelectorAll(".emoji-tab").forEach((t) => {
+      t.onclick = () => {
+        picker.querySelectorAll(".emoji-tab").forEach((x) => x.classList.remove("active"));
+        t.classList.add("active");
+        renderCat(t.dataset.cat);
+      };
     });
   }
   function toggleEmojiPicker() {

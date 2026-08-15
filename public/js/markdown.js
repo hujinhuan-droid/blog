@@ -1,4 +1,4 @@
-// 轻量 Markdown 渲染器（零依赖，覆盖常用语法）
+// 轻量 Markdown 渲染器（零依赖：表格 + [TOC] 目录 + 代码高亮/行号/折叠钩子）
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -20,12 +20,53 @@ function inlineMd(text) {
   return s;
 }
 
+function slugify(text, taken) {
+  let base = String(text).toLowerCase().replace(/[^\w一-龥]+/g, "-").replace(/^-+|-+$/g, "") || "h";
+  let slug = base, n = 1;
+  while (taken.has(slug)) { slug = base + "-" + n; n++; }
+  return slug;
+}
+
+function splitRow(line) {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((s) => s.trim());
+}
+
+function renderToc(headings) {
+  if (!headings.length) return "";
+  let out = '<nav class="toc"><div class="toc-title">📑 目录</div><ul>';
+  for (const h of headings) {
+    out += `<li class="toc-l${h.level}"><a href="#${h.slug}" onclick="event.preventDefault();scrollToAnchor('${h.slug}')">${inlineMd(h.text)}</a></li>`;
+  }
+  out += "</ul></nav>\n";
+  return out;
+}
+
 function renderMarkdown(src) {
   if (!src) return "";
   const lines = src.replace(/\r\n/g, "\n").split("\n");
   let html = "";
   let i = 0;
   let para = [];
+
+  // 预扫描：收集标题（用于 id 锚点与 [TOC]），跳过代码块内的「伪标题」
+  const headings = [];
+  const slugTaken = new Set();
+  {
+    let j = 0;
+    while (j < lines.length) {
+      if (/^```/.test(lines[j])) { j++; while (j < lines.length && !/^```/.test(lines[j])) j++; j++; continue; }
+      const m = lines[j].match(/^(#{1,6})\s+(.*)$/);
+      if (m) {
+        const text = m[2].trim();
+        const slug = slugify(text, slugTaken);
+        slugTaken.add(slug);
+        headings.push({ idx: j, level: m[1].length, text, slug });
+      }
+      j++;
+    }
+  }
+  const slugMap = new Map();
+  headings.forEach((h) => slugMap.set(h.idx, h.slug));
 
   function flushPara() {
     if (para.length) {
@@ -37,7 +78,7 @@ function renderMarkdown(src) {
   while (i < lines.length) {
     const line = lines[i];
 
-    // 代码块（保留语言，支持复制按钮 + 语法高亮）
+    // 代码块（保留语言，支持复制 + 折叠 + 高亮 + 行号）
     if (/^```/.test(line)) {
       flushPara();
       const langMatch = line.match(/^```\s*([\w+#.-]*)/);
@@ -50,8 +91,44 @@ function renderMarkdown(src) {
       }
       i++; // 跳过结束 ```
       const cls = lang ? ` class="language-${lang}"` : "";
-      const langLabel = lang ? `<span class="code-lang">${lang}</span>` : "";
-      html += `<div class="code-block">${langLabel}<button class="copy-btn" type="button" onclick="copyCode(this)">复制</button><pre><code${cls}>${escapeHtml(buf.join("\n"))}</code></pre></div>\n`;
+      const langLabel = lang ? `<span class="code-lang">${lang}</span>` : `<span class="code-lang"></span>`;
+      html += `<div class="code-block">` +
+        `<div class="code-head">${langLabel}` +
+        `<span class="code-tools">` +
+        `<button class="code-toggle" type="button" onclick="toggleCodeBlock(this)" title="折叠/展开">▾</button>` +
+        `<button class="copy-btn" type="button" onclick="copyCode(this)">复制</button>` +
+        `</span></div>` +
+        `<pre><code${cls}>${escapeHtml(buf.join("\n"))}</code></pre></div>\n`;
+      continue;
+    }
+
+    // 表格（GFM）
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(lines[i + 1])) {
+      flushPara();
+      const header = splitRow(line);
+      const aligns = splitRow(lines[i + 1]).map((c) => {
+        const t = c.trim();
+        if (t.startsWith(":") && t.endsWith(":")) return "center";
+        if (t.endsWith(":")) return "right";
+        if (t.startsWith(":")) return "left";
+        return "";
+      });
+      i += 2;
+      const rows = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(splitRow(lines[i])); i++; }
+      let t = '<div class="table-wrap"><table>';
+      t += "<thead><tr>" + header.map((h, idx) => `<th${aligns[idx] ? ` style="text-align:${aligns[idx]}"` : ""}>${inlineMd(h)}</th>`).join("") + "</tr></thead>";
+      t += "<tbody>" + rows.map((r) => "<tr>" + r.map((c, idx) => `<td${aligns[idx] ? ` style="text-align:${aligns[idx]}"` : ""}>${inlineMd(c)}</td>`).join("") + "</tr>").join("") + "</tbody>";
+      t += "</table></div>\n";
+      html += t;
+      continue;
+    }
+
+    // TOC 占位
+    if (/^\[TOC\]$/i.test(line.trim())) {
+      flushPara();
+      html += renderToc(headings);
+      i++;
       continue;
     }
 
@@ -60,7 +137,8 @@ function renderMarkdown(src) {
     if (h) {
       flushPara();
       const level = h[1].length;
-      html += `<h${level}>${inlineMd(h[2])}</h${level}>\n`;
+      const slug = slugMap.get(i) || "";
+      html += `<h${level} id="${slug}">${inlineMd(h[2])}</h${level}>\n`;
       i++;
       continue;
     }
@@ -122,11 +200,12 @@ function renderMarkdown(src) {
   return html;
 }
 
-// 代码块复制按钮（全局，供 onclick 调用）
+// 代码块复制按钮（复制原始代码，不含行号）
 window.copyCode = function (btn) {
-  const code = btn.parentElement.querySelector("code");
+  const block = btn.closest(".code-block");
+  const code = block && block.querySelector("code");
   if (!code) return;
-  const text = code.textContent;
+  const text = code.dataset.raw || code.textContent;
   const ok = () => { btn.textContent = "已复制"; setTimeout(() => (btn.textContent = "复制"), 1500); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(ok).catch(() => fallbackCopy(text, ok));
@@ -143,10 +222,40 @@ function fallbackCopy(text, ok) {
   document.body.removeChild(ta);
 }
 
-// 渲染后调用：对已插入的代码块做语法高亮（依赖 highlight.js，未加载则跳过）
+// 代码块折叠 / 展开
+window.toggleCodeBlock = function (btn) {
+  const block = btn.closest(".code-block");
+  if (!block) return;
+  block.classList.toggle("collapsed");
+  btn.textContent = block.classList.contains("collapsed") ? "▸" : "▾";
+};
+
+// TOC 锚点跳转（不改变 location.hash，避免与 SPA 路由冲突）
+window.scrollToAnchor = function (id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+// 渲染后调用：语法高亮 + 行号（依赖 highlight.js，未加载则仅加行号）
 window.highlightCode = function (root) {
-  if (!window.hljs || !root) return;
+  if (!root) return;
   root.querySelectorAll("pre code").forEach((b) => {
-    try { window.hljs.highlightElement(b); } catch (e) {}
+    if (window.hljs) {
+      try { window.hljs.highlightElement(b); } catch (e) {}
+    }
+    addLineNumbers(b);
   });
 };
+function addLineNumbers(codeEl) {
+  if (codeEl.dataset.ln) return;
+  const original = codeEl.textContent;
+  const raw = codeEl.innerHTML.split("\n");
+  if (raw.length <= 1) return;
+  if (raw[raw.length - 1].trim() === "") raw.pop();
+  codeEl.innerHTML = raw
+    .map((line, idx) => `<span class="code-line"><span class="ln">${idx + 1}</span><span class="lc">${line || " "}</span></span>`)
+    .join("");
+  codeEl.dataset.raw = original;
+  codeEl.dataset.ln = "1";
+  codeEl.classList.add("has-ln");
+}
