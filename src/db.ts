@@ -220,6 +220,11 @@ export const SETTING_KEYS = [
   "ai_model",
   "ai_enabled",
   "about_content",
+  "comments_enabled",
+  "posts_per_page",
+  "seo_title",
+  "seo_description",
+  "seo_keywords",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -243,4 +248,38 @@ export async function setSettings(db: DB, values: Record<string, string>): Promi
       .bind(k, v)
       .run();
   }
+}
+
+// ---------------- 评论 ----------------
+
+export interface CommentRow {
+  id: number;
+  post_slug: string;
+  author: string;
+  email: string | null;
+  content: string;
+  created_at: number;
+}
+
+export async function listComments(db: DB, postSlug: string): Promise<CommentRow[]> {
+  const r = await db
+    .prepare("SELECT * FROM comments WHERE post_slug = ? ORDER BY created_at ASC")
+    .bind(postSlug)
+    .all();
+  return (r.results as CommentRow[]) || [];
+}
+
+export async function createComment(
+  db: DB,
+  data: { post_slug: string; author: string; email?: string | null; content: string }
+): Promise<CommentRow> {
+  const ts = now();
+  await db
+    .prepare("INSERT INTO comments (post_slug, author, email, content, created_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(data.post_slug, data.author, data.email || null, data.content, ts)
+    .run();
+  return (await db
+    .prepare("SELECT * FROM comments WHERE post_slug = ? ORDER BY created_at DESC LIMIT 1")
+    .bind(data.post_slug)
+    .first()) as CommentRow;
 }

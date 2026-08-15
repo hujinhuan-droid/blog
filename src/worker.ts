@@ -21,6 +21,8 @@ import {
   deletePost,
   getSettings,
   setSettings,
+  listComments,
+  createComment,
 } from "./db";
 
 interface Env extends AuthEnv {
@@ -132,6 +134,11 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       "ai_model",
       "ai_enabled",
       "about_content",
+      "comments_enabled",
+      "posts_per_page",
+      "seo_title",
+      "seo_description",
+      "seo_keywords",
     ]) {
       if (body[k] !== undefined && body[k] !== null) clean[k] = String(body[k]);
     }
@@ -274,6 +281,32 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     return new Response(obj.body, {
       headers: { "content-type": obj.httpMetadata?.contentType || "application/octet-stream" },
     });
+  }
+
+  // 读取文章评论（公开）
+  if (method === "GET" && seg.length === 2 && seg[1] === "comments") {
+    const url = new URL(req.url);
+    const slug = url.searchParams.get("post");
+    if (!slug) return json({ error: "缺少 post 参数" }, 400);
+    const rows = await listComments(env.DB, slug);
+    return json(rows);
+  }
+
+  // 提交评论（公开；含蜜罐字段防机器人）
+  if (method === "POST" && seg.length === 2 && seg[1] === "comments") {
+    const body = await readJson(req);
+    // 蜜罐：隐藏字段被填写说明是机器人，静默成功但不存储
+    if (body.hp) return json({ ok: true });
+    const slug = (body.post_slug || "").toString().trim();
+    const author = (body.author || "").toString().trim();
+    const content = (body.content || "").toString().trim();
+    const email = body.email ? String(body.email).toString().trim() : null;
+    if (!slug || !author || !content) return json({ error: "请填写昵称和评论内容" }, 400);
+    if (author.length > 40 || content.length > 1000) return json({ error: "内容过长" }, 400);
+    const post = await getPostBySlug(env.DB, slug);
+    if (!post) return json({ error: "文章不存在" }, 404);
+    const row = await createComment(env.DB, { post_slug: slug, author, email, content });
+    return json(row, 201);
   }
 
   return json({ error: "Not Found" }, 404);

@@ -14,6 +14,8 @@ let MENUS = [
 // 站点设置（由 /api/settings 填充，供各页面读取）
 let SITE_SETTINGS = {};
 let SITE_ABOUT = "";
+let PER_PAGE = 10;            // 首页每页文章数（设置可调）
+let COMMENTS_ENABLED = true;  // 评论开关（设置可调）
 
 function darken(hex, f) {
   const n = parseInt(hex.replace("#", ""), 16);
@@ -23,14 +25,13 @@ function darken(hex, f) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-// 应用站点设置到页面（站点名 / 页脚 / 导航 / 主题色 / 深色模式 / 关于页）
+// 应用站点设置到页面（站点名 / 页脚 / 导航 / 主题色 / 深色模式 / 关于页 / SEO / 阅读偏好）
 function applySettings(s) {
   if (!s || typeof s !== "object") return;
   SITE_SETTINGS = s;
   if (s.site_title) {
     const b = document.querySelector(".brand");
     if (b) b.textContent = s.site_title;
-    document.title = s.site_title;
   }
   if (s.footer_text) {
     const c = document.querySelector(".copyright");
@@ -57,7 +58,15 @@ function applySettings(s) {
   }
   if (s.theme_dark === "1") document.body.classList.add("dark");
   else document.body.classList.remove("dark");
+  // 阅读偏好
+  if (s.posts_per_page) {
+    const n = parseInt(s.posts_per_page, 10);
+    if (Number.isFinite(n) && n >= 1 && n <= 100) PER_PAGE = n;
+  }
+  COMMENTS_ENABLED = s.comments_enabled !== "0";
   SITE_ABOUT = s.about_content || "";
+  // SEO
+  applySeo(s);
 }
 
 function api(path, opts) {
@@ -86,6 +95,40 @@ function el(html) {
   const t = document.createElement("template");
   t.innerHTML = html.trim();
   return t.content.firstChild;
+}
+
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// 写入 / 更新 <head> 中的 meta 标签（SEO 用）
+function setMeta(name, content) {
+  if (!content) return;
+  let m = document.head.querySelector(`meta[name="${name}"]`);
+  if (!m) {
+    m = document.createElement("meta");
+    m.setAttribute("name", name);
+    document.head.appendChild(m);
+  }
+  m.setAttribute("content", content);
+}
+
+// 应用 SEO 设置：标题（seo_title 优先于 site_title）、描述、关键词、OG 标签
+function applySeo(s) {
+  const title = s.seo_title || s.site_title || document.title;
+  if (title) {
+    document.title = title;
+    setMeta("og:title", title);
+  }
+  if (s.seo_description) {
+    setMeta("description", s.seo_description);
+    setMeta("og:description", s.seo_description);
+  }
+  if (s.seo_keywords) setMeta("keywords", s.seo_keywords);
 }
 
 function renderNav() {
@@ -142,17 +185,29 @@ async function renderSiteStats() {
     `<span>访客 —</span>`;
 }
 
+// 首页文章缓存 + 当前页码（用于客户端分页，避免每次切换都重新拉取）
+let homeAll = [];
+let homePage = 1;
+
 async function renderHome() {
   const app = document.getElementById("app");
   app.innerHTML = `<div class="empty">加载中…</div>`;
-  const res = await api("/posts");
-  const posts = await res.json();
-  if (!posts.length) {
+  if (!homeAll.length) {
+    const res = await api("/posts");
+    homeAll = await res.json();
+  }
+  if (!homeAll.length) {
     app.innerHTML = `<div class="empty">还没有文章，去管理后台写第一篇吧。</div>`;
     return;
   }
+  const total = homeAll.length;
+  const pageCount = Math.max(1, Math.ceil(total / PER_PAGE));
+  if (homePage > pageCount) homePage = pageCount;
+  const start = (homePage - 1) * PER_PAGE;
+  const slice = homeAll.slice(start, start + PER_PAGE);
+
   const list = el(`<div class="post-list"></div>`);
-  for (const p of posts) {
+  for (const p of slice) {
     const card = el(`
       <article class="post-card">
         <h2><a href="#/post/${p.slug}">${p.title}</a>${
@@ -165,6 +220,20 @@ async function renderHome() {
   }
   app.innerHTML = "";
   app.appendChild(list);
+
+  // 分页控件
+  if (pageCount > 1) {
+    const pager = el(`<div class="pager"></div>`);
+    pager.innerHTML = `
+      <button class="btn btn-sm" id="pg-prev" ${homePage <= 1 ? "disabled" : ""}>← 上一页</button>
+      <span class="muted">第 ${homePage} / ${pageCount} 页</span>
+      <button class="btn btn-sm" id="pg-next" ${homePage >= pageCount ? "disabled" : ""}>下一页 →</button>`;
+    app.appendChild(pager);
+    const prev = document.getElementById("pg-prev");
+    const next = document.getElementById("pg-next");
+    if (prev) prev.onclick = () => { homePage--; renderHome(); window.scrollTo(0, 0); };
+    if (next) next.onclick = () => { homePage++; renderHome(); window.scrollTo(0, 0); };
+  }
 }
 
 async function renderPost(slug) {
@@ -185,6 +254,85 @@ async function renderPost(slug) {
     <div class="content">${renderMarkdown(p.content)}</div>`;
   app.innerHTML = "";
   app.appendChild(detail);
+  attachComments(p.slug);
+}
+
+// 文章底部评论区（受 comments_enabled 开关控制）
+function attachComments(slug) {
+  if (COMMENTS_ENABLED !== true) return;
+  const app = document.getElementById("app");
+
+  const box = el(`<section class="comments"></section>`);
+  box.innerHTML = `
+    <h2 class="comments-title">评论</h2>
+    <div id="comment-list" class="comment-list"><div class="empty">加载中…</div></div>`;
+  app.appendChild(box);
+  loadComments(slug);
+
+  const form = el(`<form class="comment-form" id="comment-form"></form>`);
+  form.innerHTML = `
+    <h3>发表评论</h3>
+    <input type="text" id="c-author" placeholder="昵称（必填）" maxlength="40" />
+    <input type="email" id="c-email" placeholder="邮箱（选填，不会公开）" maxlength="80" />
+    <textarea id="c-content" placeholder="说点什么…（必填）" maxlength="1000"></textarea>
+    <input type="text" id="c-hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true" />
+    <div style="display:flex;gap:10px;align-items:center">
+      <button class="btn btn-primary" type="submit">提交评论</button>
+      <span id="c-msg" class="muted"></span>
+    </div>`;
+  app.appendChild(form);
+
+  const hp = document.getElementById("c-hp");
+  hp.style.position = "absolute";
+  hp.style.left = "-9999px";
+  hp.style.width = "1px";
+  hp.style.height = "1px";
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const author = document.getElementById("c-author").value.trim();
+    const content = document.getElementById("c-content").value.trim();
+    const email = document.getElementById("c-email").value.trim();
+    const msg = document.getElementById("c-msg");
+    // 蜜罐命中：静默成功，不存储
+    if (hp.value) { msg.textContent = "提交成功"; form.reset(); return; }
+    if (!author || !content) { msg.textContent = "请填写昵称和评论内容"; return; }
+    const res = await api("/comments", {
+      method: "POST",
+      body: JSON.stringify({ post_slug: slug, author, email, content, hp: hp.value }),
+    });
+    const r = await res.json().catch(() => ({}));
+    if (res.ok) {
+      msg.textContent = "评论已发布";
+      form.reset();
+      loadComments(slug);
+    } else {
+      msg.textContent = r.error || "提交失败";
+    }
+  };
+}
+
+async function loadComments(slug) {
+  const list = document.getElementById("comment-list");
+  if (!list) return;
+  try {
+    const res = await api("/comments?post=" + encodeURIComponent(slug));
+    const cs = await res.json();
+    if (!Array.isArray(cs) || !cs.length) {
+      list.innerHTML = `<div class="empty">还没有评论，来抢沙发吧。</div>`;
+      return;
+    }
+    let html = "";
+    for (const c of cs) {
+      html += `<div class="comment-item">
+        <div class="comment-head"><span class="comment-author">${escHtml(c.author)}</span><span class="comment-date">${fmtDate(c.created_at)}</span></div>
+        <div class="comment-body">${escHtml(c.content)}</div>
+      </div>`;
+    }
+    list.innerHTML = html;
+  } catch {
+    list.innerHTML = `<div class="empty">评论加载失败</div>`;
+  }
 }
 
 async function renderTimeline() {

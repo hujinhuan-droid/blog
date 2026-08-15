@@ -396,6 +396,25 @@ async function renderSettings() {
       <textarea id="s-about_content" style="min-height:160px">${escHtml(s.about_content || "")}</textarea>
     </fieldset>
 
+    <fieldset class="set-group">
+      <legend>⑥ 阅读与互动</legend>
+      <label>每页文章数（首页列表分页，1–100）</label>
+      <input type="number" id="s-posts_per_page" min="1" max="100" value="${escHtml(s.posts_per_page || "10")}" />
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="s-comments_enabled" ${s.comments_enabled !== "0" ? "checked" : ""} /> 在文章底部开启读者评论
+      </label>
+    </fieldset>
+
+    <fieldset class="set-group">
+      <legend>⑦ SEO 优化</legend>
+      <label>SEO 标题（留空则使用站点名称）</label>
+      <input type="text" id="s-seo_title" value="${escHtml(s.seo_title || "")}" placeholder="AI Agent Blog" />
+      <label>SEO 描述（用于搜索引擎结果摘要）</label>
+      <textarea id="s-seo_description" style="min-height:80px" placeholder="一句话介绍你的博客…">${escHtml(s.seo_description || "")}</textarea>
+      <label>SEO 关键词（逗号分隔）</label>
+      <input type="text" id="s-seo_keywords" value="${escHtml(s.seo_keywords || "")}" placeholder="AI, 博客, Cloudflare, 工程实践" />
+    </fieldset>
+
     <div style="margin-top:18px;display:flex;gap:10px;align-items:center">
       <button class="btn btn-primary" id="save-settings">保存设置</button>
       <span id="settings-msg" class="muted"></span>
@@ -419,6 +438,11 @@ async function renderSettings() {
       ai_model: document.getElementById("s-ai_model").value.trim() || "gemini-flash-latest",
       ai_enabled: document.getElementById("s-ai_enabled").checked ? "1" : "0",
       about_content: document.getElementById("s-about_content").value,
+      posts_per_page: document.getElementById("s-posts_per_page").value.trim() || "10",
+      comments_enabled: document.getElementById("s-comments_enabled").checked ? "1" : "0",
+      seo_title: document.getElementById("s-seo_title").value.trim(),
+      seo_description: document.getElementById("s-seo_description").value.trim(),
+      seo_keywords: document.getElementById("s-seo_keywords").value.trim(),
     };
     const res = await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
     const r = await res.json().catch(() => ({}));
