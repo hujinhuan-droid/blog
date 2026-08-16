@@ -30,14 +30,22 @@ a:hover { text-decoration: underline; }
 /* 顶栏 */
 .topbar {
   height: 60px;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(10px);
+  backdrop-filter: saturate(180%) blur(10px);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: 0 2px 16px rgba(15, 23, 42, 0.06);
 }
-.topbar .wrap { display: flex; align-items: center; height: 60px; }
-.brand { font-weight: 700; font-size: 18px; color: var(--text); }
+.topbar .wrap { display: flex; align-items: center; height: 60px; gap: 16px; }
+.brand { font-weight: 700; font-size: 18px; color: var(--text); display: inline-flex; align-items: center; letter-spacing: .2px; }
+.brand::before {
+  content: ""; width: 11px; height: 11px; border-radius: 50%; margin-right: 9px;
+  background: linear-gradient(135deg, var(--primary), var(--accent-2));
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--primary) 45%, transparent);
+}
 .brand:hover { text-decoration: none; color: var(--primary); }
 
 /* 导航：左侧主导航 + 右侧登录区，整体在 .wrap 内与底部统计平行 */
@@ -45,7 +53,7 @@ a:hover { text-decoration: underline; }
 .menu { display: flex; align-items: center; gap: 18px; margin-left: 10px; }
 .menu-link { color: var(--text); font-size: 15px; padding: 6px 2px; border-bottom: 2px solid transparent; }
 .menu-link:hover { color: var(--primary); text-decoration: none; border-bottom-color: var(--primary); }
-.nav-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.nav-right { margin-left: 0; display: flex; align-items: center; gap: 10px; }
 .nav .user { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .nav .avatar { width: 28px; height: 28px; border-radius: 50%; }
 
@@ -924,6 +932,16 @@ body.dark .ca-body { color: #cbd5e1; }
 .lang-opt:hover { color: var(--primary); }
 .lang-opt.active { background: var(--surface); color: var(--primary); box-shadow: var(--shadow); }
 body.dark .lang-opt.active { background: #0f1729; }
+
+/* ---------- 桌面端顶栏布局（仅 ≥769px；移动端保持原折叠逻辑不变） ---------- */
+@media (min-width: 769px) {
+  .brand { order: 1; }
+  .nav { order: 2; min-width: 0; }
+  .topbar-actions { order: 3; margin-left: 0; gap: 10px; }
+  .nav-toggle { order: 4; }
+  .menu { gap: 22px; margin-left: 8px; }
+  .nav-search { margin-left: auto; }
+}
 
 /* ---------- 编辑器 AI 写作助手面板 ---------- */
 .ai-compose {
