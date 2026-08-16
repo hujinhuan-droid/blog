@@ -39,6 +39,7 @@ interface Env extends AuthEnv {
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   GEMINI_API_KEY?: string;
   GEMINI_BASE_URL?: string;
+  DEEPSEEK_API_KEY?: string;
 }
 
 function json(data: any, status = 200, extra: Record<string, string> = {}): Response {
@@ -209,6 +210,49 @@ async function callWorkersText(env: Env, system: string, userText: string): Prom
   else if (out && typeof out.result === "string") gen = out.result;
   else if (out && out.text) gen = out.text;
   return (gen || "").trim();
+}
+
+// 用 DeepSeek 文本模型生成文本（聊天补全 API）。优先于 Workers AI，失败自动回退。
+async function callDeepSeek(env: Env, system: string, userText: string): Promise<string> {
+  const key = env.DEEPSEEK_API_KEY;
+  if (!key) throw new Error("未配置 DEEPSEEK_API_KEY 密钥");
+  const resp = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: userText },
+      ],
+      max_tokens: 1200,
+      temperature: 0.7,
+      stream: false,
+    }),
+  });
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => "");
+    throw new Error(`DeepSeek 调用失败 (${resp.status}): ${t.slice(0, 200)}`);
+  }
+  const data: any = await resp.json().catch(() => ({}));
+  const gen = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+  return (gen || "").trim();
+}
+
+// 统一文本生成入口：优先 DeepSeek；未配置或失败时回退 Workers AI。
+// 注意：语义检索用的 embedding 仍走 Workers AI（bge），DeepSeek 不提供向量接口。
+async function callAI(env: Env, system: string, userText: string): Promise<string> {
+  if (env.DEEPSEEK_API_KEY) {
+    try {
+      return await callDeepSeek(env, system, userText);
+    } catch (e: any) {
+      console.error("[AI] DeepSeek 失败，回退 Workers AI：", e && e.message);
+    }
+  }
+  return await callWorkersText(env, system, userText);
 }
 
 // 余弦相似度
@@ -636,7 +680,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const sys = prompts[task] || prompts.continue;
     const userText = task === "instruction" ? text : `标题：${(body.title || "(无标题)")}\n\n正文：\n${text}`;
     try {
-      const gen = await callWorkersText(env, sys, userText);
+      const gen = await callAI(env, sys, userText);
       if (!gen) return json({ error: "AI 未返回内容" }, 502);
       return json({ result: gen });
     } catch (e: any) {
@@ -702,7 +746,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const langName = target === "en" ? "English" : target === "zht" ? "繁體中文" : "简体中文";
     const sys = `你是一位专业翻译。请将下面的 Markdown 文章正文翻译成${langName}。保持所有 Markdown 格式与占位符不变，只翻译自然语言内容。只返回翻译后的全文，不要任何额外解释或前后缀。`;
     try {
-      const gen = await callWorkersText(env, sys, text);
+      const gen = await callAI(env, sys, text);
       if (!gen) return json({ error: "翻译失败" }, 502);
       return json({ text: gen });
     } catch (e: any) {
@@ -734,7 +778,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const sys = `你是本博客的站内问答助手。请仅基于下面提供的「站内文章资料」回答用户问题，用简体中文、条理清晰地作答；若资料不足以回答，请坦诚说明「站内暂无相关内容」，不要编造。可在末尾列出引用的文章标题。`;
     const userText = `用户问题：${question}\n\n站内文章资料：\n${ctx || "（无）"}`;
     try {
-      const answer = await callWorkersText(env, sys, userText);
+      const answer = await callAI(env, sys, userText);
       return json({ answer: answer || "（暂无回答）", refs });
     } catch (e: any) {
       return json({ error: e.message || "问答失败" }, 502);
