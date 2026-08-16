@@ -873,6 +873,48 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     }
   }
 
+  // AI 连通性自检（管理员）：逐个检测 workers / deepseek / gemini 是否可用，并返回失败原因
+  if (method === "POST" && seg.length === 3 && seg[1] === "ai" && seg[2] === "test") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const settings = await getSettings(env.DB);
+    const pingSys = "你是连通性测试机器人，只需回复一个单词 ok。";
+    const ping = "ping";
+    async function testWorkers(): Promise<{ ok: boolean; msg: string }> {
+      if (!env.AI) return { ok: false, msg: "未绑定 Workers AI（ai 绑定缺失，请检查 wrangler.toml）" };
+      try {
+        const r = await callWorkersText(env, pingSys, ping);
+        return { ok: !!r, msg: r ? "连接正常（@cf/meta/llama-3.1-8b-instruct）" : "返回内容为空" };
+      } catch (e: any) {
+        return { ok: false, msg: "调用失败：" + (e && e.message ? e.message : String(e)) };
+      }
+    }
+    async function testDeepSeek(): Promise<{ ok: boolean; msg: string }> {
+      const keys = resolveAiKeys(env, "deepseek", settings);
+      if (keys.length === 0)
+        return { ok: false, msg: "未配置 DeepSeek Key（请在后台填写，或配置 DEEPSEEK_API_KEY 环境变量 secret）" };
+      try {
+        const r = await callDeepSeek(env, pingSys, ping, keys[0]);
+        return { ok: !!r, msg: r ? `连接正常（用第 1/${keys.length} 个 Key）` : "返回内容为空" };
+      } catch (e: any) {
+        return { ok: false, msg: "调用失败：" + (e && e.message ? e.message : String(e)) };
+      }
+    }
+    async function testGemini(): Promise<{ ok: boolean; msg: string }> {
+      const keys = resolveAiKeys(env, "gemini", settings);
+      if (keys.length === 0)
+        return { ok: false, msg: "未配置 Gemini Key（请在后台填写，或配置 GEMINI_API_KEY 环境变量 secret）" };
+      const base = (settings.gemini_base_url || "").toString().trim();
+      try {
+        const r = await callGeminiChat(env, pingSys, ping, keys[0], base);
+        return { ok: !!r, msg: r ? `连接正常（用第 1/${keys.length} 个 Key）` : "返回内容为空" };
+      } catch (e: any) {
+        return { ok: false, msg: "调用失败：" + (e && e.message ? e.message : String(e)) };
+      }
+    }
+    const [workers, deepseek, gemini] = await Promise.all([testWorkers(), testDeepSeek(), testGemini()]);
+    return json({ workers, deepseek, gemini });
+  }
+
   // 数据看板统计（管理员）
   if (method === "GET" && seg.length === 2 && seg[1] === "stats") {
     if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);

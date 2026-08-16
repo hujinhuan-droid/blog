@@ -1542,6 +1542,8 @@ async function renderSettings() {
       <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
         <input type="checkbox" id="s-ai_enabled" ${s.ai_enabled !== "0" ? "checked" : ""} /> 在编辑器中显示 AI 按钮
       </label>
+      <button type="button" class="btn" id="ai-test-btn" style="margin-top:16px">🔌 检测连通性</button>
+      <div id="ai-test-result" style="margin-top:10px"></div>
     </fieldset>
 
     <fieldset class="set-group">
@@ -1627,6 +1629,39 @@ async function renderSettings() {
   renderKeyHint("gem-key-hint", s.gemini_api_key || "");
   document.getElementById("s-deepseek_api_key").addEventListener("input", (e) => renderKeyHint("ds-key-hint", e.target.value));
   document.getElementById("s-gemini_api_key").addEventListener("input", (e) => renderKeyHint("gem-key-hint", e.target.value));
+
+  // 检测连通性：逐个探测 workers / deepseek / gemini，显示是否可用及失败原因
+  const testBtn = document.getElementById("ai-test-btn");
+  const testRes = document.getElementById("ai-test-result");
+  testBtn.onclick = async () => {
+    testBtn.disabled = true;
+    testRes.innerHTML = '<p class="set-hint">检测中…</p>';
+    try {
+      const r = await api("/ai/test", { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        testRes.innerHTML = `<p class="set-hint" style="color:#e5484d">${escHtml(d.error || "检测失败")}</p>`;
+        return;
+      }
+      const rows = [
+        ["Workers AI", d.workers],
+        ["DeepSeek", d.deepseek],
+        ["Gemini", d.gemini],
+      ];
+      testRes.innerHTML = rows
+        .map(([name, st]) => {
+          const ok = st && st.ok;
+          const icon = ok ? "✅" : "❌";
+          const color = ok ? "var(--primary)" : "#e5484d";
+          return `<div class="ai-probe"><span style="color:${color}">${icon}</span><b style="margin:0 6px">${name}</b><span class="set-hint" style="margin:0;color:${color}">${escHtml(st ? st.msg : "未知")}</span></div>`;
+        })
+        .join("");
+    } catch (e) {
+      testRes.innerHTML = `<p class="set-hint" style="color:#e5484d">请求异常：${escHtml(e && e.message ? e.message : String(e))}</p>`;
+    } finally {
+      testBtn.disabled = false;
+    }
+  };
 
   const colorInput = document.getElementById("s-theme_primary");
   colorInput.oninput = () => {
