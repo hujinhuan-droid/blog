@@ -635,13 +635,13 @@ tbody tr:nth-child(even) { background: color-mix(in srgb, var(--primary) 3%, var
 .toc .toc-l4, .toc .toc-l5, .toc .toc-l6 { padding-left: 42px; }
 
 .emoji-picker { flex-direction: column; align-items: stretch; }
-.emoji-tabs { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; margin-bottom: 8px; }
+.emoji-tabs { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; min-width: 0; margin-bottom: 8px; }
 .emoji-tab {
   font-size: 12px; padding: 3px 9px; cursor: pointer;
   border: 1px solid var(--border); border-radius: 999px; background: var(--bg); color: var(--text);
 }
 .emoji-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-.emoji-grid { display: flex; flex-wrap: wrap; gap: 4px; width: 100%; }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; width: 100%; min-width: 0; }
 
 /* 深色模式适配 */
 body.dark table th { background: color-mix(in srgb, var(--primary) 14%, #0f1729); }
@@ -691,12 +691,11 @@ body.dark .emoji-tab { background: #0f1729; color: #e5e7eb; }
 body.dark .popover { background: #11141a; }
 body.dark .popover::after { background: #11141a; }
 .emoji-picker {
-  flex-wrap: wrap; gap: 4px; max-width: 360px;
-  padding: 10px; max-height: 240px; overflow: auto;
+  padding: 10px; max-width: 340px; max-height: 264px; overflow-y: auto; overflow-x: hidden;
 }
 .emoji-item {
-  width: 32px; height: 32px; border: none; background: transparent; cursor: pointer;
-  font-size: 18px; border-radius: 6px;
+  width: 100%; aspect-ratio: 1 / 1; border: none; background: transparent; cursor: pointer;
+  font-size: 18px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
 }
 .emoji-item:hover { background: var(--bg); }
 
