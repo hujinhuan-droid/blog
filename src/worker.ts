@@ -196,7 +196,7 @@ async function genCoverImage(env: Env, prompt: string): Promise<string> {
 // 用 Workers AI 文本模型生成文本（写作用途，独立于 Gemini 配额）
 async function callWorkersText(env: Env, system: string, userText: string): Promise<string> {
   if (!env.AI) throw new Error("未配置 Workers AI 绑定（ai），无法使用 AI 写作助手");
-  const model = "@cf/meta/llama-3.1-8b-instruct";
+  const model = "@cf/meta/llama-3.1-8b-instruct-fast";
   const out: any = await env.AI.run(model, {
     messages: [
       { role: "system", content: system },
@@ -208,6 +208,7 @@ async function callWorkersText(env: Env, system: string, userText: string): Prom
   let gen = "";
   if (typeof out === "string") gen = out;
   else if (out && out.response) gen = out.response;
+  else if (out && out.result && typeof out.result.response === "string") gen = out.result.response;
   else if (out && typeof out.result === "string") gen = out.result;
   else if (out && out.text) gen = out.text;
   return (gen || "").trim();
@@ -236,7 +237,11 @@ async function callDeepSeek(env: Env, system: string, userText: string, apiKey?:
   });
   if (!resp.ok) {
     const t = await resp.text().catch(() => "");
-    throw new Error(`DeepSeek 调用失败 (${resp.status}): ${t.slice(0, 200)}`);
+    let msg = `DeepSeek 调用失败 (HTTP ${resp.status})`;
+    if (resp.status === 402 || /insufficient balance/i.test(t)) msg += "：账户余额不足，请到 https://platform.deepseek.com 充值后重试";
+    else if (resp.status === 429) msg += "：触发限流（速率/额度），请稍后重试";
+    else msg += "：" + t.slice(0, 200);
+    throw new Error(msg);
   }
   const data: any = await resp.json().catch(() => ({}));
   const gen = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
@@ -880,12 +885,30 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const pingSys = "你是连通性测试机器人，只需回复一个单词 ok。";
     const ping = "ping";
     async function testWorkers(): Promise<{ ok: boolean; msg: string }> {
-      if (!env.AI) return { ok: false, msg: "未绑定 Workers AI（ai 绑定缺失，请检查 wrangler.toml）" };
+      if (!env.AI) return { ok: false, msg: "未绑定 Workers AI（ai 绑定缺失，请检查 wrangler.toml 的 [ai] 配置 binding = \"AI\"）" };
       try {
-        const r = await callWorkersText(env, pingSys, ping);
-        return { ok: !!r, msg: r ? "连接正常（@cf/meta/llama-3.1-8b-instruct）" : "返回内容为空" };
+        const out: any = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
+          messages: [
+            { role: "system", content: pingSys },
+            { role: "user", content: ping },
+          ],
+          max_tokens: 50,
+        });
+        let r = "";
+        if (typeof out === "string") r = out;
+        else if (out && out.response) r = out.response;
+        else if (out && out.result && typeof out.result.response === "string") r = out.result.response;
+        else if (out && typeof out.result === "string") r = out.result;
+        else if (out && out.text) r = out.text;
+        if (r && r.trim()) return { ok: true, msg: "连接正常（@cf/meta/llama-3.1-8b-instruct-fast）" };
+        return { ok: false, msg: "返回内容为空，原始响应：" + JSON.stringify(out).slice(0, 180) };
       } catch (e: any) {
-        return { ok: false, msg: "调用失败：" + (e && e.message ? e.message : String(e)) };
+        const raw = (e && e.message ? e.message : String(e)) || "";
+        let reason = "调用失败";
+        if (/429/i.test(raw) || /rate.?limit/i.test(raw)) reason = "触发限流（免费额度 10000 神经元/天已用尽或瞬时速率超限，通常次日 UTC 0 点恢复）";
+        else if (/model/i.test(raw) || /not found/i.test(raw) || /unavailable/i.test(raw)) reason = "模型不可用（该区域可能未部署此模型）";
+        else if (/binding/i.test(raw) || (/ai/i.test(raw) && /undefined/i.test(raw))) reason = "绑定缺失";
+        return { ok: false, msg: reason + "：" + raw.slice(0, 220) };
       }
     }
     async function testDeepSeek(): Promise<{ ok: boolean; msg: string }> {
