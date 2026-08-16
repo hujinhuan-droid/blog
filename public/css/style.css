@@ -656,13 +656,16 @@ body.dark .emoji-tab { background: #0f1729; color: #e5e7eb; }
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
 }
 .fmt-btn {
-  min-width: 34px; height: 32px; padding: 0 8px;
-  border: 1px solid var(--border); border-radius: 6px;
+  min-width: 46px; min-height: 46px; padding: 6px 7px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  border: 1px solid var(--border); border-radius: 8px;
   background: var(--bg); color: var(--text); cursor: pointer;
   font-size: 14px; line-height: 1; transition: background .12s, border-color .12s;
 }
+.fmt-ico { font-size: 17px; line-height: 1; display: block; }
+.fmt-label { font-size: 10px; line-height: 1.15; opacity: .82; display: block; white-space: nowrap; }
 .fmt-btn:hover { background: color-mix(in srgb, var(--primary) 12%, var(--bg)); border-color: var(--primary); }
-.toolbar-sep { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
+.toolbar-sep { width: 1px; height: 34px; background: var(--border); margin: 0 4px; }
 
 .editor-grid.dropzone-active { outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: 8px; }
 .editor-grid.dropzone-active #f-content { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }

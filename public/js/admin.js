@@ -695,11 +695,11 @@ async function renderEditor(slug) {
     <input type="text" id="f-tags" value="${escHtml(initialTags)}" placeholder="如：睡眠, 饮食, 运动" />
     <label>正文（Markdown，支持工具栏、代码高亮、表情、拖拽图片）</label>
     <div class="editor-toolbar" id="editor-toolbar">
-      <button type="button" class="fmt-btn" data-act="bold" title="加粗"><b>B</b></button>
-      <button type="button" class="fmt-btn" data-act="italic" title="斜体"><i>I</i></button>
-      <button type="button" class="fmt-btn" data-act="strike" title="删除线"><s>S</s></button>
+      <button type="button" class="fmt-btn" data-act="bold" title="加粗"><span class="fmt-ico"><b>B</b></span><span class="fmt-label">加粗</span></button>
+      <button type="button" class="fmt-btn" data-act="italic" title="斜体"><span class="fmt-ico"><i>I</i></span><span class="fmt-label">斜体</span></button>
+      <button type="button" class="fmt-btn" data-act="strike" title="删除线"><span class="fmt-ico"><s>S</s></span><span class="fmt-label">删除线</span></button>
       <div class="fmt-dropdown">
-        <button type="button" class="fmt-btn" data-act="h" title="标题">H▾</button>
+        <button type="button" class="fmt-btn" data-act="h" title="标题"><span class="fmt-ico">H</span><span class="fmt-label">标题</span></button>
         <div class="fmt-menu popover" id="h-menu">
           <button type="button" class="fmt-menu-item" data-h="1">H1 一级标题</button>
           <button type="button" class="fmt-menu-item" data-h="2">H2 二级标题</button>
@@ -707,20 +707,20 @@ async function renderEditor(slug) {
           <button type="button" class="fmt-menu-item" data-h="4">H4 四级标题</button>
         </div>
       </div>
-      <button type="button" class="fmt-btn" data-act="quote" title="引用">❝</button>
-      <button type="button" class="fmt-btn" data-act="ul" title="无序列表">•</button>
-      <button type="button" class="fmt-btn" data-act="ol" title="有序列表">1.</button>
-      <button type="button" class="fmt-btn" data-act="task" title="任务列表">☑</button>
-      <button type="button" class="fmt-btn" data-act="link" title="链接">🔗</button>
-      <button type="button" class="fmt-btn" data-act="code" title="行内代码">&lt;/&gt;</button>
-      <button type="button" class="fmt-btn" data-act="codeblock" title="代码块">▦</button>
-      <button type="button" class="fmt-btn" data-act="table" title="表格">▤</button>
-      <button type="button" class="fmt-btn" data-act="hr" title="分割线">―</button>
-      <button type="button" class="fmt-btn" data-act="toc" title="目录">☰</button>
+      <button type="button" class="fmt-btn" data-act="quote" title="引用"><span class="fmt-ico">❝</span><span class="fmt-label">引用</span></button>
+      <button type="button" class="fmt-btn" data-act="ul" title="无序列表"><span class="fmt-ico">•</span><span class="fmt-label">列表</span></button>
+      <button type="button" class="fmt-btn" data-act="ol" title="有序列表"><span class="fmt-ico">1.</span><span class="fmt-label">有序</span></button>
+      <button type="button" class="fmt-btn" data-act="task" title="任务列表"><span class="fmt-ico">☑</span><span class="fmt-label">任务</span></button>
+      <button type="button" class="fmt-btn" data-act="link" title="链接"><span class="fmt-ico">🔗</span><span class="fmt-label">链接</span></button>
+      <button type="button" class="fmt-btn" data-act="code" title="行内代码"><span class="fmt-ico">&lt;/&gt;</span><span class="fmt-label">代码</span></button>
+      <button type="button" class="fmt-btn" data-act="codeblock" title="代码块"><span class="fmt-ico">▦</span><span class="fmt-label">代码块</span></button>
+      <button type="button" class="fmt-btn" data-act="table" title="表格"><span class="fmt-ico">▤</span><span class="fmt-label">表格</span></button>
+      <button type="button" class="fmt-btn" data-act="hr" title="分割线"><span class="fmt-ico">―</span><span class="fmt-label">分割线</span></button>
+      <button type="button" class="fmt-btn" data-act="toc" title="目录"><span class="fmt-ico">☰</span><span class="fmt-label">目录</span></button>
       <span class="toolbar-sep"></span>
-      <button type="button" class="fmt-btn" data-act="emoji" title="插入表情">😊</button>
-      <button type="button" class="fmt-btn" data-act="image" title="上传并插入图片">🖼</button>
-      <button type="button" class="fmt-btn" data-act="aiwrite" title="AI 写作助手">🤖</button>
+      <button type="button" class="fmt-btn" data-act="emoji" title="插入表情"><span class="fmt-ico">😊</span><span class="fmt-label">表情</span></button>
+      <button type="button" class="fmt-btn" data-act="image" title="上传并插入图片"><span class="fmt-ico">🖼</span><span class="fmt-label">图片</span></button>
+      <button type="button" class="fmt-btn" data-act="aiwrite" title="AI 写作助手"><span class="fmt-ico">🤖</span><span class="fmt-label">AI</span></button>
     </div>
     <div class="editor-grid" id="editor-grid">
       <textarea id="f-content" placeholder="在此用 Markdown 写作…（可直接把图片拖进来）">${post ? post.content : ""}</textarea>
