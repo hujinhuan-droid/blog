@@ -214,8 +214,8 @@ async function callWorkersText(env: Env, system: string, userText: string): Prom
 }
 
 // 用 DeepSeek 文本模型生成文本（聊天补全 API）。优先于 Workers AI，失败自动回退。
-async function callDeepSeek(env: Env, system: string, userText: string): Promise<string> {
-  const key = env.DEEPSEEK_API_KEY;
+async function callDeepSeek(env: Env, system: string, userText: string, apiKey?: string): Promise<string> {
+  const key = apiKey || env.DEEPSEEK_API_KEY;
   if (!key) throw new Error("未配置 DEEPSEEK_API_KEY 密钥");
   const resp = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
@@ -245,12 +245,12 @@ async function callDeepSeek(env: Env, system: string, userText: string): Promise
 
 // 用 Gemini 文本模型做聊天式生成（与 callDeepSeek 同签名 system/userText），
 // 供 /ai/write、/ai/translate、/ai/ask 在服务商切换为 gemini 时复用。
-async function callGeminiChat(env: Env, system: string, userText: string): Promise<string> {
-  const key = env.GEMINI_API_KEY;
+async function callGeminiChat(env: Env, system: string, userText: string, apiKey?: string, base?: string): Promise<string> {
+  const key = apiKey || env.GEMINI_API_KEY;
   if (!key) throw new Error("服务端未配置 GEMINI_API_KEY，请在 Cloudflare 设置该 secret");
-  const base = (env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/$/, "");
+  const baseUrl = (base || env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/$/, "");
   const model = "gemini-flash-latest";
-  const url = `${base}/v1beta/models/${model}:generateContent?key=${key}`;
+  const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${key}`;
   const body = JSON.stringify({
     systemInstruction: { parts: [{ text: system }] },
     contents: [{ parts: [{ text: userText }] }],
@@ -271,28 +271,61 @@ async function callGeminiChat(env: Env, system: string, userText: string): Promi
   return text;
 }
 
-// 统一文本生成入口：按后台设置 ai_provider 选择服务商（gemini / deepseek / workers 自动），
-// 任一服务商未配置或调用异常时自动回退 Workers AI（最后兜底）。
+// 从设置/环境变量解析某服务商的 Key 列表（支持多 Key：换行或逗号分隔）。
+// DB 中保存的 Key 优先，其次回退到 Cloudflare secret（环境变量），两者共存。
+function resolveAiKeys(env: Env, provider: string, settings: Record<string, string>): string[] {
+  const confKey = provider === "deepseek" ? "deepseek_api_key" : "gemini_api_key";
+  const dbVal = (settings[confKey] || "").toString().trim();
+  const dbKeys = dbVal ? dbVal.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean) : [];
+  const envVal = provider === "deepseek" ? (env.DEEPSEEK_API_KEY || "") : (env.GEMINI_API_KEY || "");
+  const envKeys = envVal ? envVal.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean) : [];
+  return [...dbKeys, ...envKeys];
+}
+
+// 多 Key 轮询计数器（模块级，按请求递增，分散到不同 Key 上以避开单 Key 限流）
+let aiKeyRR = 0;
+function pickAiKey(keys: string[]): string {
+  const k = keys[aiKeyRR % keys.length];
+  aiKeyRR = (aiKeyRR + 1) % Math.max(keys.length, 1);
+  return k;
+}
+
+// 统一文本生成入口：按后台设置 ai_provider 选择服务商（gemini / deepseek / workers 自动）。
+// - 支持多 Key 共存：解析出该服务商的全部 Key 后轮询调用，单个 Key 失败自动切下一个；
+// - 全部 Key 失败或未配置任何 Key 时，回退 Workers AI（最后兜底）。
 // 注意：语义检索用的 embedding 仍走 Workers AI（bge），DeepSeek/Gemini 都不提供向量接口。
 async function callAI(env: Env, system: string, userText: string): Promise<string> {
-  let provider = "deepseek";
+  let settings: Record<string, string> = {};
   try {
-    const s = await getSettings(env.DB);
-    provider = (s.ai_provider || "deepseek").toString();
+    settings = await getSettings(env.DB);
   } catch {}
-  if (provider === "gemini") {
+  const provider = (settings.ai_provider || "deepseek").toString();
+
+  if (provider === "workers") {
+    return await callWorkersText(env, system, userText);
+  }
+
+  const isDs = provider === "deepseek";
+  const keys = resolveAiKeys(env, provider, settings);
+  const geminiBase = (settings.gemini_base_url || "").toString().trim();
+
+  if (keys.length === 0) {
+    console.error(`[AI] ${provider} 未配置任何 Key，回退 Workers AI`);
+    return await callWorkersText(env, system, userText);
+  }
+
+  let lastErr = "";
+  for (let i = 0; i < keys.length; i++) {
+    const k = pickAiKey(keys);
     try {
-      return await callGeminiChat(env, system, userText);
+      if (isDs) return await callDeepSeek(env, system, userText, k);
+      return await callGeminiChat(env, system, userText, k, geminiBase);
     } catch (e: any) {
-      console.error("[AI] Gemini 失败，回退 Workers AI：", e && e.message);
-    }
-  } else if (provider === "deepseek") {
-    try {
-      return await callDeepSeek(env, system, userText);
-    } catch (e: any) {
-      console.error("[AI] DeepSeek 失败，回退 Workers AI：", e && e.message);
+      lastErr = (e && e.message) || "未知错误";
+      console.error(`[AI] ${provider} key#${i + 1}/${keys.length} 失败，尝试下一个：`, lastErr);
     }
   }
+  console.error(`[AI] ${provider} 全部 Key 均失败，回退 Workers AI：`, lastErr);
   return await callWorkersText(env, system, userText);
 }
 
@@ -414,7 +447,11 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       "theme_preset",
       "theme_dark",
       "ai_model",
+      "ai_provider",
       "ai_enabled",
+      "deepseek_api_key",
+      "gemini_api_key",
+      "gemini_base_url",
       "about_content",
       "comments_enabled",
       "posts_per_page",

@@ -1525,8 +1525,21 @@ async function renderSettings() {
         <option value="workers" ${(s.ai_provider || "deepseek") === "workers" ? "selected" : ""}>Workers AI（自动回退 llama-3.1-8b）</option>
       </select>
       <label style="margin-top:12px">默认模型</label>
-      <input type="text" id="s-ai_model" value="${escHtml(s.ai_model || "gemini-flash-latest")}" placeholder="gemini-flash-latest" />
-      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+      <input type="text" id="s-ai_model" value="${escHtml(s.ai_model || "deepseek-chat")}" placeholder="deepseek-chat" />
+      <p class="set-hint" id="ai-model-hint"></p>
+
+      <label style="margin-top:14px">DeepSeek API Key（每行一个，可填多个，自动轮询 / 故障切换）</label>
+      <textarea id="s-deepseek_api_key" class="key-input" placeholder="sk-...&#10;sk-...（多个换行分隔，全部共存）">${escHtml(s.deepseek_api_key || "")}</textarea>
+      <p class="set-hint" id="ds-key-hint"></p>
+
+      <label style="margin-top:14px">Gemini API Key（每行一个，可填多个，自动轮询 / 故障切换）</label>
+      <textarea id="s-gemini_api_key" class="key-input" placeholder="AIza...&#10;AIza...（多个换行分隔，全部共存）">${escHtml(s.gemini_api_key || "")}</textarea>
+      <p class="set-hint" id="gem-key-hint"></p>
+
+      <label style="margin-top:14px">Gemini Base URL（可选，留空用官方默认）</label>
+      <input type="text" id="s-gemini_base_url" value="${escHtml(s.gemini_base_url || "")}" placeholder="https://generativelanguage.googleapis.com" />
+
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
         <input type="checkbox" id="s-ai_enabled" ${s.ai_enabled !== "0" ? "checked" : ""} /> 在编辑器中显示 AI 按钮
       </label>
     </fieldset>
@@ -1573,6 +1586,48 @@ async function renderSettings() {
   app.innerHTML = "";
   app.appendChild(form);
 
+  // —— AI 服务商切换：默认模型随服务商自动更新；API Key 脱敏显示 ——
+  const PROVIDER_MODEL = { deepseek: "deepseek-chat", gemini: "gemini-flash-latest", workers: "llama-3.1-8b" };
+  const provSel = document.getElementById("s-ai_provider");
+  const modelInput = document.getElementById("s-ai_model");
+  const modelHint = document.getElementById("ai-model-hint");
+  function syncModelHint() {
+    const p = provSel.value;
+    modelHint.textContent =
+      "推荐模型：" + (PROVIDER_MODEL[p] || "—") +
+      (p === "workers" ? "（Workers AI 固定使用该模型，本字段不生效）" : "（切换服务商时自动填入，也可手动自定义）");
+  }
+  provSel.addEventListener("change", () => {
+    const cur = modelInput.value.trim();
+    // 仅当模型为空、或当前值正好是某个服务商的默认模型时，才自动切换为新服务商的默认模型（避免覆盖用户自定义）
+    if (!cur || Object.values(PROVIDER_MODEL).includes(cur)) {
+      modelInput.value = PROVIDER_MODEL[provSel.value] || "";
+    }
+    syncModelHint();
+  });
+  syncModelHint();
+
+  function maskKey(k) {
+    k = (k || "").trim();
+    if (!k) return "";
+    if (k.length <= 10) return k.slice(0, 2) + "••••" + k.slice(-2);
+    return k.slice(0, 6) + "••••" + k.slice(-4);
+  }
+  function renderKeyHint(elId, rawVal) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    const arr = (rawVal || "").split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
+    if (arr.length === 0) {
+      el.textContent = "（未配置：将使用 Cloudflare 环境变量 secret，若也没有则回退 Workers AI）";
+      return;
+    }
+    el.textContent = `已保存 ${arr.length} 个 Key：` + arr.map(maskKey).join("、");
+  }
+  renderKeyHint("ds-key-hint", s.deepseek_api_key || "");
+  renderKeyHint("gem-key-hint", s.gemini_api_key || "");
+  document.getElementById("s-deepseek_api_key").addEventListener("input", (e) => renderKeyHint("ds-key-hint", e.target.value));
+  document.getElementById("s-gemini_api_key").addEventListener("input", (e) => renderKeyHint("gem-key-hint", e.target.value));
+
   const colorInput = document.getElementById("s-theme_primary");
   colorInput.oninput = () => {
     document.getElementById("s-theme_primary_txt").textContent = colorInput.value;
@@ -1617,9 +1672,12 @@ async function renderSettings() {
       theme_primary: document.getElementById("s-theme_primary").value,
       theme_preset: document.getElementById("s-theme_preset").value || "default",
       theme_dark: document.getElementById("s-theme_dark").checked ? "1" : "0",
-      ai_model: document.getElementById("s-ai_model").value.trim() || "gemini-flash-latest",
+      ai_model: document.getElementById("s-ai_model").value.trim() || "deepseek-chat",
       ai_provider: document.getElementById("s-ai_provider").value || "deepseek",
       ai_enabled: document.getElementById("s-ai_enabled").checked ? "1" : "0",
+      deepseek_api_key: document.getElementById("s-deepseek_api_key").value.trim(),
+      gemini_api_key: document.getElementById("s-gemini_api_key").value.trim(),
+      gemini_base_url: document.getElementById("s-gemini_base_url").value.trim(),
       about_content: document.getElementById("s-about_content").value,
       posts_per_page: document.getElementById("s-posts_per_page").value.trim() || "10",
       comments_enabled: document.getElementById("s-comments_enabled").checked ? "1" : "0",
