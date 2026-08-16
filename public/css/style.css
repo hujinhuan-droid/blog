@@ -770,10 +770,19 @@ body.admin-mode #app.container { max-width: none; margin: 0; padding: 0; }
   position: sticky; top: 0; height: 100vh;
   padding: 18px 14px;
 }
-.admin-brand { display: flex; align-items: center; gap: 11px; padding: 6px 8px 18px; }
+.admin-brand { position: relative; display: flex; align-items: center; gap: 11px; padding: 6px 8px 18px; }
 .admin-logo { font-size: 26px; line-height: 1; }
 .admin-brand-name { font-weight: 800; font-size: 16px; }
 .admin-brand-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
+/* 手机端顶部品牌区下拉（修改密码 / 登出） */
+.brand-caret { font-size: 10px; opacity: .6; margin-left: 1px; display: none; }
+.admin-brand-menu {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; min-width: 158px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .18); padding: 6px; z-index: 70;
+}
+.admin-brand-menu.open { display: block; }
+@media (min-width: 769px) { .admin-brand-menu.open { display: none; } } /* 桌面端始终隐藏，改由左下角管理员按钮负责 */
 .admin-nav { display: flex; flex-direction: column; gap: 4px; }
 .admin-nav-item {
   display: flex; align-items: center; gap: 11px;
@@ -900,7 +909,9 @@ body.dark .admin-menu-item.danger:hover { background: #2a1414; }
 @media (max-width: 768px) {
   .admin-shell { flex-direction: column; min-height: auto; }
   .admin-sidebar { width: 100%; flex: none; height: auto; position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; }
-  .admin-brand { padding: 4px 8px; }
+  .admin-brand { padding: 4px 10px; cursor: pointer; border-radius: 10px; }
+  .admin-brand:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+  .admin-brand .brand-caret { display: inline; }
   .admin-nav { flex-direction: row; flex-wrap: wrap; margin: 0; }
   .admin-nav-item { padding: 8px 11px; }
   .admin-side-foot { display: none; }

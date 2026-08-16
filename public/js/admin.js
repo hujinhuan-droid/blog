@@ -19,11 +19,16 @@ function buildAdminShell() {
   app.innerHTML = `
     <div class="admin-shell">
       <aside class="admin-sidebar">
-        <div class="admin-brand">
+        <div class="admin-brand" id="adminBrand">
           <span class="admin-logo">🤖</span>
           <div class="admin-brand-txt">
             <div class="admin-brand-name">AI Agent</div>
             <div class="admin-brand-sub">管理后台</div>
+          </div>
+          <span class="caret brand-caret">▾</span>
+          <div class="admin-brand-menu" id="adminBrandMenu" role="menu">
+            <button type="button" class="admin-menu-item" id="btnChangePw2">🔑 修改密码</button>
+            <button type="button" class="admin-menu-item danger" id="btnLogout2">🚪 登出</button>
           </div>
         </div>
         <nav class="admin-nav">
@@ -96,6 +101,38 @@ function bindAdminUserMenu() {
     toggle(false);
     openChangePwModal();
   };
+
+  // 手机端：顶部品牌区「AI Agent 管理后台」点击展开下拉（修改密码 / 登出）
+  const brandBtn = document.getElementById("adminBrand");
+  const brandMenu = document.getElementById("adminBrandMenu");
+  if (brandBtn && brandMenu && !brandBtn.dataset.bound) {
+    brandBtn.dataset.bound = "1";
+    const toggleBrand = (open) => {
+      const isOpen = open ?? !brandMenu.classList.contains("open");
+      brandMenu.classList.toggle("open", isOpen);
+      brandBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    };
+    brandBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleBrand();
+    });
+    document.addEventListener("click", (e) => {
+      if (!brandMenu.contains(e.target) && !brandBtn.contains(e.target)) toggleBrand(false);
+    });
+    const bLogout2 = document.getElementById("btnLogout2");
+    if (bLogout2) bLogout2.onclick = async () => {
+      toggleBrand(false);
+      await api("/auth/logout", { method: "POST" });
+      CURRENT_USER = null;
+      renderNav();
+      location.hash = "#/";
+    };
+    const bCpw2 = document.getElementById("btnChangePw2");
+    if (bCpw2) bCpw2.onclick = () => {
+      toggleBrand(false);
+      openChangePwModal();
+    };
+  }
 }
 
 // 修改密码弹窗
