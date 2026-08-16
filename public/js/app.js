@@ -392,6 +392,8 @@ function renderNav() {
   nav.innerHTML = "";
   const menu = el(`<div class="menu"></div>`);
   for (const m of MENUS) {
+    // 「管理后台」已由右上角单按钮提供，菜单里若也有 #/admin 则跳过，避免重复
+    if (m.hash === "#/admin") continue;
     const link = el(`<a class="menu-link" href="${m.hash}">${m.label || t(m.key || "")}</a>`);
     // 手机端点菜单项后自动收起下拉
     link.onclick = () => document.querySelector(".topbar")?.classList.remove("open");
@@ -411,14 +413,11 @@ function renderNav() {
   nav.appendChild(search);
 
   const right = el(`<div class="nav-right"></div>`);
-  if (CURRENT_USER) {
-    const u = CURRENT_USER;
-    if (u.role === "admin") {
-      right.appendChild(el(`<a class="btn btn-sm" href="#/admin">${t("nav_admin")}</a>`));
-    }
-    right.appendChild(
-      el(`<span class="user">${u.avatar ? `<img class="avatar" src="${u.avatar}"/>` : ""}${u.username}</span>`)
-    );
+  if (CURRENT_USER && CURRENT_USER.role === "admin") {
+    // 管理员：单一「管理后台」按钮（退出可在后台内操作）
+    right.appendChild(el(`<a class="btn btn-sm btn-primary" href="#/admin">${t("nav_admin")}</a>`));
+  } else if (CURRENT_USER) {
+    // 已登录但非管理员：仅提供退出
     const logout = el(`<button class="btn btn-sm">${t("nav_logout")}</button>`);
     logout.onclick = async () => {
       await api("/auth/logout", { method: "POST" });
@@ -1029,23 +1028,61 @@ function route() {
 
 // ---------- 主题切换（浅色 / 深色 / 跟随系统） ----------
 function initTheme() {
+  // 语言切换：合并为单个按钮，点击向下弹出选项（仍留在顶栏右侧）
   const wrap = document.querySelector(".topbar .wrap");
-  if (!wrap) return;
   const box = document.createElement("div");
   box.className = "topbar-actions";
   box.innerHTML = `
+    <div class="lang-dd">
+      <button type="button" class="lang-btn" id="langBtn" aria-haspopup="true" aria-expanded="false">
+        <span id="langCur">${LANG === "en" ? "EN" : LANG === "zht" ? "繁" : "简"}</span><span class="caret">▾</span>
+      </button>
+      <div class="lang-menu" id="langMenu" role="menu">
+        <button type="button" class="lang-item" data-lang="zh">简体中文</button>
+        <button type="button" class="lang-item" data-lang="zht">繁體中文</button>
+        <button type="button" class="lang-item" data-lang="en">English</button>
+      </div>
+    </div>`;
+  const navToggle = document.getElementById("navToggle");
+  if (wrap && navToggle) wrap.insertBefore(box, navToggle);
+
+  const langBtn = document.getElementById("langBtn");
+  const langMenu = document.getElementById("langMenu");
+  function paintLang() {
+    const cur = document.getElementById("langCur");
+    if (cur) cur.textContent = LANG === "en" ? "EN" : LANG === "zht" ? "繁" : "简";
+    box.querySelectorAll(".lang-item").forEach((b) => b.classList.toggle("active", b.dataset.lang === LANG));
+    if (langMenu) langMenu.classList.remove("open");
+    if (langBtn) langBtn.setAttribute("aria-expanded", "false");
+  }
+  if (langBtn) langBtn.onclick = (e) => {
+    e.stopPropagation();
+    const open = langMenu.classList.toggle("open");
+    langBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+  langMenu.querySelectorAll(".lang-item").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    setLang(b.dataset.lang);
+    paintLang();
+  }));
+  document.addEventListener("click", (e) => {
+    if (!box.contains(e.target)) {
+      if (langMenu) langMenu.classList.remove("open");
+      if (langBtn) langBtn.setAttribute("aria-expanded", "false");
+    }
+  });
+  paintLang();
+
+  // 主题模式：移到页面底部左下角固定浮层（避免与右下角问答浮窗冲突）
+  const fab = document.createElement("div");
+  fab.className = "site-theme-fab";
+  fab.innerHTML = `
     <div class="theme-switch" role="group" aria-label="主题模式">
       <button type="button" class="theme-opt" data-mode="light" title="浅色模式">☀️</button>
       <button type="button" class="theme-opt" data-mode="dark" title="深色模式">🌙</button>
       <button type="button" class="theme-opt" data-mode="system" title="跟随系统">🖥️</button>
-    </div>
-    <div class="lang-switch" role="group" aria-label="语言">
-      <button type="button" class="lang-opt" data-lang="zh" title="简体中文">简</button>
-      <button type="button" class="lang-opt" data-lang="zht" title="繁體中文">繁</button>
-      <button type="button" class="lang-opt" data-lang="en" title="English">EN</button>
     </div>`;
-  const navToggle = document.getElementById("navToggle");
-  wrap.insertBefore(box, navToggle);
+  document.body.appendChild(fab);
 
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   function applyTheme(mode) {
@@ -1055,9 +1092,9 @@ function initTheme() {
     else dark = mq.matches;
     document.body.classList.toggle("dark", dark);
     try { localStorage.setItem("blog-theme", mode); } catch {}
-    box.querySelectorAll(".theme-opt").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+    fab.querySelectorAll(".theme-opt").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
   }
-  box.querySelectorAll(".theme-opt").forEach((b) => (b.onclick = () => applyTheme(b.dataset.mode)));
+  fab.querySelectorAll(".theme-opt").forEach((b) => (b.onclick = () => applyTheme(b.dataset.mode)));
   let saved = null;
   try { saved = localStorage.getItem("blog-theme"); } catch {}
   applyTheme(saved || "system");
@@ -1066,13 +1103,6 @@ function initTheme() {
     try { cur = localStorage.getItem("blog-theme") || "system"; } catch {}
     if (cur === "system") applyTheme("system");
   });
-
-  // 语言切换：applyLang 写偏好 + 设 <html lang> + 重渲染当前页；paintLang 仅高亮
-  function paintLang() {
-    box.querySelectorAll(".lang-opt").forEach((b) => b.classList.toggle("active", b.dataset.lang === LANG));
-  }
-  box.querySelectorAll(".lang-opt").forEach((b) => (b.onclick = () => { setLang(b.dataset.lang); paintLang(); }));
-  paintLang();
 }
 
 async function init() {
