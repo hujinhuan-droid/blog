@@ -806,6 +806,11 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const slug = (body.slug || "").toString().trim();
     if (!slug) return json({ error: "缺少 slug" }, 400);
     await env.DB.prepare("UPDATE posts SET views = views + 1 WHERE slug = ? AND visibility = 'public'").bind(slug).run();
+    // 同步累加每日访问量（兜底：表不存在时忽略）
+    try {
+      const day = new Date().toISOString().slice(0, 10);
+      await env.DB.prepare("INSERT INTO views_daily (day, views) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET views = views + 1").bind(day).run();
+    } catch {}
     const r = (await env.DB.prepare("SELECT views FROM posts WHERE slug = ?").bind(slug).first()) as any;
     return json({ views: r ? Number(r.views) || 0 : 0 });
   }
@@ -949,6 +954,12 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const tagList = await listTags(env.DB, { admin: true });
     const aiUsage = await getMeta(env.DB, "ai_usage_count");
     const totalViews = await getTotalViews(env.DB);
+    let todayViews = 0;
+    try {
+      const day = new Date().toISOString().slice(0, 10);
+      const tv = (await env.DB.prepare("SELECT views v FROM views_daily WHERE day = ?").bind(day).first()) as any;
+      if (tv) todayViews = Number(tv.v) || 0;
+    } catch {}
     const since = Date.now() - 7 * 86400000;
     const rows = (await env.DB
       .prepare("SELECT DATE(created_at/1000,'unixepoch') d, COUNT(*) c FROM posts WHERE created_at >= ? GROUP BY d ORDER BY d")
@@ -962,7 +973,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       const key = d.toISOString().slice(0, 10);
       recent7.push({ date: key, count: byDay[key] || 0 });
     }
-    return json({ total, public: publicCount, private: total - publicCount, comments, tags: tagList.length, aiUsage, totalViews, recent7 });
+    return json({ total, public: publicCount, private: total - publicCount, comments, tags: tagList.length, aiUsage, totalViews, todayViews, recent7 });
   }
 
   // 语义搜索（公开）：向量检索 + 关键词兜底
@@ -1103,6 +1114,10 @@ export default {
     if (path[0] === "feed.xml") return await handleFeed(env);
 
     if (path[0] === "api") {
+      // 兜底建表（幂等）：确保每日访问量表存在，避免迁移未 apply 时统计接口失败
+      try {
+        await env.DB.exec("CREATE TABLE IF NOT EXISTS views_daily (day TEXT PRIMARY KEY, views INTEGER NOT NULL DEFAULT 0)");
+      } catch {}
       try {
         return await handleApi(req, env, path, req.method);
       } catch (e: any) {

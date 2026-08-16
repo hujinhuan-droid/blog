@@ -355,7 +355,8 @@ async function renderDashboard() {
       <div class="stat-card clickable" data-drill="comments" title="点击查看有评论的文章"><div class="stat-num">${stats.comments}</div><div class="stat-lbl">评论</div></div>
       <div class="stat-card clickable" data-drill="tags" title="点击查看已打标签的文章"><div class="stat-num">${stats.tags}</div><div class="stat-lbl">标签</div></div>
       <div class="stat-card clickable" data-drill="ai" title="点击查看使用过 AI 的文章"><div class="stat-num">${stats.aiUsage}</div><div class="stat-lbl">AI 调用</div></div>
-      <div class="stat-card"><div class="stat-num">${stats.totalViews || 0}</div><div class="stat-lbl">阅读量</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.todayViews || 0}</div><div class="stat-lbl">当天访问量</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.totalViews || 0}</div><div class="stat-lbl">全部访问量</div></div>
       <div class="stat-chart"><div class="stat-chart-title">近 7 天发布</div><div class="bars">${bars}</div></div>`;
     wrap.appendChild(panel);
     // 统计卡片点击下钻到文章标题列表（走正式路由，保证返回/导航按钮可用）
