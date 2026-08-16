@@ -208,6 +208,7 @@ async function renderDashboard() {
       <div class="stat-card clickable" data-drill="comments" title="点击查看有评论的文章"><div class="stat-num">${stats.comments}</div><div class="stat-lbl">评论</div></div>
       <div class="stat-card clickable" data-drill="tags" title="点击查看已打标签的文章"><div class="stat-num">${stats.tags}</div><div class="stat-lbl">标签</div></div>
       <div class="stat-card clickable" data-drill="ai" title="点击查看使用过 AI 的文章"><div class="stat-num">${stats.aiUsage}</div><div class="stat-lbl">AI 调用</div></div>
+      <div class="stat-card"><div class="stat-num">${stats.totalViews || 0}</div><div class="stat-lbl">阅读量</div></div>
       <div class="stat-chart"><div class="stat-chart-title">近 7 天发布</div><div class="bars">${bars}</div></div>`;
     wrap.appendChild(panel);
     // 统计卡片点击下钻到文章标题列表（走正式路由，保证返回/导航按钮可用）
@@ -567,6 +568,13 @@ async function renderEditor(slug) {
       <option value="public" ${post && post.visibility === "public" ? "selected" : ""}>公开</option>
       <option value="private" ${post && post.visibility === "private" ? "selected" : ""}>仅自己可见</option>
     </select>
+    <label>发布状态</label>
+    <select id="f-status">
+      <option value="published" ${!post || post.status !== "draft" ? "selected" : ""}>立即发布</option>
+      <option value="draft" ${post && post.status === "draft" ? "selected" : ""}>存为草稿</option>
+    </select>
+    <label>定时发布（可选，留空则按上面状态；设置时间后到点自动公开）</label>
+    <input type="datetime-local" id="f-scheduled" value="${post && post.scheduled_at ? toLocalInput(post.scheduled_at) : ""}" />
     <label>封面图 URL（可选，可点「🎨 AI 配图」自动生成）</label>
     <input type="text" id="f-cover" value="${post && post.cover ? post.cover.replace(/"/g, "&quot;") : ""}" />
     <label>AI 配图提示词（可选，留空则根据标题+标签自动生成）</label>
@@ -620,6 +628,8 @@ async function renderEditor(slug) {
         <button class="btn" id="ai-cover">🎨 AI 配图</button>
         <button class="btn" id="ai-moderate">🚫 AI 检查违禁词</button>
         <button class="btn" id="ai-classify">🏷 AI 分类</button>
+        <button class="btn" id="ai-translate-en">🌐 译英</button>
+        <button class="btn" id="ai-translate-zht">🌐 译繁</button>
       </div>
     </div>
     <div id="ai-result" class="ai-result" style="display:none;"></div>
@@ -1160,11 +1170,38 @@ async function renderEditor(slug) {
     };
   }
 
+  // AI 翻译正文：调 Workers AI 翻译全文并替换
+  const bindTranslateButton = (target) => {
+    const btn = document.getElementById(target === "en" ? "ai-translate-en" : "ai-translate-zht");
+    if (!btn) return;
+    btn.onclick = async () => {
+      const c = content.value;
+      if (!c.trim()) { toast("正文为空，无法翻译"); return; }
+      const old = btn.textContent;
+      btn.disabled = true; btn.textContent = "翻译中…";
+      try {
+        const res = await api("/ai/translate", { method: "POST", body: JSON.stringify({ text: c, target }) });
+        const r = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(r.error || "翻译失败"); return; }
+        content.value = r.text || c;
+        updatePreview();
+        toast("已翻译为正文");
+      } catch { toast("请求异常"); }
+      finally { btn.disabled = false; btn.textContent = old; }
+    };
+  };
+  bindTranslateButton("en");
+  bindTranslateButton("zht");
+
   document.getElementById("save").onclick = async () => {
+    const scheduledRaw = document.getElementById("f-scheduled").value;
+    const scheduled_at = scheduledRaw ? new Date(scheduledRaw).getTime() : null;
     const payload = {
       title: document.getElementById("f-title").value.trim(),
       content: content.value,
       visibility: document.getElementById("f-visibility").value,
+      status: document.getElementById("f-status").value,
+      scheduled_at: scheduled_at,
       cover: document.getElementById("f-cover").value.trim() || undefined,
       excerpt: document.getElementById("f-excerpt").value.trim() || undefined,
       ai_notes: aiNotes.value.trim() || undefined,
@@ -1181,6 +1218,13 @@ async function renderEditor(slug) {
       toast(r.error || "保存失败");
     }
   };
+}
+
+function toLocalInput(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function fileToBase64(file) {

@@ -970,3 +970,48 @@ body.dark .lang-opt.active { background: #0f1729; }
 .theme-swatch .sw { width: 38px; height: 38px; border-radius: 50%; box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
 .theme-swatch .sw-name { font-size: 12.5px; color: var(--text); }
 
+/* ---------- 文章页：阅读量 / 点赞收藏 / 翻译 ---------- */
+.post-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0 4px; }
+.post-views { font-size: 13px; color: var(--muted); }
+.react-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--bg);
+  color: var(--text); cursor: pointer; font-size: 13px; transition: 0.12s;
+}
+.react-btn:hover { border-color: var(--primary); color: var(--primary); }
+.react-btn.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, var(--bg)); color: var(--primary); }
+.translate-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 4px; }
+
+/* ---------- 站内问答浮窗 ---------- */
+.ask-fab {
+  position: fixed; right: 20px; bottom: 20px; z-index: 60;
+  width: 52px; height: 52px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--primary); color: #fff; font-size: 22px; box-shadow: 0 6px 20px rgba(0,0,0,0.22);
+}
+.ask-fab:hover { filter: brightness(1.05); }
+.ask-bot {
+  position: fixed; right: 20px; bottom: 84px; z-index: 60; width: 340px; max-width: calc(100vw - 40px);
+  display: flex; flex-direction: column; max-height: 70vh;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2); overflow: hidden;
+}
+.ask-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.ask-head button { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; }
+.ask-log { flex: 1; overflow: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.ask-me { align-self: flex-end; max-width: 85%; background: color-mix(in srgb, var(--primary) 16%, var(--bg)); color: var(--text); padding: 8px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.6; }
+.ask-ai { align-self: flex-start; max-width: 92%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 12px; font-size: 13.5px; line-height: 1.6; }
+.ask-ai .ask-refs { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--primary); display: flex; flex-wrap: wrap; gap: 6px; }
+.ask-input { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); align-items: flex-end; }
+.ask-input textarea { flex: 1; resize: none; border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: var(--bg); color: var(--text); font-family: inherit; font-size: 13px; }
+
+/* ---------- 嵌套评论 ---------- */
+.comment-child { margin-left: 28px; border-left: 2px solid var(--border); padding-left: 14px; margin-top: 10px; }
+.reply-toggle { background: none; border: none; color: var(--primary); font-size: 12.5px; cursor: pointer; margin-left: 8px; }
+.reply-box { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.reply-box .reply-author, .reply-box .reply-content { border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; background: var(--bg); color: var(--text); font-family: inherit; font-size: 13px; }
+
+/* ---------- 页脚 RSS / Sitemap 链接 ---------- */
+.foot-links { margin-left: 8px; }
+.foot-links a { color: var(--primary); text-decoration: none; }
+.foot-links a:hover { text-decoration: underline; }
+

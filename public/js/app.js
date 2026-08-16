@@ -55,6 +55,10 @@ const I18N = {
     tag_back: "← 全部标签", tag_empty: "该标签下还没有文章。",
     friends_title: "朋友们", about_title: "关于",
     tts_read: "🔊 朗读", tts_stop: "⏹ 停止",
+    like: "👍 赞", favorite: "⭐ 收藏", views: "阅读 {0}",
+    translate: "🌐 翻译", orig: "原文", trans: "译文",
+    ask_title: "站内问答", ask_ph: "问我关于博客的任何问题…", send: "发送",
+    rss: "RSS", sitemap: "站点地图",
   },
   zht: {
     m_posts: "文章", m_timeline: "時間軸", m_feed: "動態", m_tags: "標籤", m_friends: "朋友們", m_about: "關於",
@@ -82,6 +86,10 @@ const I18N = {
     tag_back: "← 全部標籤", tag_empty: "該標籤下還沒有文章。",
     friends_title: "朋友們", about_title: "關於",
     tts_read: "🔊 朗讀", tts_stop: "⏹ 停止",
+    like: "👍 讚", favorite: "⭐ 收藏", views: "閱讀 {0}",
+    translate: "🌐 翻譯", orig: "原文", trans: "譯文",
+    ask_title: "站內問答", ask_ph: "問我關於部落格的任何問題…", send: "傳送",
+    rss: "RSS", sitemap: "網站地圖",
   },
   en: {
     m_posts: "Posts", m_timeline: "Timeline", m_feed: "Feed", m_tags: "Tags", m_friends: "Friends", m_about: "About",
@@ -109,6 +117,10 @@ const I18N = {
     tag_back: "← All tags", tag_empty: "No posts with this tag.",
     friends_title: "Friends", about_title: "About",
     tts_read: "🔊 Read", tts_stop: "⏹ Stop",
+    like: "👍 Like", favorite: "⭐ Save", views: "{0} views",
+    translate: "🌐 Translate", orig: "Original", trans: "Translation",
+    ask_title: "Ask the blog", ask_ph: "Ask me anything about this blog…", send: "Send",
+    rss: "RSS", sitemap: "Sitemap",
   },
 };
 let LANG = "zh";
@@ -560,19 +572,28 @@ async function renderPost(slug) {
     return;
   }
   const p = await res.json();
+  if (p.cover) setMeta("og:image", p.cover);
   const detail = el(`<div class="post-detail"></div>`);
   detail.innerHTML = `
     <h1>${p.title}</h1>
-    <button type="button" class="tts-btn" id="ttsBtn">${t("tts_read")}</button>
+    <div class="post-actions">
+      <button type="button" class="tts-btn" id="ttsBtn">${t("tts_read")}</button>
+      <span class="post-views" id="postViews"></span>
+      <button type="button" class="react-btn" id="likeBtn">👍 <span id="likeCount">0</span></button>
+      <button type="button" class="react-btn" id="favBtn">⭐ <span id="favCount">0</span></button>
+    </div>
     <div class="meta">${fmtDate(p.created_at)}${
       p.visibility === "private" ? " · " + t("private") : ""
     }</div>
-    <div class="content">${renderMarkdown(p.content)}</div>
+    <div class="content" id="postContent">${renderMarkdown(p.content)}</div>
     ${aiNotesHtml(p.ai_notes)}
     ${tagsHtml(p)}`;
   app.innerHTML = "";
   app.appendChild(detail);
   window.highlightCode(detail);
+  reportView(p.slug);
+  loadReactions(p.slug);
+  bindTranslate(detail, p);
   loadRelated(p.slug);
   attachComments(p.slug);
   // 文章朗读（浏览器内置语音合成，零配额、纯前端）
@@ -580,9 +601,10 @@ async function renderPost(slug) {
   if (ttsBtn && "speechSynthesis" in window) {
     let speaking = false;
     ttsBtn.onclick = () => {
-      if (speaking) { window.speechSynthesis.cancel(); return; }
-      const txt = (detail.querySelector(".content")?.innerText || "").trim();
+      const cEl = document.getElementById("postContent");
+      const txt = (cEl?.innerText || "").trim();
       if (!txt) return;
+      if (speaking) { window.speechSynthesis.cancel(); return; }
       const u = new SpeechSynthesisUtterance(txt);
       u.lang = ttsLang(); u.rate = 1; u.pitch = 1;
       u.onend = () => { speaking = false; ttsBtn.classList.remove("active"); ttsBtn.textContent = t("tts_read"); };
@@ -591,6 +613,102 @@ async function renderPost(slug) {
       speaking = true; ttsBtn.classList.add("active"); ttsBtn.textContent = t("tts_stop");
     };
   }
+}
+
+// 阅读量上报（每会话只报一次，避免刷新虚高）
+function reportView(slug) {
+  try {
+    const k = "view:" + slug;
+    if (sessionStorage.getItem(k)) return;
+    sessionStorage.setItem(k, "1");
+  } catch {}
+  api("/view", { method: "POST", body: JSON.stringify({ slug }) })
+    .then((r) => r.json())
+    .then((d) => {
+      const elv = document.getElementById("postViews");
+      if (elv && d.views != null) elv.textContent = t("views", d.views);
+    })
+    .catch(() => {});
+}
+
+// 点赞 / 收藏：计数展示 + 切换（匿名用 localStorage 持久化 user_key）
+function reactionUserKey() {
+  try {
+    let k = localStorage.getItem("blog-uid");
+    if (!k) { k = "anon-" + crypto.randomUUID(); localStorage.setItem("blog-uid", k); }
+    return k;
+  } catch { return "anon"; }
+}
+async function loadReactions(slug) {
+  const likeBtn = document.getElementById("likeBtn");
+  const favBtn = document.getElementById("favBtn");
+  if (!likeBtn || !favBtn) return;
+  try {
+    const d = await (await api("/reactions?slug=" + encodeURIComponent(slug))).json();
+    const lc = document.getElementById("likeCount");
+    const fc = document.getElementById("favCount");
+    if (lc) lc.textContent = d.likes || 0;
+    if (fc) fc.textContent = d.favorites || 0;
+  } catch {}
+  const uk = reactionUserKey();
+  const paint = (kind, on) => {
+    const b = kind === "like" ? likeBtn : favBtn;
+    if (b) b.classList.toggle("active", on);
+  };
+  paint("like", (() => { try { return localStorage.getItem("react:like:" + slug) === "1"; } catch { return false; } })());
+  paint("favorite", (() => { try { return localStorage.getItem("react:favorite:" + slug) === "1"; } catch { return false; } })());
+  likeBtn.onclick = async () => {
+    const r = await api("/reactions", { method: "POST", body: JSON.stringify({ slug, kind: "like", user_key: uk }) }).then((x) => x.json()).catch(() => null);
+    if (r) {
+      const lc = document.getElementById("likeCount");
+      if (lc) lc.textContent = r.likes;
+      const on = !!r.acted;
+      likeBtn.classList.toggle("active", on);
+      try { localStorage.setItem("react:like:" + slug, on ? "1" : "0"); } catch {}
+    }
+  };
+  favBtn.onclick = async () => {
+    const r = await api("/reactions", { method: "POST", body: JSON.stringify({ slug, kind: "favorite", user_key: uk }) }).then((x) => x.json()).catch(() => null);
+    if (r) {
+      const fc = document.getElementById("favCount");
+      if (fc) fc.textContent = r.favorites;
+      const on = !!r.acted;
+      favBtn.classList.toggle("active", on);
+      try { localStorage.setItem("react:favorite:" + slug, on ? "1" : "0"); } catch {}
+    }
+  };
+}
+
+// 正文翻译面板（管理员可用）：调 /api/ai/translate 翻译全文，可切回原文
+function bindTranslate(detail, p) {
+  if (!CURRENT_USER || CURRENT_USER.role !== "admin") return;
+  const content = document.getElementById("postContent");
+  if (!content) return;
+  const bar = el(`<div class="translate-bar"></div>`);
+  bar.innerHTML = `
+    <button type="button" class="btn btn-sm" id="tr-en">🌐 EN</button>
+    <button type="button" class="btn btn-sm" id="tr-zht">🌐 繁</button>
+    <button type="button" class="btn btn-sm" id="tr-back" style="display:none">${t("orig")}</button>
+    <span id="tr-msg" class="muted"></span>`;
+  const h1 = detail.querySelector("h1");
+  if (h1) h1.insertAdjacentElement("afterend", bar);
+  const original = p.content;
+  const show = (html) => { content.innerHTML = html; window.highlightCode(content); };
+  const tr = async (target) => {
+    const msg = bar.querySelector("#tr-msg");
+    msg.textContent = "翻译中…";
+    try {
+      const r = await api("/ai/translate", { method: "POST", body: JSON.stringify({ text: original, target }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) { msg.textContent = d.error || "翻译失败"; return; }
+      show(renderMarkdown(d.text || original));
+      bar.querySelector("#tr-back").style.display = "";
+      msg.textContent = t("trans");
+    } catch { msg.textContent = "翻译失败"; }
+  };
+  bar.querySelector("#tr-en").onclick = () => tr("en");
+  bar.querySelector("#tr-zht").onclick = () => tr("zht");
+  bar.querySelector("#tr-back").onclick = () => { show(renderMarkdown(original)); bar.querySelector("#tr-back").style.display = "none"; bar.querySelector("#tr-msg").textContent = ""; };
 }
 
 // 文章底部「相关文章」：调用 /api/related（向量相似度 top3，无向量时按标签兜底）
@@ -682,14 +800,47 @@ async function loadComments(slug) {
       list.innerHTML = `<div class="empty">${t("c_empty")}</div>`;
       return;
     }
-    let html = "";
+    const byId = {};
+    const roots = [];
+    for (const c of cs) { c._children = []; byId[c.id] = c; }
     for (const c of cs) {
-      html += `<div class="comment-item">
-        <div class="comment-head"><span class="comment-author">${escHtml(c.author)}</span><span class="comment-date">${fmtDate(c.created_at)}</span></div>
-        <div class="comment-body">${escHtml(c.content)}</div>
-      </div>`;
+      if (c.parent_id && byId[c.parent_id]) byId[c.parent_id]._children.push(c);
+      else roots.push(c);
     }
-    list.innerHTML = html;
+    const renderItem = (c, depth) => {
+      const replies = (c._children || []).map((ch) => renderItem(ch, depth + 1)).join("");
+      const replyBox = `<div class="reply-box" id="reply-${c.id}" style="display:none">
+        <input type="text" class="reply-author" placeholder="${t("c_author_ph")}" maxlength="40" />
+        <textarea class="reply-content" placeholder="${t("c_content_ph")}" maxlength="1000"></textarea>
+        <button class="btn btn-sm btn-primary reply-submit">${t("c_submit")}</button>
+      </div>`;
+      return `<div class="comment-item${depth ? " comment-child" : ""}">
+        <div class="comment-head"><span class="comment-author">${escHtml(c.author)}</span><span class="comment-date">${fmtDate(c.created_at)}</span>
+          <button type="button" class="reply-toggle" data-id="${c.id}">回复</button></div>
+        <div class="comment-body">${escHtml(c.content)}</div>
+        ${replyBox}
+        ${replies}
+      </div>`;
+    };
+    list.innerHTML = roots.map((c) => renderItem(c, 0)).join("");
+    list.querySelectorAll(".reply-toggle").forEach((btn) => {
+      btn.onclick = () => {
+        const box = list.querySelector("#reply-" + btn.dataset.id);
+        if (box) box.style.display = box.style.display === "none" ? "block" : "none";
+      };
+    });
+    list.querySelectorAll(".reply-submit").forEach((btn) => {
+      btn.onclick = async () => {
+        const box = btn.closest(".reply-box");
+        const author = box.querySelector(".reply-author").value.trim();
+        const content = box.querySelector(".reply-content").value.trim();
+        const parentId = Number(btn.closest(".comment-item").querySelector(".reply-toggle").dataset.id);
+        if (!author || !content) { toast(t("c_fill")); return; }
+        const r = await api("/comments", { method: "POST", body: JSON.stringify({ post_slug: slug, author, content, parent_id: parentId, hp: "" }) });
+        if (r.ok) { toast(t("c_success")); loadComments(slug); }
+        else toast(t("c_fail"));
+      };
+    });
   } catch {
     list.innerHTML = `<div class="empty">${t("c_load_fail")}</div>`;
   }
@@ -949,6 +1100,60 @@ async function init() {
     route();
   });
   route();
+  buildAskBot();
+  registerPWA();
+  addFooterLinks();
 }
 
 init();
+
+// 站内问答浮窗（全局，复用 /api/ai/ask）
+function buildAskBot() {
+  if (document.getElementById("ask-bot")) return;
+  const fab = el(`<button type="button" id="ask-fab" class="ask-fab" title="${t("ask_title")}">💬</button>`);
+  const panel = el(`<div id="ask-bot" class="ask-bot" style="display:none">
+    <div class="ask-head"><span>${t("ask_title")}</span><button type="button" id="ask-close">✕</button></div>
+    <div class="ask-log" id="ask-log"></div>
+    <div class="ask-input"><textarea id="ask-q" placeholder="${t("ask_ph")}" rows="2"></textarea><button type="button" id="ask-send" class="btn btn-primary btn-sm">${t("send")}</button></div>
+  </div>`);
+  document.body.appendChild(fab);
+  document.body.appendChild(panel);
+  fab.onclick = () => { panel.style.display = panel.style.display === "none" ? "flex" : "none"; };
+  document.getElementById("ask-close").onclick = () => { panel.style.display = "none"; };
+  const log = () => document.getElementById("ask-log");
+  const send = async () => {
+    const qEl = document.getElementById("ask-q");
+    const q = qEl.value.trim();
+    if (!q) return;
+    log().innerHTML += `<div class="ask-me">${escHtml(q)}</div>`;
+    qEl.value = "";
+    log().innerHTML += `<div class="ask-ai" id="ask-typing">…</div>`;
+    log().scrollTop = log().scrollHeight;
+    try {
+      const r = await api("/ai/ask", { method: "POST", body: JSON.stringify({ question: q }) });
+      const d = await r.json().catch(() => ({}));
+      const typing = document.getElementById("ask-typing");
+      if (!r.ok) { if (typing) typing.outerHTML = `<div class="ask-ai">${escHtml(d.error || "问答失败")}</div>`; return; }
+      const refs = (d.refs || []).map((rf) => `<a href="#/post/${encodeURIComponent(rf.slug)}">${escHtml(rf.title)}</a>`).join(" · ");
+      if (typing) typing.outerHTML = `<div class="ask-ai">${renderMarkdown(d.answer || "")}${refs ? `<div class="ask-refs">${refs}</div>` : ""}</div>`;
+    } catch { const typing = document.getElementById("ask-typing"); if (typing) typing.outerHTML = `<div class="ask-ai">问答失败</div>`; }
+  };
+  document.getElementById("ask-send").onclick = send;
+  document.getElementById("ask-q").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); });
+}
+
+// PWA：注册 Service Worker（离线可安装）
+function registerPWA() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+
+// 页脚加 RSS / Sitemap 链接
+function addFooterLinks() {
+  const stats = document.getElementById("site-stats");
+  if (!stats || stats.querySelector(".foot-links")) return;
+  const links = el(`<span class="foot-links"><a href="/feed.xml" target="_blank" rel="noopener">${t("rss")}</a> · <a href="/sitemap.xml" target="_blank" rel="noopener">${t("sitemap")}</a></span>`);
+  stats.appendChild(links);
+}

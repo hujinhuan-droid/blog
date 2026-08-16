@@ -1,0 +1,11 @@
+{
+  "name": "AI Agent Blog",
+  "short_name": "AI Agent",
+  "description": "记录 AI Agent 的探索、实践与思考",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": []
+}

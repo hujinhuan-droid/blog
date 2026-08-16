@@ -27,6 +27,9 @@ import {
   parseTags,
   getMeta,
   incMeta,
+  getReactionCounts,
+  toggleReaction,
+  getTotalViews,
 } from "./db";
 
 interface Env extends AuthEnv {
@@ -231,11 +234,63 @@ function cardOf(p: any): any {
     cover: p.cover,
     tags: p.tags,
     visibility: p.visibility,
+    status: p.status,
+    views: p.views || 0,
     created_at: p.created_at,
   };
 }
 
 // ---------------- 路由 ----------------
+
+function escXml(s: string): string {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// RSS Feed（公开）：最近 50 篇公开文章
+async function handleFeed(env: Env): Promise<Response> {
+  const posts = await listPosts(env.DB, { admin: false });
+  const base = (env.APP_URL || "").replace(/\/$/, "");
+  const items = posts
+    .slice(0, 50)
+    .map((p: any) => {
+      const link = `${base}/#/post/${encodeURIComponent(p.slug)}`;
+      const desc = (p.excerpt || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return `    <item>
+      <title>${escXml(p.title)}</title>
+      <link>${link}</link>
+      <guid>${link}</guid>
+      <pubDate>${new Date(p.created_at).toUTCString()}</pubDate>
+      <description>${desc}</description>
+    </item>`;
+    })
+    .join("\n");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>AI Agent Blog</title>
+    <link>${base}/</link>
+    <description>AI Agent 博客</description>
+    <language>zh-CN</language>
+${items}
+  </channel>
+</rss>`;
+  return new Response(xml, { headers: { "content-type": "application/rss+xml; charset=utf-8" } });
+}
+
+// 站点地图（公开）
+async function handleSitemap(env: Env): Promise<Response> {
+  const posts = await listPosts(env.DB, { admin: false });
+  const base = (env.APP_URL || "").replace(/\/$/, "");
+  const urls = posts
+    .map((p: any) => `  <url><loc>${base}/#/post/${encodeURIComponent(p.slug)}</loc><lastmod>${new Date(p.updated_at).toISOString()}</lastmod></url>`)
+    .join("\n");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+  <url><loc>${base}/</loc></url>
+</urlset>`;
+  return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8" } });
+}
 
 async function handleApi(req: Request, env: Env, path: string[], method: string): Promise<Response> {
   const user = await currentUser(req, env);
@@ -318,6 +373,8 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       excerpt: body.excerpt,
       cover: body.cover,
       visibility: body.visibility,
+      status: body.status,
+      scheduled_at: body.scheduled_at ?? null,
       author_id: user!.id,
       tags: body.tags,
       embedding: emb || undefined,
@@ -335,7 +392,18 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       const existing = await getPostById(env.DB, id, { admin: true });
       if (!existing) return json({ error: "文章不存在" }, 404);
       const emb = await embedText(env, (body.title ?? existing.title) + "\n" + (body.content ?? existing.content));
-      const row = await updatePost(env.DB, id, { ...body, embedding: emb || undefined });
+      const row = await updatePost(env.DB, id, {
+        title: body.title,
+        content: body.content,
+        excerpt: body.excerpt,
+        cover: body.cover,
+        visibility: body.visibility,
+        status: body.status,
+        scheduled_at: body.scheduled_at ?? null,
+        ai_notes: body.ai_notes,
+        tags: body.tags,
+        embedding: emb || undefined,
+      });
       return row ? json(row) : json({ error: "文章不存在" }, 404);
     }
     if (method === "DELETE") {
@@ -594,6 +662,84 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     return json({ ok, fail, total: posts.length });
   }
 
+  // 阅读量上报（公开）
+  if (method === "POST" && seg.length === 2 && seg[1] === "view") {
+    const body = await readJson(req);
+    const slug = (body.slug || "").toString().trim();
+    if (!slug) return json({ error: "缺少 slug" }, 400);
+    await env.DB.prepare("UPDATE posts SET views = views + 1 WHERE slug = ? AND visibility = 'public'").bind(slug).run();
+    const r = (await env.DB.prepare("SELECT views FROM posts WHERE slug = ?").bind(slug).first()) as any;
+    return json({ views: r ? Number(r.views) || 0 : 0 });
+  }
+
+  // 点赞 / 收藏计数与切换
+  if (method === "GET" && seg.length === 2 && seg[1] === "reactions") {
+    const slug = new URL(req.url).searchParams.get("slug") || "";
+    if (!slug) return json({ error: "缺少 slug" }, 400);
+    const post = await getPostBySlug(env.DB, slug, { admin: false });
+    if (!post) return json({ error: "文章不存在" }, 404);
+    return json(await getReactionCounts(env.DB, post.id));
+  }
+  if (method === "POST" && seg.length === 2 && seg[1] === "reactions") {
+    const body = await readJson(req);
+    const slug = (body.slug || "").toString().trim();
+    const kind = body.kind === "favorite" ? "favorite" : "like";
+    const userKey = (body.user_key || "").toString().trim();
+    if (!slug || !userKey) return json({ error: "缺少参数" }, 400);
+    const post = await getPostBySlug(env.DB, slug, { admin: false });
+    if (!post) return json({ error: "文章不存在" }, 404);
+    return json(await toggleReaction(env.DB, post.id, kind, userKey));
+  }
+
+  // 正文多语翻译（管理员）
+  if (method === "POST" && seg.length === 3 && seg[1] === "ai" && seg[2] === "translate") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const text = (body.text || "").toString();
+    const target = body.target === "en" ? "en" : body.target === "zht" ? "zht" : "zh";
+    if (!text.trim()) return json({ error: "正文不能为空" }, 400);
+    const langName = target === "en" ? "English" : target === "zht" ? "繁體中文" : "简体中文";
+    const sys = `你是一位专业翻译。请将下面的 Markdown 文章正文翻译成${langName}。保持所有 Markdown 格式与占位符不变，只翻译自然语言内容。只返回翻译后的全文，不要任何额外解释或前后缀。`;
+    try {
+      const gen = await callWorkersText(env, sys, text);
+      if (!gen) return json({ error: "翻译失败" }, 502);
+      return json({ text: gen });
+    } catch (e: any) {
+      return json({ error: e.message || "翻译失败" }, 502);
+    }
+  }
+
+  // 站内问答（公开）：检索相关文章 + Workers AI 生成中文回答并附引用
+  if (method === "POST" && seg.length === 3 && seg[1] === "ai" && seg[2] === "ask") {
+    const body = await readJson(req);
+    const question = (body.question || "").toString().trim();
+    if (!question) return json({ error: "请输入问题" }, 400);
+    const all = await listPosts(env.DB, { admin: false });
+    const qEmb = await embedText(env, question);
+    const top = all
+      .map((p: any) => {
+        let emb: number[] | null = null;
+        try { emb = p.embedding ? JSON.parse(p.embedding) : null; } catch {}
+        const ql = question.toLowerCase();
+        const kw = ((p.title || "") + " " + (p.content || "")).toLowerCase().includes(ql) ? 0.5 : 0;
+        const vec = emb && qEmb ? cosine(qEmb, emb) : 0;
+        return { p, score: emb && qEmb ? Math.max(kw, 0.4 + 0.6 * vec) : kw };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+    const ctx = top.map((x: any, i: number) => `【文章${i + 1}】${x.p.title}\n${(x.p.content || "").slice(0, 1500)}`).join("\n\n");
+    const refs = top.map((x: any) => ({ title: x.p.title, slug: x.p.slug }));
+    const sys = `你是本博客的站内问答助手。请仅基于下面提供的「站内文章资料」回答用户问题，用简体中文、条理清晰地作答；若资料不足以回答，请坦诚说明「站内暂无相关内容」，不要编造。可在末尾列出引用的文章标题。`;
+    const userText = `用户问题：${question}\n\n站内文章资料：\n${ctx || "（无）"}`;
+    try {
+      const answer = await callWorkersText(env, sys, userText);
+      return json({ answer: answer || "（暂无回答）", refs });
+    } catch (e: any) {
+      return json({ error: e.message || "问答失败" }, 502);
+    }
+  }
+
   // 数据看板统计（管理员）
   if (method === "GET" && seg.length === 2 && seg[1] === "stats") {
     if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
@@ -604,6 +750,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const comments = cRow ? Number(cRow.c) || 0 : 0;
     const tagList = await listTags(env.DB, { admin: true });
     const aiUsage = await getMeta(env.DB, "ai_usage_count");
+    const totalViews = await getTotalViews(env.DB);
     const since = Date.now() - 7 * 86400000;
     const rows = (await env.DB
       .prepare("SELECT DATE(created_at/1000,'unixepoch') d, COUNT(*) c FROM posts WHERE created_at >= ? GROUP BY d ORDER BY d")
@@ -617,7 +764,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       const key = d.toISOString().slice(0, 10);
       recent7.push({ date: key, count: byDay[key] || 0 });
     }
-    return json({ total, public: publicCount, private: total - publicCount, comments, tags: tagList.length, aiUsage, recent7 });
+    return json({ total, public: publicCount, private: total - publicCount, comments, tags: tagList.length, aiUsage, totalViews, recent7 });
   }
 
   // 语义搜索（公开）：向量检索 + 关键词兜底
@@ -718,7 +865,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     return json(rows);
   }
 
-  // 提交评论（公开；含蜜罐字段防机器人）
+  // 提交评论（公开；含蜜罐字段防机器人；支持 parent_id 嵌套回复）
   if (method === "POST" && seg.length === 2 && seg[1] === "comments") {
     const body = await readJson(req);
     // 蜜罐：隐藏字段被填写说明是机器人，静默成功但不存储
@@ -727,11 +874,12 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const author = (body.author || "").toString().trim();
     const content = (body.content || "").toString().trim();
     const email = body.email ? String(body.email).toString().trim() : null;
+    const parent_id = Number(body.parent_id) || 0;
     if (!slug || !author || !content) return json({ error: "请填写昵称和评论内容" }, 400);
     if (author.length > 40 || content.length > 1000) return json({ error: "内容过长" }, 400);
     const post = await getPostBySlug(env.DB, slug);
     if (!post) return json({ error: "文章不存在" }, 404);
-    const row = await createComment(env.DB, { post_slug: slug, author, email, content });
+    const row = await createComment(env.DB, { post_slug: slug, author, email, content, parent_id });
     return json(row, 201);
   }
 
@@ -751,6 +899,10 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname.split("/").filter(Boolean); // ['api', ...] 或 []
+
+    // 站点地图与 RSS（公开）
+    if (path[0] === "sitemap.xml") return await handleSitemap(env);
+    if (path[0] === "feed.xml") return await handleFeed(env);
 
     if (path[0] === "api") {
       try {

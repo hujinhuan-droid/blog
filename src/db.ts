@@ -1,4 +1,4 @@
-// D1 数据访问层 —— 文章 / 用户 / 会话
+// D1 数据访问层 —— 文章 / 用户 / 会话 / 互动
 
 export interface PostRow {
   id: number;
@@ -8,6 +8,9 @@ export interface PostRow {
   excerpt: string;
   cover: string | null;
   visibility: string;
+  status: string; // 'published' | 'draft'
+  scheduled_at: number | null;
+  views: number;
   ai_notes: string | null;
   tags: string | null;
   embedding: string | null;
@@ -69,7 +72,7 @@ export function slugify(title: string): string {
   return `${clean}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** 列表：非管理员只能看 public；管理员可见全部（可再按 visibility 过滤） */
+/** 列表：非管理员只能看 public + 已发布 + 未到定时时间的文章；管理员可见全部（可再按 visibility 过滤） */
 export async function listPosts(
   db: DB,
   opts: { admin?: boolean; visibility?: string } = {}
@@ -79,6 +82,10 @@ export async function listPosts(
   if (!opts.admin) {
     where.push("visibility = ?");
     params.push("public");
+    where.push("status = ?");
+    params.push("published");
+    where.push("(scheduled_at IS NULL OR scheduled_at <= ?)");
+    params.push(now());
   } else if (opts.visibility) {
     where.push("visibility = ?");
     params.push(opts.visibility);
@@ -101,7 +108,11 @@ export async function getPostBySlug(
     .bind(slug)
     .first()) as PostRow | null;
   if (!row) return null;
-  if (row.visibility !== "public" && !opts.admin) return null;
+  if (!opts.admin) {
+    if (row.visibility !== "public") return null;
+    if (row.status && row.status !== "published") return null;
+    if (row.scheduled_at && row.scheduled_at > now()) return null;
+  }
   return row;
 }
 
@@ -115,27 +126,45 @@ export async function getPostById(
     .bind(id)
     .first()) as PostRow | null;
   if (!row) return null;
-  if (row.visibility !== "public" && !opts.admin) return null;
+  if (!opts.admin) {
+    if (row.visibility !== "public") return null;
+    if (row.status && row.status !== "published") return null;
+    if (row.scheduled_at && row.scheduled_at > now()) return null;
+  }
   return row;
 }
 
 export async function createPost(
   db: DB,
-  data: { title: string; content: string; excerpt?: string; cover?: string; visibility?: string; author_id?: number | null; ai_notes?: string; tags?: string; embedding?: number[] | string }
+  data: {
+    title: string;
+    content: string;
+    excerpt?: string;
+    cover?: string;
+    visibility?: string;
+    status?: string;
+    scheduled_at?: number | null;
+    author_id?: number | null;
+    ai_notes?: string;
+    tags?: string;
+    embedding?: number[] | string;
+  }
 ): Promise<PostRow> {
   const slug = slugify(data.title);
   const ts = now();
   const excerpt = (data.excerpt || data.content.replace(/[#>*`\-\s]/g, "").slice(0, 120)).trim();
   const visibility = data.visibility || "public";
+  const status = data.status || "published";
+  const scheduled_at = data.scheduled_at != null ? data.scheduled_at : null;
   const cover = data.cover || null;
   const ai_notes = data.ai_notes ?? null;
   const tags = data.tags ? stringifyTags(parseTags(data.tags)) : "[]";
   const embedding = data.embedding ? (Array.isArray(data.embedding) ? JSON.stringify(data.embedding) : String(data.embedding)) : null;
   await db
     .prepare(
-      "INSERT INTO posts (slug, title, content, excerpt, cover, visibility, ai_notes, tags, embedding, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO posts (slug, title, content, excerpt, cover, visibility, status, scheduled_at, ai_notes, tags, embedding, created_at, updated_at, author_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .bind(slug, data.title, data.content, excerpt, cover, visibility, ai_notes, tags, embedding, ts, ts, data.author_id ?? null)
+    .bind(slug, data.title, data.content, excerpt, cover, visibility, status, scheduled_at, ai_notes, tags, embedding, ts, ts, data.author_id ?? null)
     .run();
   return (await getPostBySlug(db, slug, { admin: true }))!;
 }
@@ -143,7 +172,18 @@ export async function createPost(
 export async function updatePost(
   db: DB,
   id: number,
-  data: { title?: string; content?: string; excerpt?: string; cover?: string; visibility?: string; ai_notes?: string; tags?: string; embedding?: number[] | string }
+  data: {
+    title?: string;
+    content?: string;
+    excerpt?: string;
+    cover?: string;
+    visibility?: string;
+    status?: string;
+    scheduled_at?: number | null;
+    ai_notes?: string;
+    tags?: string;
+    embedding?: number[] | string;
+  }
 ): Promise<PostRow | null> {
   const existing = (await db.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first()) as PostRow | null;
   if (!existing) return null;
@@ -154,6 +194,8 @@ export async function updatePost(
     (content.replace(/[#>*`\-\s]/g, "").slice(0, 120)).trim();
   const cover = data.cover !== undefined ? data.cover : existing.cover;
   const visibility = data.visibility ?? existing.visibility;
+  const status = data.status ?? existing.status;
+  const scheduled_at = data.scheduled_at !== undefined ? data.scheduled_at : existing.scheduled_at;
   const ai_notes = data.ai_notes !== undefined ? data.ai_notes : existing.ai_notes;
   const tags = data.tags !== undefined ? stringifyTags(parseTags(data.tags)) : existing.tags;
   const embedding = data.embedding !== undefined
@@ -162,9 +204,9 @@ export async function updatePost(
   const ts = now();
   await db
     .prepare(
-      "UPDATE posts SET title = ?, content = ?, excerpt = ?, cover = ?, visibility = ?, ai_notes = ?, tags = ?, embedding = ?, updated_at = ? WHERE id = ?"
+      "UPDATE posts SET title = ?, content = ?, excerpt = ?, cover = ?, visibility = ?, status = ?, scheduled_at = ?, ai_notes = ?, tags = ?, embedding = ?, updated_at = ? WHERE id = ?"
     )
-    .bind(title, content, excerpt, cover, visibility, ai_notes, tags, embedding, ts, id)
+    .bind(title, content, excerpt, cover, visibility, status, scheduled_at, ai_notes, tags, embedding, ts, id)
     .run();
   return (await getPostById(db, id, { admin: true }))!;
 }
@@ -278,6 +320,7 @@ export const SETTING_KEYS = [
   "seo_keywords",
   "moderation_enabled",
   "banned_words",
+  "notify_email",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -316,7 +359,13 @@ export async function incMeta(db: DB, k: string, by = 1): Promise<void> {
     .run();
 }
 
-// ---------------- 评论 ----------------
+// 站点总阅读量（看板用）
+export async function getTotalViews(db: DB): Promise<number> {
+  const r = (await db.prepare("SELECT COALESCE(SUM(views),0) v FROM posts").first()) as { v: number } | null;
+  return r ? Number(r.v) || 0 : 0;
+}
+
+// ---------------- 评论（支持嵌套） ----------------
 
 export interface CommentRow {
   id: number;
@@ -324,6 +373,7 @@ export interface CommentRow {
   author: string;
   email: string | null;
   content: string;
+  parent_id: number;
   created_at: number;
 }
 
@@ -337,15 +387,62 @@ export async function listComments(db: DB, postSlug: string): Promise<CommentRow
 
 export async function createComment(
   db: DB,
-  data: { post_slug: string; author: string; email?: string | null; content: string }
+  data: { post_slug: string; author: string; email?: string | null; content: string; parent_id?: number }
 ): Promise<CommentRow> {
   const ts = now();
+  const parent_id = data.parent_id || 0;
   await db
-    .prepare("INSERT INTO comments (post_slug, author, email, content, created_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(data.post_slug, data.author, data.email || null, data.content, ts)
+    .prepare("INSERT INTO comments (post_slug, author, email, content, parent_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+    .bind(data.post_slug, data.author, data.email || null, data.content, parent_id, ts)
     .run();
   return (await db
     .prepare("SELECT * FROM comments WHERE post_slug = ? ORDER BY created_at DESC LIMIT 1")
     .bind(data.post_slug)
     .first()) as CommentRow;
+}
+
+// ---------------- 点赞 / 收藏 ----------------
+
+export interface ReactionCounts {
+  likes: number;
+  favorites: number;
+}
+
+export async function getReactionCounts(db: DB, postId: number): Promise<ReactionCounts> {
+  const r = await db
+    .prepare("SELECT kind, COUNT(*) c FROM reactions WHERE post_id = ? GROUP BY kind")
+    .bind(postId)
+    .all();
+  const out: ReactionCounts = { likes: 0, favorites: 0 };
+  for (const row of (r.results as any[]) || []) {
+    if (row.kind === "like") out.likes = Number(row.c) || 0;
+    else if (row.kind === "favorite") out.favorites = Number(row.c) || 0;
+  }
+  return out;
+}
+
+// 切换点赞/收藏：已点则取消，未点则插入。返回最新计数与本用户是否已点（acted）
+export async function toggleReaction(
+  db: DB,
+  postId: number,
+  kind: string,
+  userKey: string
+): Promise<ReactionCounts & { acted: boolean }> {
+  const existing = await db
+    .prepare("SELECT id FROM reactions WHERE post_id = ? AND kind = ? AND user_key = ?")
+    .bind(postId, kind, userKey)
+    .first();
+  if (existing) {
+    await db
+      .prepare("DELETE FROM reactions WHERE post_id = ? AND kind = ? AND user_key = ?")
+      .bind(postId, kind, userKey)
+      .run();
+  } else {
+    await db
+      .prepare("INSERT INTO reactions (post_id, kind, user_key, created_at) VALUES (?, ?, ?, ?)")
+      .bind(postId, kind, userKey, now())
+      .run();
+  }
+  const counts = await getReactionCounts(db, postId);
+  return { ...counts, acted: !existing };
 }
