@@ -51,12 +51,12 @@ const I18N = {
     timeline_title: "时间轴", timeline_empty: "暂无文章",
     feed_title: "动态", feed_empty: "还没有动态，去管理后台发点什么吧。",
     search_title: "搜索", search_empty_q: "请输入关键词。", search_back: "← 返回", search_none: "没有找到相关文章。",
-    tags_title: "标签", tags_empty: "还没有标签，去文章编辑器加标签或用「🏷 AI 分类」吧。", tags_fail: "标签加载失败", post_load_fail: "文章加载失败",
+    tags_title: "标签", tags_empty: "还没有标签，去文章编辑器加标签或用「AI 分类」吧。", tags_fail: "标签加载失败", post_load_fail: "文章加载失败",
     tag_back: "← 全部标签", tag_empty: "该标签下还没有文章。",
     friends_title: "朋友们", about_title: "关于",
     tts_read: "🔊 朗读", tts_stop: "⏹ 停止",
-    like: "👍 赞", favorite: "⭐ 收藏", views: "阅读 {0}",
-    translate: "🌐 翻译", orig: "原文", trans: "译文",
+    like: "赞", favorite: "收藏", views: "阅读 {0}",
+    translate: "翻译", orig: "原文", trans: "译文",
     ask_title: "站内问答", ask_ph: "问我关于博客的任何问题…", send: "发送",
     rss: "RSS", sitemap: "站点地图",
   },
@@ -82,12 +82,12 @@ const I18N = {
     timeline_title: "時間軸", timeline_empty: "暫無文章",
     feed_title: "動態", feed_empty: "還沒有動態，去管理後台發點什麼吧。",
     search_title: "搜尋", search_empty_q: "請輸入關鍵詞。", search_back: "← 返回", search_none: "沒有找到相關文章。",
-    tags_title: "標籤", tags_empty: "還沒有標籤，去文章編輯器加標籤或用「🏷 AI 分類」吧。", tags_fail: "標籤載入失敗", post_load_fail: "文章載入失敗",
+    tags_title: "標籤", tags_empty: "還沒有標籤，去文章編輯器加標籤或用「AI 分類」吧。", tags_fail: "標籤載入失敗", post_load_fail: "文章載入失敗",
     tag_back: "← 全部標籤", tag_empty: "該標籤下還沒有文章。",
     friends_title: "朋友們", about_title: "關於",
     tts_read: "🔊 朗讀", tts_stop: "⏹ 停止",
-    like: "👍 讚", favorite: "⭐ 收藏", views: "閱讀 {0}",
-    translate: "🌐 翻譯", orig: "原文", trans: "譯文",
+    like: "讚", favorite: "收藏", views: "閱讀 {0}",
+    translate: "翻譯", orig: "原文", trans: "譯文",
     ask_title: "站內問答", ask_ph: "問我關於部落格的任何問題…", send: "傳送",
     rss: "RSS", sitemap: "網站地圖",
   },
@@ -113,12 +113,12 @@ const I18N = {
     timeline_title: "Timeline", timeline_empty: "No posts",
     feed_title: "Feed", feed_empty: "No feed updates yet.",
     search_title: "Search", search_empty_q: "Please enter a keyword.", search_back: "← Back", search_none: "No matching posts found.",
-    tags_title: "Tags", tags_empty: "No tags yet. Add tags in the editor or use “🏷 AI category”.", tags_fail: "Failed to load tags", post_load_fail: "Failed to load posts",
+    tags_title: "Tags", tags_empty: "No tags yet. Add tags in the editor or use 'AI category'.", tags_fail: "Failed to load tags", post_load_fail: "Failed to load posts",
     tag_back: "← All tags", tag_empty: "No posts with this tag.",
     friends_title: "Friends", about_title: "About",
     tts_read: "🔊 Read", tts_stop: "⏹ Stop",
-    like: "👍 Like", favorite: "⭐ Save", views: "{0} views",
-    translate: "🌐 Translate", orig: "Original", trans: "Translation",
+    like: "👍 Like", favorite: "Save", views: "{0} views",
+    translate: "Translate", orig: "Original", trans: "Translation",
     ask_title: "Ask the blog", ask_ph: "Ask me anything about this blog…", send: "Send",
     rss: "RSS", sitemap: "Sitemap",
   },
@@ -239,7 +239,7 @@ function aiNotesHtml(notes, mini) {
   if (!notes || !notes.trim()) return "";
   return `
     <section class="ai-notes${mini ? " ai-notes-mini" : ""}">
-      <div class="ai-notes-head">🤖 AI 备注</div>
+      <div class="ai-notes-head"><i data-lucide="bot"></i> AI 备注</div>
       <div class="ai-notes-body">${renderMarkdown(notes)}</div>
     </section>`;
 }
@@ -272,19 +272,19 @@ function pickIcon(p) {
   const tags = parseTags(p.tags).join(" ");
   const t = ((p.title || "") + " " + tags).toLowerCase();
   const map = [
-    [/(ai|人工智能|智能体|agent|llm|gpt|大模型|机器学习|深度学习|神经网络|提示词|prompt)/, "🤖"],
-    [/(代码|编程|程序|js|javascript|python|java|go|rust|c\+\+|前端|后端|bug|函数|算法|开发|脚本)/, "💻"],
-    [/(教程|指南|上手|入门|实战|手册|文档|搭建)/, "📚"],
-    [/(笔记|记录|总结|复盘|整理|清单)/, "📝"],
-    [/(思考|想法|观点|随笔|感悟|建议|心得)/, "💡"],
-    [/(新闻|快讯|动态|资讯|公告|发布)/, "📰"],
-    [/(安全|隐私|加密|漏洞|防护|密码)/, "🔐"],
-    [/(部署|服务器|运维|云|cloudflare|docker|k8s|域名|网络)/, "☁️"],
-    [/(生活|日常|旅行|美食|健康|摄影|运动)/, "🌿"],
-    [/(设计|ui|ux|排版|美化|视觉|配色|样式)/, "🎨"],
+    [/(ai|人工智能|智能体|agent|llm|gpt|大模型|机器学习|深度学习|神经网络|提示词|prompt)/, "bot"],
+    [/(代码|编程|程序|js|javascript|python|java|go|rust|c\+\+|前端|后端|bug|函数|算法|开发|脚本)/, "code"],
+    [/(教程|指南|上手|入门|实战|手册|文档|搭建)/, "book-open"],
+    [/(笔记|记录|总结|复盘|整理|清单)/, "notebook-pen"],
+    [/(思考|想法|观点|随笔|感悟|建议|心得)/, "lightbulb"],
+    [/(新闻|快讯|动态|资讯|公告|发布)/, "newspaper"],
+    [/(安全|隐私|加密|漏洞|防护|密码)/, "shield"],
+    [/(部署|服务器|运维|云|cloudflare|docker|k8s|域名|网络)/, "cloud"],
+    [/(生活|日常|旅行|美食|健康|摄影|运动)/, "leaf"],
+    [/(设计|ui|ux|排版|美化|视觉|配色|样式)/, "palette"],
   ];
   for (const [re, icon] of map) if (re.test(t)) return icon;
-  return "📄";
+  return "file-text";
 }
 
 // 估算阅读时间（优先用正文，其次摘要；无内容则返回空）
@@ -302,7 +302,7 @@ function postCardHtml(p) {
   const read = calcReadTime(p);
   return `<article class="post-card">
     <div class="post-card-head">
-      <span class="post-icon" aria-hidden="true">${icon}</span>
+      <span class="post-icon" aria-hidden="true"><i data-lucide="${icon}"></i></span>
       <div class="post-head-body">
         <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
           p.visibility === "private" ? `<span class="badge">${t("private")}</span>` : ""
@@ -339,7 +339,7 @@ function featuredHtml(p) {
   const read = calcReadTime(p);
   return `<article class="post-card featured">
     <div class="post-card-head">
-      <span class="post-icon" aria-hidden="true">${icon}</span>
+      <span class="post-icon" aria-hidden="true"><i data-lucide="${icon}"></i></span>
       <div class="post-head-body">
         <span class="featured-tag">${t("featured_tag")}</span>
         <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
@@ -585,8 +585,8 @@ async function renderPost(slug) {
     <div class="post-actions">
       <button type="button" class="tts-btn" id="ttsBtn">${t("tts_read")}</button>
       <span class="post-views" id="postViews"></span>
-      <button type="button" class="react-btn" id="likeBtn">👍 <span id="likeCount">0</span></button>
-      <button type="button" class="react-btn" id="favBtn">⭐ <span id="favCount">0</span></button>
+      <button type="button" class="react-btn" id="likeBtn"><i data-lucide="thumbs-up"></i> <span id="likeCount">0</span></button>
+      <button type="button" class="react-btn" id="favBtn"><i data-lucide="star"></i> <span id="favCount">0</span></button>
     </div>
     <div class="meta">${fmtDate(p.created_at)}${
       p.visibility === "private" ? " · " + t("private") : ""
@@ -692,8 +692,8 @@ function bindTranslate(detail, p) {
   if (!content) return;
   const bar = el(`<div class="translate-bar"></div>`);
   bar.innerHTML = `
-    <button type="button" class="btn btn-sm" id="tr-en">🌐 EN</button>
-    <button type="button" class="btn btn-sm" id="tr-zht">🌐 繁</button>
+    <button type="button" class="btn btn-sm" id="tr-en"><i data-lucide="languages"></i> EN</button>
+    <button type="button" class="btn btn-sm" id="tr-zht"><i data-lucide="languages"></i> 繁</button>
     <button type="button" class="btn btn-sm" id="tr-back" style="display:none">${t("orig")}</button>
     <span id="tr-msg" class="muted"></span>`;
   const h1 = detail.querySelector("h1");
@@ -1078,9 +1078,9 @@ function initTheme() {
   fab.className = "site-theme-fab";
   fab.innerHTML = `
     <div class="theme-switch" role="group" aria-label="主题模式">
-      <button type="button" class="theme-opt" data-mode="light" title="浅色模式">☀️</button>
-      <button type="button" class="theme-opt" data-mode="dark" title="深色模式">🌙</button>
-      <button type="button" class="theme-opt" data-mode="system" title="跟随系统">🖥️</button>
+      <button type="button" class="theme-opt" data-mode="light" title="浅色模式"><i data-lucide="sun"></i></button>
+      <button type="button" class="theme-opt" data-mode="dark" title="深色模式"><i data-lucide="moon"></i></button>
+      <button type="button" class="theme-opt" data-mode="system" title="跟随系统"><i data-lucide="monitor"></i></button>
     </div>`;
   document.body.appendChild(fab);
 
@@ -1147,7 +1147,7 @@ init();
 // 站内问答浮窗（全局，复用 /api/ai/ask）
 function buildAskBot() {
   if (document.getElementById("ask-bot")) return;
-  const fab = el(`<button type="button" id="ask-fab" class="ask-fab" title="${t("ask_title")}">💬</button>`);
+  const fab = el(`<button type="button" id="ask-fab" class="ask-fab" title="${t("ask_title")}"><i data-lucide="message-circle"></i></button>`);
   const panel = el(`<div id="ask-bot" class="ask-bot" style="display:none">
     <div class="ask-head"><span>${t("ask_title")}</span><button type="button" id="ask-close">✕</button></div>
     <div class="ask-log" id="ask-log"></div>

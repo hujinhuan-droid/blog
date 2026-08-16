@@ -14,7 +14,7 @@
     <header class="topbar">
       <div class="wrap">
         <a class="brand" href="#/">AI Agent Blog</a>
-        <button class="nav-toggle" id="navToggle" aria-label="展开菜单">☰</button>
+        <button class="nav-toggle" id="navToggle" aria-label="展开菜单"><i data-lucide="menu"></i></button>
         <nav class="nav" id="nav"></nav>
       </div>
     </header>
@@ -30,6 +30,22 @@
 
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script>
+      // Lucide 图标：每次 DOM 变化（含 SPA 路由切换/动态插入）后自动渲染 data-lucide 元素
+      (function () {
+        var refresh = function () { if (window.lucide) window.lucide.createIcons(); };
+        refresh();
+        var pending = false;
+        var io = new MutationObserver(function () {
+          if (pending) return;
+          pending = true;
+          requestAnimationFrame(function () { pending = false; refresh(); });
+        });
+        io.observe(document.body, { childList: true, subtree: true });
+        window.addEventListener("hashchange", refresh);
+      })();
+    </script>
     <script src="/js/markdown.js"></script>
     <script src="/js/admin.js"></script>
     <script src="/js/app.js"></script>

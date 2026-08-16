@@ -20,22 +20,22 @@ function buildAdminShell() {
     <div class="admin-shell">
       <aside class="admin-sidebar">
         <div class="admin-brand" id="adminBrand">
-          <span class="admin-logo">🤖</span>
+          <span class="admin-logo"><i data-lucide="bot"></i></span>
           <div class="admin-brand-txt">
             <div class="admin-brand-name">AI Agent</div>
             <div class="admin-brand-sub">管理后台</div>
           </div>
           <span class="caret brand-caret">▾</span>
           <div class="admin-brand-menu" id="adminBrandMenu" role="menu">
-            <button type="button" class="admin-menu-item" id="btnChangePw2">🔑 修改密码</button>
-            <button type="button" class="admin-menu-item danger" id="btnLogout2">🚪 登出</button>
+            <button type="button" class="admin-menu-item" id="btnChangePw2"><i data-lucide="key-round"></i> 修改密码</button>
+            <button type="button" class="admin-menu-item danger" id="btnLogout2"><i data-lucide="log-out"></i> 登出</button>
           </div>
         </div>
         <nav class="admin-nav">
-          <a class="admin-nav-item" href="#/admin" data-nav="overview"><span class="ico">📊</span><span>概览</span></a>
-          <a class="admin-nav-item" href="#/admin/posts" data-nav="posts"><span class="ico">📝</span><span>文章</span></a>
-          <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico">🖼️</span><span>媒体库</span></a>
-          <a class="admin-nav-item" href="#/admin/settings" data-nav="settings"><span class="ico">⚙️</span><span>设置</span></a>
+          <a class="admin-nav-item" href="#/admin" data-nav="overview"><span class="ico"><i data-lucide="layout-dashboard"></i></span><span>概览</span></a>
+          <a class="admin-nav-item" href="#/admin/posts" data-nav="posts"><span class="ico"><i data-lucide="file-text"></i></span><span>文章</span></a>
+          <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico"><i data-lucide="images"></i></span><span>媒体库</span></a>
+          <a class="admin-nav-item" href="#/admin/settings" data-nav="settings"><span class="ico"><i data-lucide="settings"></i></span><span>设置</span></a>
         </nav>
         <div class="admin-side-foot">
           <button type="button" class="admin-user" id="adminUserBtn" aria-haspopup="true" aria-expanded="false">
@@ -47,15 +47,15 @@ function buildAdminShell() {
             <span class="caret">▾</span>
           </button>
           <div class="admin-user-menu" id="adminUserMenu" role="menu">
-            <button type="button" class="admin-menu-item" id="btnChangePw">🔑 修改密码</button>
-            <button type="button" class="admin-menu-item danger" id="btnLogout">🚪 登出</button>
+            <button type="button" class="admin-menu-item" id="btnChangePw"><i data-lucide="key-round"></i> 修改密码</button>
+            <button type="button" class="admin-menu-item danger" id="btnLogout"><i data-lucide="log-out"></i> 登出</button>
           </div>
         </div>
       </aside>
       <div class="admin-content">
         <header class="admin-topbar">
           <span class="admin-top-title" id="admin-top-title">概览</span>
-          <a class="admin-home-btn" href="#/" title="返回网站首页">🏠 返回首页</a>
+          <a class="admin-home-btn" href="#/" title="返回网站首页"><i data-lucide="home"></i> 返回首页</a>
         </header>
         <div class="admin-main" id="admin-main"></div>
       </div>
@@ -383,7 +383,7 @@ async function renderDashboard() {
           <div class="mini-title">${escHtml(p.title)}</div>
           <div class="mini-sub">${p.visibility === "private" ? "私密" : "公开"}${tg.length ? " · " + tg.slice(0, 3).join("、") : ""} · ${fmtDate(p.updated_at)}</div>
         </div>
-        <span class="mini-go">✎</span>`;
+        <span class="mini-go"><i data-lucide="pencil"></i></span>`;
       list.appendChild(row);
     }
     sec.appendChild(list);
@@ -413,9 +413,9 @@ async function renderPostsTable() {
 
   const tbar = el(`<div class="posts-toolbar"></div>`);
   tbar.innerHTML = `
-    <button class="btn" id="reindex">🧠 重建搜索索引</button>
-    <button class="btn" id="batch-notes" disabled>🤖 批量 AI 备注</button>
-    <button class="btn" id="batch-tags" disabled>🏷 批量 AI 分类</button>`;
+    <button class="btn" id="reindex"><i data-lucide="brain"></i> 重建搜索索引</button>
+    <button class="btn" id="batch-notes" disabled><i data-lucide="bot"></i> 批量 AI 备注</button>
+    <button class="btn" id="batch-tags" disabled><i data-lucide="tags"></i> 批量 AI 分类</button>`;
   wrap.appendChild(tbar);
 
   if (!posts.length) {
@@ -462,9 +462,9 @@ async function renderPostsTable() {
   const updateBatchBtn = () => {
     const n = app.querySelectorAll(".row-sel:checked").length;
     batchBtn.disabled = n === 0;
-    batchBtn.textContent = n ? `🤖 批量 AI 备注(${n})` : "🤖 批量 AI 备注";
+    batchBtn.innerHTML = n ? `<i data-lucide="bot"></i> 批量 AI 备注(${n})` : `<i data-lucide="bot"></i> 批量 AI 备注`;
     batchTagsBtn.disabled = n === 0;
-    batchTagsBtn.textContent = n ? `🏷 批量 AI 分类(${n})` : "🏷 批量 AI 分类";
+    batchTagsBtn.innerHTML = n ? `<i data-lucide="tags"></i> 批量 AI 分类(${n})` : `<i data-lucide="tags"></i> 批量 AI 分类`;
   };
   if (selAll)
     selAll.onchange = () => {
@@ -541,7 +541,7 @@ async function renderMediaPage() {
   tool.innerHTML = `
     <input type="file" id="media-file" accept="image/*" />
     <button class="btn btn-primary" id="media-upload">上传</button>
-    <span class="muted">也可在编辑文章时通过「🖼 媒体库」按钮插入正文</span>`;
+    <span class="muted">也可在编辑文章时通过「媒体库」按钮插入正文</span>`;
   wrap.appendChild(tool);
   const grid = el(`<div class="media-grid" id="media-grid"></div>`);
   wrap.appendChild(grid);
@@ -723,13 +723,13 @@ async function renderEditor(slug) {
     </select>
     <label>定时发布（可选，留空则按上面状态；设置时间后到点自动公开）</label>
     <input type="datetime-local" id="f-scheduled" value="${post && post.scheduled_at ? toLocalInput(post.scheduled_at) : ""}" />
-    <label>封面图 URL（可选，可点「🎨 AI 配图」自动生成）</label>
+    <label>封面图 URL（可选，可点「AI 配图」自动生成）</label>
     <input type="text" id="f-cover" value="${post && post.cover ? post.cover.replace(/"/g, "&quot;") : ""}" />
     <label>AI 配图提示词（可选，留空则根据标题+标签自动生成）</label>
     <input type="text" id="f-cover-prompt" placeholder="如：水墨风格的晨练插画" />
     <label>摘要（列表页展示，可点「📋 AI 摘要」自动生成；留空则自动截取正文前 120 字）</label>
     <textarea id="f-excerpt" style="min-height:70px" placeholder="留空则自动截取正文前 120 字">${post && post.excerpt ? post.excerpt : ""}</textarea>
-    <label>标签（逗号分隔，用于文章分类；可点「🏷 AI 分类」自动生成）</label>
+    <label>标签（逗号分隔，用于文章分类；可点「AI 分类」自动生成）</label>
     <input type="text" id="f-tags" value="${escHtml(initialTags)}" placeholder="如：睡眠, 饮食, 运动" />
     <label>正文（Markdown，支持工具栏、代码高亮、表情、拖拽图片）</label>
     <div class="editor-toolbar" id="editor-toolbar">
@@ -745,20 +745,20 @@ async function renderEditor(slug) {
           <button type="button" class="fmt-menu-item" data-h="4">H4 四级标题</button>
         </div>
       </div>
-      <button type="button" class="fmt-btn" data-act="quote" title="引用"><span class="fmt-ico">❝</span><span class="fmt-label">引用</span></button>
-      <button type="button" class="fmt-btn" data-act="ul" title="无序列表"><span class="fmt-ico">•</span><span class="fmt-label">列表</span></button>
-      <button type="button" class="fmt-btn" data-act="ol" title="有序列表"><span class="fmt-ico">1.</span><span class="fmt-label">有序</span></button>
-      <button type="button" class="fmt-btn" data-act="task" title="任务列表"><span class="fmt-ico">☑</span><span class="fmt-label">任务</span></button>
-      <button type="button" class="fmt-btn" data-act="link" title="链接"><span class="fmt-ico">🔗</span><span class="fmt-label">链接</span></button>
-      <button type="button" class="fmt-btn" data-act="code" title="行内代码"><span class="fmt-ico">&lt;/&gt;</span><span class="fmt-label">代码</span></button>
-      <button type="button" class="fmt-btn" data-act="codeblock" title="代码块"><span class="fmt-ico">▦</span><span class="fmt-label">代码块</span></button>
-      <button type="button" class="fmt-btn" data-act="table" title="表格"><span class="fmt-ico">▤</span><span class="fmt-label">表格</span></button>
-      <button type="button" class="fmt-btn" data-act="hr" title="分割线"><span class="fmt-ico">―</span><span class="fmt-label">分割线</span></button>
-      <button type="button" class="fmt-btn" data-act="toc" title="目录"><span class="fmt-ico">☰</span><span class="fmt-label">目录</span></button>
+      <button type="button" class="fmt-btn" data-act="quote" title="引用"><span class="fmt-ico"><i data-lucide="quote"></i></span><span class="fmt-label">引用</span></button>
+      <button type="button" class="fmt-btn" data-act="ul" title="无序列表"><span class="fmt-ico"><i data-lucide="list"></i></span><span class="fmt-label">列表</span></button>
+      <button type="button" class="fmt-btn" data-act="ol" title="有序列表"><span class="fmt-ico"><i data-lucide="list-ordered"></i></span><span class="fmt-label">有序</span></button>
+      <button type="button" class="fmt-btn" data-act="task" title="任务列表"><span class="fmt-ico"><i data-lucide="square-check"></i></span><span class="fmt-label">任务</span></button>
+      <button type="button" class="fmt-btn" data-act="link" title="链接"><span class="fmt-ico"><i data-lucide="link"></i></span><span class="fmt-label">链接</span></button>
+      <button type="button" class="fmt-btn" data-act="code" title="行内代码"><span class="fmt-ico"><i data-lucide="code"></i></span><span class="fmt-label">代码</span></button>
+      <button type="button" class="fmt-btn" data-act="codeblock" title="代码块"><span class="fmt-ico"><i data-lucide="square-code"></i></span><span class="fmt-label">代码块</span></button>
+      <button type="button" class="fmt-btn" data-act="table" title="表格"><span class="fmt-ico"><i data-lucide="table"></i></span><span class="fmt-label">表格</span></button>
+      <button type="button" class="fmt-btn" data-act="hr" title="分割线"><span class="fmt-ico"><i data-lucide="minus"></i></span><span class="fmt-label">分割线</span></button>
+      <button type="button" class="fmt-btn" data-act="toc" title="目录"><span class="fmt-ico"><i data-lucide="list"></i></span><span class="fmt-label">目录</span></button>
       <span class="toolbar-sep"></span>
-      <button type="button" class="fmt-btn" data-act="emoji" title="插入表情"><span class="fmt-ico">😊</span><span class="fmt-label">表情</span></button>
-      <button type="button" class="fmt-btn" data-act="image" title="上传并插入图片"><span class="fmt-ico">🖼</span><span class="fmt-label">图片</span></button>
-      <button type="button" class="fmt-btn" data-act="aiwrite" title="AI 写作助手"><span class="fmt-ico">🤖</span><span class="fmt-label">AI</span></button>
+      <button type="button" class="fmt-btn" data-act="emoji" title="插入表情"><span class="fmt-ico"><i data-lucide="smile"></i></span><span class="fmt-label">表情</span></button>
+      <button type="button" class="fmt-btn" data-act="image" title="上传并插入图片"><span class="fmt-ico"><i data-lucide="image"></i></span><span class="fmt-label">图片</span></button>
+      <button type="button" class="fmt-btn" data-act="aiwrite" title="AI 写作助手"><span class="fmt-ico"><i data-lucide="bot"></i></span><span class="fmt-label">AI</span></button>
     </div>
     <div class="editor-grid" id="editor-grid">
       <textarea id="f-content" placeholder="在此用 Markdown 写作…（可直接把图片拖进来）">${post ? post.content : ""}</textarea>
@@ -770,14 +770,14 @@ async function renderEditor(slug) {
     <div id="ai-block">
       <label>GEMINI AI 辅助</label>
       <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap">
-        <button class="btn" id="ai-optimize">✨ AI 优化正文</button>
-        <button class="btn" id="ai-annotate">📝 AI 生成备注</button>
-        <button class="btn" id="ai-summarize">📋 AI 摘要/SEO</button>
-        <button class="btn" id="ai-cover">🎨 AI 配图</button>
-        <button class="btn" id="ai-moderate">🚫 AI 检查违禁词</button>
-        <button class="btn" id="ai-classify">🏷 AI 分类</button>
-        <button class="btn" id="ai-translate-en">🌐 译英</button>
-        <button class="btn" id="ai-translate-zht">🌐 译繁</button>
+        <button class="btn" id="ai-optimize"><i data-lucide="sparkles"></i> AI 优化正文</button>
+        <button class="btn" id="ai-annotate"><i data-lucide="notebook-pen"></i> AI 生成备注</button>
+        <button class="btn" id="ai-summarize"><i data-lucide="clipboard-list"></i> AI 摘要/SEO</button>
+        <button class="btn" id="ai-cover"><i data-lucide="palette"></i> AI 配图</button>
+        <button class="btn" id="ai-moderate"><i data-lucide="shield-alert"></i> AI 检查违禁词</button>
+        <button class="btn" id="ai-classify"><i data-lucide="tags"></i> AI 分类</button>
+        <button class="btn" id="ai-translate-en"><i data-lucide="languages"></i> 译英</button>
+        <button class="btn" id="ai-translate-zht"><i data-lucide="languages"></i> 译繁</button>
       </div>
     </div>
     <div id="ai-result" class="ai-result" style="display:none;"></div>
@@ -786,7 +786,7 @@ async function renderEditor(slug) {
     <label>插入图片（上传到 R2）</label>
     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
       <input type="file" id="f-image" accept="image/*" />
-      <button class="btn" id="open-media" type="button">🖼 媒体库</button>
+      <button class="btn" id="open-media" type="button"><i data-lucide="image"></i> 媒体库</button>
     </div>
     <div style="margin-top:18px; display:flex; gap:10px;">
       <button class="btn btn-primary" id="save">保存</button>
@@ -1007,11 +1007,11 @@ async function renderEditor(slug) {
       <div class="ai-compose-row">
         <select id="ai-task" class="ai-compose-sel">
           <option value="continue">✍️ 续写</option>
-          <option value="expand">📝 扩写</option>
+          <option value="expand">扩写</option>
           <option value="shorten">✂️ 缩写</option>
           <option value="polish">✨ 润色</option>
           <option value="tone">🗣️ 换语气</option>
-          <option value="instruction">🎯 按指令</option>
+          <option value="instruction">按指令</option>
         </select>
         <button type="button" class="btn btn-primary" id="ai-gen">生成</button>
       </div>
@@ -1617,7 +1617,7 @@ async function renderSettings() {
       <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
         <input type="checkbox" id="s-ai_enabled" ${s.ai_enabled !== "0" ? "checked" : ""} /> 在编辑器中显示 AI 按钮
       </label>
-      <button type="button" class="btn" id="ai-test-btn" style="margin-top:16px">🔌 检测连通性</button>
+      <button type="button" class="btn" id="ai-test-btn" style="margin-top:16px"><i data-lucide="plug-zap"></i> 检测连通性</button>
       <div id="ai-test-result" style="margin-top:10px"></div>
     </fieldset>
 

@@ -48,6 +48,18 @@ a:hover { text-decoration: underline; }
 }
 .brand:hover { text-decoration: none; color: var(--primary); }
 
+/* Lucide 图标统一尺寸与对齐（颜色跟随 currentColor / 字号跟随 em） */
+.lucide, svg.lucide { width: 1.15em; height: 1.15em; stroke-width: 2; vertical-align: -0.15em; flex: none; }
+button .lucide, .btn .lucide, .menu-link .lucide, .nav-toggle .lucide { margin-right: 6px; }
+.lucide-menu { margin-right: 0; }
+/* 关键按钮图标锁定像素尺寸，避免跟随字号偏差 */
+.fmt-ico .lucide { width: 18px; height: 18px; }
+.theme-opt .lucide { width: 18px; height: 18px; margin-right: 0; }
+.nav-toggle .lucide { width: 22px; height: 22px; margin-right: 0; }
+.admin-nav-item .lucide, .menu-link .lucide { width: 18px; height: 18px; }
+.ask-fab { display: inline-flex; align-items: center; justify-content: center; }
+.ask-fab .lucide { width: 22px; height: 22px; margin-right: 0; }
+
 /* 导航：左侧主导航 + 右侧登录区，整体在 .wrap 内与底部统计平行 */
 .nav { display: flex; align-items: center; flex: 1; gap: 14px; }
 .menu { display: flex; align-items: center; gap: 18px; margin-left: 10px; }
@@ -154,6 +166,7 @@ a:hover { text-decoration: underline; }
   user-select: none;
   transition: transform .18s ease, box-shadow .18s ease;
 }
+.post-icon .lucide { width: 24px; height: 24px; color: #fff; stroke: #fff; }
 .post-card:hover .post-icon {
   transform: scale(1.08) rotate(-3deg);
   box-shadow: 0 6px 16px color-mix(in srgb, var(--primary) 45%, transparent);
