@@ -700,7 +700,7 @@ async function renderEditor(slug) {
       <button type="button" class="fmt-btn" data-act="strike" title="删除线"><s>S</s></button>
       <div class="fmt-dropdown">
         <button type="button" class="fmt-btn" data-act="h" title="标题">H▾</button>
-        <div class="fmt-menu" id="h-menu">
+        <div class="fmt-menu popover" id="h-menu">
           <button type="button" class="fmt-menu-item" data-h="1">H1 一级标题</button>
           <button type="button" class="fmt-menu-item" data-h="2">H2 二级标题</button>
           <button type="button" class="fmt-menu-item" data-h="3">H3 三级标题</button>
@@ -727,8 +727,8 @@ async function renderEditor(slug) {
       <div class="editor-preview"><h3>预览</h3><div id="preview"></div></div>
     </div>
     <input type="file" id="f-toolbar-image" accept="image/*" style="display:none" />
-    <div class="emoji-picker" id="emoji-picker" style="display:none"></div>
-    <div class="ai-compose" id="ai-compose" style="display:none"></div>
+    <div class="emoji-picker popover" id="emoji-picker"></div>
+    <div class="ai-compose popover" id="ai-compose"></div>
     <div id="ai-block">
       <label>GEMINI AI 辅助</label>
       <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap">
@@ -861,9 +861,39 @@ async function renderEditor(slug) {
     hr: () => insertAtCursor(ta, "\n---\n"),
   };
   const toolbar = document.getElementById("editor-toolbar");
-  function toggleHMenu() {
-    const m = document.getElementById("h-menu");
-    if (m) m.classList.toggle("show");
+  // ---- 统一锚定弹层（微信风格：在触发按钮原位弹出，带小箭头）----
+  function closeAllPopovers() {
+    ["emoji-picker", "ai-compose", "h-menu"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("open");
+    });
+  }
+  function placePopover(panel, anchor) {
+    panel.classList.add("open");
+    const pw = panel.offsetWidth, ph = panel.offsetHeight;
+    const r = anchor.getBoundingClientRect();
+    const vw = window.innerWidth, vh = window.innerHeight;
+    let top = r.bottom + 10;
+    let arrowDir = "up";
+    if (top + ph > vh - 8) { top = r.top - ph - 10; arrowDir = "down"; }
+    if (top < 8) top = 8;
+    let left = r.left;
+    if (left + pw > vw - 8) left = Math.max(8, vw - pw - 8);
+    if (left < 8) left = 8;
+    panel.style.position = "fixed";
+    panel.style.top = top + "px";
+    panel.style.left = left + "px";
+    const arrowLeft = Math.min(Math.max(r.left + r.width / 2 - left, 16), Math.max(pw - 16, 16));
+    panel.style.setProperty("--arrow-left", arrowLeft + "px");
+    panel.dataset.arrow = arrowDir;
+  }
+  function togglePopover(id, anchorAct) {
+    const panel = document.getElementById(id);
+    const anchor = toolbar.querySelector('[data-act="' + anchorAct + '"]');
+    if (!panel || !anchor) return;
+    const willOpen = !panel.classList.contains("open");
+    closeAllPopovers();
+    if (willOpen) placePopover(panel, anchor);
   }
   if (toolbar) {
     toolbar.querySelectorAll(".fmt-btn").forEach((btn) => {
@@ -872,7 +902,7 @@ async function renderEditor(slug) {
         if (act === "emoji") { toggleEmojiPicker(); return; }
         if (act === "image") { document.getElementById("f-toolbar-image").click(); return; }
         if (act === "aiwrite") { toggleAiCompose(); return; }
-        if (act === "h") { toggleHMenu(); return; }
+        if (act === "h") { togglePopover("h-menu", "h"); return; }
         ACTIONS[act] && ACTIONS[act]();
       };
     });
@@ -882,7 +912,7 @@ async function renderEditor(slug) {
       hMenu.querySelectorAll(".fmt-menu-item").forEach((mi) => {
         mi.onclick = () => {
           applyHeading(Number(mi.dataset.h));
-          hMenu.classList.remove("show");
+          closeAllPopovers();
         };
       });
     }
@@ -926,7 +956,7 @@ async function renderEditor(slug) {
   }
   function toggleEmojiPicker() {
     buildEmojiPicker();
-    picker.style.display = picker.style.display === "none" ? "flex" : "none";
+    togglePopover("emoji-picker", "emoji");
   }
   // AI 写作助手面板
   const composeEl = document.getElementById("ai-compose");
@@ -985,20 +1015,24 @@ async function renderEditor(slug) {
   }
   function toggleAiCompose() {
     buildAiCompose();
-    composeEl.style.display = composeEl.style.display === "none" ? "block" : "none";
+    togglePopover("ai-compose", "aiwrite");
   }
-  form.addEventListener("click", (ev) => {
-    if (picker && picker.style.display !== "none" && !picker.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="emoji"]'))) {
-      picker.style.display = "none";
-    }
-    if (composeEl && composeEl.style.display !== "none" && !composeEl.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="aiwrite"]'))) {
-      composeEl.style.display = "none";
-    }
-    const hm = document.getElementById("h-menu");
-    if (hm && hm.classList.contains("show") && !hm.contains(ev.target) && !(ev.target.closest && ev.target.closest('[data-act="h"]'))) {
-      hm.classList.remove("show");
-    }
-  });
+  // 点击弹层外部 / 滚动 / 缩放时关闭（微信风格：弹层脱离按钮即收起）
+  function onPopoverOutside(ev) {
+    const t = ev.target;
+    if (t && t.closest && (t.closest(".popover") || t.closest('[data-act="emoji"],[data-act="aiwrite"],[data-act="h"]'))) return;
+    closeAllPopovers();
+  }
+  if (!window.__popoverDocBound) {
+    document.addEventListener("click", onPopoverOutside);
+    window.__popoverDocBound = true;
+  }
+  if (!window.__popoverScrollBound) {
+    const close = () => closeAllPopovers();
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    window.__popoverScrollBound = true;
+  }
 
   // 工具栏图片上传
   const toolbarImg = document.getElementById("f-toolbar-image");
