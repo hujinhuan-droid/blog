@@ -940,9 +940,12 @@ async function renderEditor(slug) {
     picker.dataset.built = "1";
     const grid = picker.querySelector(".emoji-grid");
     const renderCat = (cat) => {
-      grid.innerHTML = EMOJI_CATS[cat].split(" ").map((e) => `<button type="button" class="emoji-item">${e}</button>`).join("");
+      grid.innerHTML = EMOJI_CATS[cat].split(" ").map((e) => `<button type="button" class="emoji-item" data-emoji="${e}">${e}</button>`).join("");
+      if (window.twemoji) {
+        try { window.twemoji.parse(grid, { folder: "svg", base: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/" }); } catch (_) {}
+      }
       grid.querySelectorAll(".emoji-item").forEach((b) => {
-        b.onclick = () => { insertAtCursor(ta, b.textContent); };
+        b.onclick = () => { insertAtCursor(ta, b.dataset.emoji || b.textContent); };
       });
     };
     renderCat(cats[0]);
