@@ -33,12 +33,17 @@ function buildAdminShell() {
           <a class="admin-nav-item" href="#/admin/settings" data-nav="settings"><span class="ico">⚙️</span><span>设置</span></a>
         </nav>
         <div class="admin-side-foot">
-          <div class="admin-user">
+          <button type="button" class="admin-user" id="adminUserBtn" aria-haspopup="true" aria-expanded="false">
             <span class="admin-ava">${uname.slice(0, 1).toUpperCase()}</span>
             <div class="admin-user-txt">
               <div class="admin-un">${uname}</div>
               <div class="admin-role">管理员</div>
             </div>
+            <span class="caret">▾</span>
+          </button>
+          <div class="admin-user-menu" id="adminUserMenu" role="menu">
+            <button type="button" class="admin-menu-item" id="btnChangePw">🔑 修改密码</button>
+            <button type="button" class="admin-menu-item danger" id="btnLogout">🚪 登出</button>
           </div>
         </div>
       </aside>
@@ -50,6 +55,111 @@ function buildAdminShell() {
         <div class="admin-main" id="admin-main"></div>
       </div>
     </div>`;
+  bindAdminUserMenu();
+}
+
+// 绑定侧边栏左下角「管理员」按钮：下拉展示「修改密码 / 登出」，点击外部自动收起
+function bindAdminUserMenu() {
+  const btn = document.getElementById("adminUserBtn");
+  const menu = document.getElementById("adminUserMenu");
+  if (!btn || !menu) return;
+  if (btn.dataset.bound) return; // 仅绑定一次
+  btn.dataset.bound = "1";
+
+  const toggle = (open) => {
+    const isOpen = open ?? !menu.classList.contains("open");
+    menu.classList.toggle("open", isOpen);
+    btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  };
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggle();
+  });
+  document.addEventListener("click", (e) => {
+    if (!menu.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+      toggle(false);
+    }
+  });
+
+  const btnLogout = document.getElementById("btnLogout");
+  if (btnLogout)
+    btnLogout.onclick = async () => {
+      toggle(false);
+      await api("/auth/logout", { method: "POST" });
+      CURRENT_USER = null;
+      renderNav();
+      location.hash = "#/";
+    };
+
+  const btnChangePw = document.getElementById("btnChangePw");
+  if (btnChangePw) btnChangePw.onclick = () => {
+    toggle(false);
+    openChangePwModal();
+  };
+}
+
+// 修改密码弹窗
+function openChangePwModal() {
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay";
+  ov.innerHTML = `
+    <div class="modal sm">
+      <div class="modal-head">修改密码</div>
+      <label>当前密码</label>
+      <input type="password" id="cpw-current" autocomplete="current-password" />
+      <label>新密码（至少 6 位）</label>
+      <input type="password" id="cpw-new" autocomplete="new-password" />
+      <label>确认新密码</label>
+      <input type="password" id="cpw-confirm" autocomplete="new-password" />
+      <div class="modal-err" id="cpw-err"></div>
+      <div class="modal-actions">
+        <button class="btn" id="cpw-cancel">取消</button>
+        <button class="btn btn-primary" id="cpw-submit">保存</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener("click", (e) => {
+    if (e.target === ov) close();
+  });
+  ov.querySelector("#cpw-cancel").onclick = close;
+  ov.querySelector("#cpw-submit").onclick = async () => {
+    const cur = ov.querySelector("#cpw-current").value || "";
+    const npw = ov.querySelector("#cpw-new").value || "";
+    const conf = ov.querySelector("#cpw-confirm").value || "";
+    const errEl = ov.querySelector("#cpw-err");
+    errEl.textContent = "";
+    if (npw.length < 6) {
+      errEl.textContent = "新密码至少 6 位";
+      return;
+    }
+    if (npw !== conf) {
+      errEl.textContent = "两次输入的新密码不一致";
+      return;
+    }
+    const submitBtn = ov.querySelector("#cpw-submit");
+    submitBtn.disabled = true;
+    submitBtn.textContent = "保存中…";
+    try {
+      const res = await api("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: cur, new_password: npw }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        errEl.textContent = data.error || "修改失败";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "保存";
+        return;
+      }
+      toast("密码已修改");
+      close();
+    } catch (e) {
+      errEl.textContent = "网络错误，请重试";
+      submitBtn.disabled = false;
+      submitBtn.textContent = "保存";
+    }
+  };
 }
 
 // 根据当前 hash 高亮侧边栏对应项，并更新顶部面包屑

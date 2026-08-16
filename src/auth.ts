@@ -173,6 +173,32 @@ export async function passwordLogin(env: AuthEnv, username: string, password: st
   return ok ? row : null;
 }
 
+/**
+ * 修改密码：校验当前密码正确后，写入新的 password_hash。
+ * 返回 "ok" | "wrong" | "weak"（weak=新密码过短）。
+ */
+export async function changePassword(
+  env: AuthEnv,
+  userId: number,
+  currentPassword: string,
+  newPassword: string
+): Promise<"ok" | "wrong" | "weak"> {
+  const np = (newPassword || "").trim();
+  if (np.length < 6) return "weak";
+  const cp = (currentPassword || "").trim();
+  if (!cp) return "wrong";
+  const row = (await env.DB
+    .prepare("SELECT password_hash FROM users WHERE id = ?")
+    .bind(userId)
+    .first()) as { password_hash?: string | null } | null;
+  if (!row || !row.password_hash) return "wrong";
+  const ok = await verifyPassword(row.password_hash, cp);
+  if (!ok) return "wrong";
+  const hash = await hashPassword(np);
+  await env.DB.prepare("UPDATE users SET password_hash = ? WHERE id = ?").bind(hash, userId).run();
+  return "ok";
+}
+
 export interface LoginResult {
   user: UserRow;
   token: string;

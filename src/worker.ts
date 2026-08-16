@@ -6,6 +6,7 @@ import {
   exchangeGithubCode,
   passwordLogin,
   ensureAdminAccount,
+  changePassword,
   startSession,
   clearSessionCookie,
   parseCookies,
@@ -548,6 +549,16 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const token = parseCookies(req)["sid"];
     if (token) await env.DB.prepare("DELETE FROM sessions WHERE token = ?").bind(token).run();
     return json({ ok: true }, 200, { "set-cookie": clearSessionCookie() });
+  }
+
+  // 修改密码（需管理员登录）
+  if (method === "POST" && seg.length === 3 && seg[1] === "auth" && seg[2] === "change-password") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const res = await changePassword(env, user!.id, body.current_password || "", body.new_password || "");
+    if (res === "wrong") return json({ error: "当前密码不正确" }, 400);
+    if (res === "weak") return json({ error: "新密码至少 6 位" }, 400);
+    return json({ ok: true });
   }
 
   // 图片上传（管理员）→ R2，返回可访问路径
