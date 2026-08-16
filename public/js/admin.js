@@ -1348,7 +1348,11 @@ async function renderSettings() {
 
     <fieldset class="set-group">
       <legend>③ 外观主题</legend>
-      <label>主色调</label>
+      <label>主题预设</label>
+      <p class="muted">选择一套整体配色风格（点选即时预览整站效果）。</p>
+      <div class="theme-grid" id="theme-grid"></div>
+      <input type="hidden" id="s-theme_preset" value="${escHtml(s.theme_preset || "default")}" />
+      <label>主色调（自定义，覆盖预设主色）</label>
       <div style="display:flex;gap:10px;align-items:center">
         <input type="color" id="s-theme_primary" value="${colorVal(s.theme_primary)}" />
         <span id="s-theme_primary_txt" class="muted">${escHtml(s.theme_primary || "#2563eb")}</span>
@@ -1414,6 +1418,36 @@ async function renderSettings() {
     document.getElementById("s-theme_primary_txt").textContent = colorInput.value;
   };
 
+  // 主题预设色卡选择器（即时预览）
+  const THEMES = [
+    { id: "default", name: "默认主题", primary: "#2563eb", accent2: "#8b5cf6" },
+    { id: "poster", name: "海报风格", primary: "#ec3750", accent2: "#ff7a45" },
+    { id: "forest", name: "森野", primary: "#16a34a", accent2: "#0ea5e9" },
+    { id: "violet", name: "紫调", primary: "#8b5cf6", accent2: "#ec4899" },
+    { id: "ocean", name: "海洋", primary: "#0891b2", accent2: "#22d3ee" },
+    { id: "amber", name: "暖阳", primary: "#f59e0b", accent2: "#ef4444" },
+  ];
+  const themeHidden = document.getElementById("s-theme_preset");
+  const grid = document.getElementById("theme-grid");
+  function paintThemeGrid() {
+    const cur = themeHidden.value || "default";
+    grid.innerHTML = THEMES.map(
+      (t) =>
+        `<button type="button" class="theme-swatch${t.id === cur ? " active" : ""}" data-theme="${t.id}" title="${t.name}">
+          <span class="sw" style="background:linear-gradient(135deg,${t.primary},${t.accent2})"></span>
+          <span class="sw-name">${t.name}</span>
+        </button>`
+    ).join("");
+  }
+  paintThemeGrid();
+  grid.addEventListener("click", (e) => {
+    const btn = e.target.closest(".theme-swatch");
+    if (!btn) return;
+    themeHidden.value = btn.dataset.theme;
+    paintThemeGrid();
+    if (window.applyThemePreset) window.applyThemePreset(btn.dataset.theme); // 实时预览
+  });
+
   document.getElementById("save-settings").onclick = async () => {
     const payload = {
       site_title: document.getElementById("s-site_title").value.trim(),
@@ -1421,6 +1455,7 @@ async function renderSettings() {
       footer_text: document.getElementById("s-footer_text").value.trim(),
       nav: JSON.stringify(textToNav(document.getElementById("s-nav").value)),
       theme_primary: document.getElementById("s-theme_primary").value,
+      theme_preset: document.getElementById("s-theme_preset").value || "default",
       theme_dark: document.getElementById("s-theme_dark").checked ? "1" : "0",
       ai_model: document.getElementById("s-ai_model").value.trim() || "gemini-flash-latest",
       ai_enabled: document.getElementById("s-ai_enabled").checked ? "1" : "0",

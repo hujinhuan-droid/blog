@@ -132,6 +132,14 @@ function ttsLang() {
 }
 
 // 应用站点设置到页面（站点名 / 页脚 / 导航 / 主题色 / 深色模式 / 关于页 / SEO / 阅读偏好）
+// 应用主题预设：给 <html> 设置 data-theme 属性，CSS 据此切换配色。
+// 仅改强调色/圆角/阴影等变量，不碰 bg/surface/text，确保与深色模式互不打架。
+function applyThemePreset(preset) {
+  const root = document.documentElement;
+  if (preset && preset !== "default") root.setAttribute("data-theme", preset);
+  else root.removeAttribute("data-theme");
+}
+
 function applySettings(s) {
   if (!s || typeof s !== "object") return;
   SITE_SETTINGS = s;
@@ -154,6 +162,8 @@ function applySettings(s) {
       }
     } catch {}
   }
+  // 先应用主题预设（决定默认强调色），再用自定义主色覆盖（如有）
+  applyThemePreset(s.theme_preset);
   if (s.theme_primary) {
     const c = String(s.theme_primary).trim();
     if (/^#?[0-9a-fA-F]{6}$/.test(c)) {

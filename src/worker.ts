@@ -270,6 +270,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       "footer_text",
       "nav",
       "theme_primary",
+      "theme_preset",
       "theme_dark",
       "ai_model",
       "ai_enabled",

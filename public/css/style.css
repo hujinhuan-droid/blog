@@ -5,6 +5,7 @@
   --muted: #6b7280;
   --primary: #2563eb;
   --primary-dark: #1d4ed8;
+  --accent-2: #8b5cf6;
   --border: #e5e7eb;
   --radius: 12px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 16px rgba(0, 0, 0, 0.04);
@@ -140,7 +141,7 @@ a:hover { text-decoration: underline; }
 .post-icon {
   flex: 0 0 auto; width: 46px; height: 46px; border-radius: 14px;
   display: flex; align-items: center; justify-content: center; font-size: 24px; line-height: 1;
-  background: linear-gradient(135deg, var(--primary), #8b5cf6);
+  background: linear-gradient(135deg, var(--primary), var(--accent-2));
   box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 35%, transparent);
   user-select: none;
   transition: transform .18s ease, box-shadow .18s ease;
@@ -166,7 +167,7 @@ body.dark .post-cat { background: color-mix(in srgb, var(--primary) 24%, #0f1729
   margin: 22px 0 18px; border-radius: 18px; overflow: hidden;
   background:
     radial-gradient(120% 140% at 12% 0%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 55%),
-    linear-gradient(135deg, var(--primary), #7c3aed 78%, #8b5cf6);
+    linear-gradient(135deg, var(--primary), var(--accent-2));
   color: #fff; box-shadow: 0 18px 40px color-mix(in srgb, var(--primary) 28%, rgba(0,0,0,0.12));
 }
 .hero-inner { padding: 38px 34px; }
@@ -290,6 +291,39 @@ body.dark .post-detail pre { background: #0b1220; color: #cbd5e1; }
 body.dark .post-detail :not(pre) > code { background: #1f2630; color: #f472b6; }
 body.dark .post-detail blockquote { background: #161b22; color: var(--muted); }
 body.dark .ai-result { background: #16233a; border-color: #24406b; }
+
+/* ---------- 主题预设（仅改强调色/圆角/阴影/渐变副色，不碰 bg/surface/text，确保与深色模式共存） ---------- */
+:root[data-theme="poster"] {
+  --primary: #ec3750; --primary-dark: #c0183a; --accent-2: #ff7a45;
+  --radius: 18px;
+  --shadow: 0 6px 26px color-mix(in srgb, var(--primary) 16%, transparent), 0 2px 8px rgba(0,0,0,0.06);
+}
+:root[data-theme="forest"] {
+  --primary: #16a34a; --primary-dark: #15803d; --accent-2: #0ea5e9;
+  --radius: 14px;
+  --shadow: 0 2px 10px rgba(22,163,74,0.10), 0 4px 18px rgba(0,0,0,0.05);
+}
+:root[data-theme="violet"] {
+  --primary: #8b5cf6; --primary-dark: #7c3aed; --accent-2: #ec4899;
+  --radius: 14px;
+  --shadow: 0 4px 20px color-mix(in srgb, var(--primary) 16%, transparent), 0 2px 8px rgba(0,0,0,0.05);
+}
+:root[data-theme="ocean"] {
+  --primary: #0891b2; --primary-dark: #0e7490; --accent-2: #22d3ee;
+  --radius: 12px;
+  --shadow: 0 2px 12px rgba(8,145,178,0.12), 0 4px 18px rgba(0,0,0,0.05);
+}
+:root[data-theme="amber"] {
+  --primary: #f59e0b; --primary-dark: #d97706; --accent-2: #ef4444;
+  --radius: 16px;
+  --shadow: 0 6px 22px rgba(245,158,11,0.16), 0 2px 8px rgba(0,0,0,0.05);
+}
+/* 深色模式下，各主题保留自己的强调色（primary/accent-2），其余变量沿用上方 body.dark */
+body.dark[data-theme="poster"] { --primary: #ff5a6e; --primary-dark: #ec3750; --accent-2: #ff9a5a; }
+body.dark[data-theme="forest"] { --primary: #22c55e; --primary-dark: #16a34a; --accent-2: #38bdf8; }
+body.dark[data-theme="violet"] { --primary: #a78bfa; --primary-dark: #8b5cf6; --accent-2: #f472b6; }
+body.dark[data-theme="ocean"] { --primary: #22d3ee; --primary-dark: #0891b2; --accent-2: #67e8f9; }
+body.dark[data-theme="amber"] { --primary: #fbbf24; --primary-dark: #f59e0b; --accent-2: #f87171; }
 body.dark .ai-result pre { background: #0f1729; color: var(--text); }
 body.dark .editor-preview { background: #11141a; }
 body.dark .admin-table th { background: #11141a; }
@@ -923,3 +957,16 @@ body.dark .lang-opt.active { background: #0f1729; }
 }
 .tts-btn:hover { border-color: var(--primary); color: var(--primary); }
 .tts-btn.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, var(--bg)); color: var(--primary); }
+
+/* ---------- 后台：主题预设色卡选择器 ---------- */
+.theme-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 6px 0 14px; }
+.theme-swatch {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  width: 78px; padding: 10px 6px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); cursor: pointer; transition: 0.12s;
+}
+.theme-swatch:hover { border-color: var(--primary); }
+.theme-swatch.active { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent); }
+.theme-swatch .sw { width: 38px; height: 38px; border-radius: 50%; box-shadow: 0 3px 10px rgba(0,0,0,0.12); }
+.theme-swatch .sw-name { font-size: 12.5px; color: var(--text); }
+
