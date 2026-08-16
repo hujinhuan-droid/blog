@@ -91,7 +91,9 @@ export async function listPosts(
     params.push(opts.visibility);
   }
   const sql =
-    "SELECT * FROM posts" +
+    "SELECT posts.*, COALESCE(c.cnt, 0) AS comment_count " +
+    "FROM posts " +
+    "LEFT JOIN (SELECT post_slug, COUNT(*) AS cnt FROM comments GROUP BY post_slug) c ON c.post_slug = posts.slug " +
     (where.length ? " WHERE " + where.join(" AND ") : "") +
     " ORDER BY created_at DESC";
   const r = await db.prepare(sql).bind(...params).all();

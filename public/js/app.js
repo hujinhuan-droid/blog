@@ -460,7 +460,7 @@ async function renderSiteStats() {
 // 首页文章缓存 + 当前页码 + 当前分类筛选（用于客户端分页/筛选，避免每次切换都重新拉取）
 let homeAll = [];
 let homePage = 1;
-let homeCat = "";
+let homeSort = ""; // "" = 默认(全部/最新) | "views" = 最多观看 | "comments" = 最多互动
 
 async function renderHome() {
   const app = document.getElementById("app");
@@ -505,20 +505,21 @@ async function renderHome() {
   renderHomeBody();
 }
 
-// 渲染分类筛选胶囊（基于全部文章的标签频次，取前 10 + 「全部」）
+// 渲染首页排序筛选：全部 / 最多观看(按浏览) / 最多互动(按评论数)
 function renderCatFilter() {
   const box = document.getElementById("catFilter");
   if (!box) return;
-  const counts = {};
-  homeAll.forEach((p) => parseTags(p.tags).forEach((t) => { if (t) counts[t] = (counts[t] || 0) + 1; }));
-  const cats = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10).map((x) => x[0]);
-  const chips = ["", ...cats];
-  box.innerHTML = chips
-    .map((c) => `<button type="button" class="cat-chip${c === homeCat ? " active" : ""}" data-cat="${escHtml(c)}">${c ? escHtml(c) : "全部"}</button>`)
+  const sorts = [
+    { key: "", label: "全部" },
+    { key: "views", label: "最多观看" },
+    { key: "comments", label: "最多互动" },
+  ];
+  box.innerHTML = sorts
+    .map((s) => `<button type="button" class="cat-chip${s.key === homeSort ? " active" : ""}" data-sort="${escHtml(s.key)}">${escHtml(s.label)}</button>`)
     .join("");
   box.querySelectorAll(".cat-chip").forEach((b) => {
     b.onclick = () => {
-      homeCat = b.dataset.cat || "";
+      homeSort = b.dataset.sort || "";
       homePage = 1;
       renderCatFilter();
       renderHomeBody();
@@ -531,8 +532,14 @@ function renderCatFilter() {
 function renderHomeBody() {
   const body = document.getElementById("homeBody");
   if (!body) return;
-  const src = homeCat ? homeAll.filter((p) => parseTags(p.tags).includes(homeCat)) : homeAll;
-  const showFeatured = !homeCat && homePage === 1;
+  // 复制一份再排序，默认顺序保持后端返回（最新在前）
+  const src = homeAll.slice();
+  if (homeSort === "views") {
+    src.sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0));
+  } else if (homeSort === "comments") {
+    src.sort((a, b) => (Number(b.comment_count) || 0) - (Number(a.comment_count) || 0));
+  }
+  const showFeatured = !homeSort && homePage === 1;
   const rest = showFeatured ? src.slice(1) : src;
   const pageCount = Math.max(1, Math.ceil(rest.length / PER_PAGE));
   if (homePage > pageCount) homePage = pageCount;

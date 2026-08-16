@@ -236,6 +236,7 @@ function cardOf(p: any): any {
     visibility: p.visibility,
     status: p.status,
     views: p.views || 0,
+    comment_count: p.comment_count || 0,
     created_at: p.created_at,
   };
 }
