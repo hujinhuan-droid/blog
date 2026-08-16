@@ -313,6 +313,7 @@ export const SETTING_KEYS = [
   "theme_primary",
   "theme_dark",
   "ai_model",
+  "ai_provider",
   "ai_enabled",
   "about_content",
   "comments_enabled",

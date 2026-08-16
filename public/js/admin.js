@@ -1408,7 +1408,13 @@ async function renderSettings() {
 
     <fieldset class="set-group">
       <legend>④ AI 助手</legend>
-      <label>默认模型</label>
+      <label>AI 服务商（写作 / 翻译 / 问答使用的文本模型）</label>
+      <select id="s-ai_provider">
+        <option value="deepseek" ${(s.ai_provider || "deepseek") === "deepseek" ? "selected" : ""}>DeepSeek（deepseek-chat）</option>
+        <option value="gemini" ${(s.ai_provider || "deepseek") === "gemini" ? "selected" : ""}>Gemini（gemini-flash-latest）</option>
+        <option value="workers" ${(s.ai_provider || "deepseek") === "workers" ? "selected" : ""}>Workers AI（自动回退 llama-3.1-8b）</option>
+      </select>
+      <label style="margin-top:12px">默认模型</label>
       <input type="text" id="s-ai_model" value="${escHtml(s.ai_model || "gemini-flash-latest")}" placeholder="gemini-flash-latest" />
       <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
         <input type="checkbox" id="s-ai_enabled" ${s.ai_enabled !== "0" ? "checked" : ""} /> 在编辑器中显示 AI 按钮
@@ -1502,6 +1508,7 @@ async function renderSettings() {
       theme_preset: document.getElementById("s-theme_preset").value || "default",
       theme_dark: document.getElementById("s-theme_dark").checked ? "1" : "0",
       ai_model: document.getElementById("s-ai_model").value.trim() || "gemini-flash-latest",
+      ai_provider: document.getElementById("s-ai_provider").value || "deepseek",
       ai_enabled: document.getElementById("s-ai_enabled").checked ? "1" : "0",
       about_content: document.getElementById("s-about_content").value,
       posts_per_page: document.getElementById("s-posts_per_page").value.trim() || "10",

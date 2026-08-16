@@ -242,10 +242,50 @@ async function callDeepSeek(env: Env, system: string, userText: string): Promise
   return (gen || "").trim();
 }
 
-// 统一文本生成入口：优先 DeepSeek；未配置或失败时回退 Workers AI。
-// 注意：语义检索用的 embedding 仍走 Workers AI（bge），DeepSeek 不提供向量接口。
+// 用 Gemini 文本模型做聊天式生成（与 callDeepSeek 同签名 system/userText），
+// 供 /ai/write、/ai/translate、/ai/ask 在服务商切换为 gemini 时复用。
+async function callGeminiChat(env: Env, system: string, userText: string): Promise<string> {
+  const key = env.GEMINI_API_KEY;
+  if (!key) throw new Error("服务端未配置 GEMINI_API_KEY，请在 Cloudflare 设置该 secret");
+  const base = (env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/$/, "");
+  const model = "gemini-flash-latest";
+  const url = `${base}/v1beta/models/${model}:generateContent?key=${key}`;
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents: [{ parts: [{ text: userText }] }],
+    generationConfig: { temperature: 0.7, maxOutputTokens: 2000 },
+  });
+  const resp = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => "");
+    if (resp.status === 429 && /quota/i.test(t)) {
+      throw new Error("Gemini API 配额已用完（HTTP 429）。请到 Google AI Studio 开启计费或等待每日额度重置：https://aistudio.google.com/apikey");
+    }
+    throw new Error(`Gemini API ${resp.status}: ${t.slice(0, 300)}`);
+  }
+  const data: any = await resp.json().catch(() => ({}));
+  const parts = data?.candidates?.[0]?.content?.parts ?? [];
+  const text = parts.map((p: any) => p.text || "").join("").trim();
+  if (!text) throw new Error("Gemini 返回内容为空");
+  return text;
+}
+
+// 统一文本生成入口：按后台设置 ai_provider 选择服务商（gemini / deepseek / workers 自动），
+// 任一服务商未配置或调用异常时自动回退 Workers AI（最后兜底）。
+// 注意：语义检索用的 embedding 仍走 Workers AI（bge），DeepSeek/Gemini 都不提供向量接口。
 async function callAI(env: Env, system: string, userText: string): Promise<string> {
-  if (env.DEEPSEEK_API_KEY) {
+  let provider = "deepseek";
+  try {
+    const s = await getSettings(env.DB);
+    provider = (s.ai_provider || "deepseek").toString();
+  } catch {}
+  if (provider === "gemini") {
+    try {
+      return await callGeminiChat(env, system, userText);
+    } catch (e: any) {
+      console.error("[AI] Gemini 失败，回退 Workers AI：", e && e.message);
+    }
+  } else if (provider === "deepseek") {
     try {
       return await callDeepSeek(env, system, userText);
     } catch (e: any) {
