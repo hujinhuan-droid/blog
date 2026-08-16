@@ -1277,7 +1277,7 @@ function escHtml(s) {
     .replace(/>/g, "&gt;");
 }
 
-const DEFAULT_MENUS = [
+const SETTINGS_DEFAULT_MENUS = [
   { label: "文章", hash: "#/" },
   { label: "时间轴", hash: "#/timeline" },
   { label: "动态", hash: "#/feed" },
@@ -1287,7 +1287,7 @@ const DEFAULT_MENUS = [
 ];
 
 function navToText(jsonStr) {
-  let arr = DEFAULT_MENUS;
+  let arr = SETTINGS_DEFAULT_MENUS;
   if (jsonStr) {
     try {
       const p = JSON.parse(jsonStr);
@@ -1308,7 +1308,7 @@ function textToNav(text) {
     const hash = t.slice(i + 1).trim();
     if (label && hash) arr.push({ label, hash });
   }
-  return arr.length ? arr : DEFAULT_MENUS;
+  return arr.length ? arr : SETTINGS_DEFAULT_MENUS;
 }
 
 function colorVal(hex) {
