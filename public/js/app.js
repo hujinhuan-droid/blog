@@ -497,6 +497,14 @@ async function renderHome() {
         </div>
       </div>
     </section>
+    <a class="tool-banner" href="ai-manju.html">
+      <div class="tool-banner-text">
+        <span class="tool-banner-tag">新上线</span>
+        <h3 class="tool-banner-title">AI 漫剧 · 1000 套万能模板</h3>
+        <p class="tool-banner-desc">人物 / 场景 / 道具 全分类提示词，1000 套一键复制，附 AI 配图</p>
+      </div>
+      <span class="tool-banner-cta">进入 →</span>
+    </a>
     <div class="cat-filter" id="catFilter"></div>
     <div id="homeBody"></div>`;
 
