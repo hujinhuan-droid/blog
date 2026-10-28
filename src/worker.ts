@@ -364,6 +364,217 @@ function cardOf(p: any): any {
   };
 }
 
+// ---------------- SEO 预渲染（针对爬虫 / 社交抓取） ----------------
+// 轻量 Markdown → HTML（服务端渲染用，对齐前端 markdown.js 的子集，供爬虫与分享卡片抓取正文）
+function escHtmlS(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+function inlineMdS(text: string): string {
+  let s = escHtmlS(text);
+  s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img alt="${alt}" src="${url}" />`);
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, url) => `<a href="${url}" target="_blank" rel="noopener">${t}</a>`);
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  return s;
+}
+function renderMarkdownSsr(src: string): string {
+  if (!src) return "";
+  const lines = src.replace(/\r\n/g, "\n").split("\n");
+  let html = "";
+  let i = 0;
+  let para: string[] = [];
+  function flushPara() {
+    if (para.length) { html += `<p>${inlineMdS(para.join(" "))}</p>\n`; para = []; }
+  }
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      flushPara();
+      const langMatch = line.match(/^```\s*([\w+#.-]*)/);
+      const lang = langMatch && langMatch[1] ? langMatch[1] : "";
+      const buf: string[] = []; i++;
+      while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++;
+      const cls = lang ? ` class="language-${lang}"` : "";
+      html += `<pre><code${cls}>${escHtmlS(buf.join("\n"))}</code></pre>\n`;
+      continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(lines[i + 1])) {
+      flushPara();
+      const splitRow = (l: string) => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((s) => s.trim());
+      const header = splitRow(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(splitRow(lines[i])); i++; }
+      let t = '<div class="table-wrap"><table>';
+      t += "<thead><tr>" + header.map((h) => `<th>${inlineMdS(h)}</th>`).join("") + "</tr></thead>";
+      t += "<tbody>" + rows.map((r) => "<tr>" + r.map((c) => `<td>${inlineMdS(c)}</td>`).join("") + "</tr>").join("") + "</tbody>";
+      t += "</table></div>\n";
+      html += t; continue;
+    }
+    if (/^\[TOC\]$/i.test(line.trim())) { flushPara(); i++; continue; }
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { flushPara(); const level = h[1].length; html += `<h${level}>${inlineMdS(h[2])}</h${level}>\n`; i++; continue; }
+    if (/^---+$/.test(line.trim())) { flushPara(); html += "<hr/>\n"; i++; continue; }
+    if (/^>\s?/.test(line)) {
+      flushPara(); const buf: string[] = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) { buf.push(lines[i].replace(/^>\s?/, "")); i++; }
+      html += `<blockquote>${inlineMdS(buf.join(" "))}</blockquote>\n`; continue;
+    }
+    if (/^[-*]\s+/.test(line)) {
+      flushPara(); const items: string[] = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) { items.push(`<li>${inlineMdS(lines[i].replace(/^[-*]\s+/, ""))}</li>`); i++; }
+      html += `<ul>${items.join("")}</ul>\n`; continue;
+    }
+    if (/^\d+\.\s+/.test(line)) {
+      flushPara(); const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) { items.push(`<li>${inlineMdS(lines[i].replace(/^\d+\.\s+/, ""))}</li>`); i++; }
+      html += `<ol>${items.join("")}</ol>\n`; continue;
+    }
+    if (line.trim() === "") { flushPara(); i++; continue; }
+    para.push(line.trim()); i++;
+  }
+  flushPara();
+  return html;
+}
+
+// 判断请求是否来自爬虫 / 社交抓取（需要服务端预渲染，而非纯客户端 SPA）
+function isCrawler(ua: string): boolean {
+  const s = (ua || "").toLowerCase();
+  return /(bot|spider|crawl|slurp|baiduspider|googlebot|bingbot|yandex|sogou|360spider|bytespider|duckduckbot|teoma|facebookexternalhit|twitterbot|discordbot|whatsapp|telegrambot|pinterest|linkedinbot|embedly|quora link|showyoubot|outbrain|pocket|slackbot|vkshare|w3c_validator|redditbot|applebot|semrush|ahrefs|mj12|dotbot|dataprovider|netcraft|rogerbot|developers\.google\.com)/.test(s);
+}
+
+function fmtDateS(ts: number): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// 通用 HTML 文档骨架（含站点级 OG / Twitter / 样式，供预渲染页复用）
+function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string }): string {
+  const { title, description, head, body } = opts;
+  const ogImage = opts.image
+    ? `<meta property="og:image" content="${escHtmlS(opts.image)}" />
+<meta name="twitter:image" content="${escHtmlS(opts.image)}" />`
+    : "";
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escHtmlS(title)}</title>
+<meta name="description" content="${escHtmlS(description)}" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="${escHtmlS(title)}" />
+<meta property="og:description" content="${escHtmlS(description)}" />
+<meta property="og:url" content="${escHtmlS(opts.base + "/")}" />
+<meta property="og:site_name" content="${escHtmlS(title)}" />
+${ogImage}
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="stylesheet" href="/css/style.css" />
+${head}
+</head>
+<body>
+<header class="topbar"><div class="wrap"><a class="brand" href="/">${escHtmlS(title)}</a></div></header>
+<main class="container">
+${body}
+</main>
+<footer class="footer"><div class="wrap"><div class="copyright">© ${escHtmlS(title)} · Powered by Cloudflare</div></div></footer>
+</body>
+</html>`;
+}
+
+async function prerenderHome(env: Env, req: Request): Promise<Response> {
+  let settings: Record<string, string> = {};
+  try { settings = await getSettings(env.DB); } catch {}
+  const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+  const title = settings.seo_title || settings.site_title || "AI Agent 博客";
+  const description = settings.seo_description || settings.about_content || "记录 AI Agent 的探索、实践与思考";
+  const posts = await listPosts(env.DB, { admin: false });
+  const tagSet = new Set<string>();
+  for (const p of posts) (parseTags(p.tags) as string[]).forEach((t) => t && tagSet.add(t));
+  const days = posts.length
+    ? Math.max(1, Math.floor((Date.now() - Math.min(...posts.map((p) => p.created_at))) / 86400000) + 1)
+    : 1;
+  const cards = posts
+    .slice(0, 20)
+    .map((p) => `<article class="post-card">
+  <div class="post-card-head"><div class="post-head-body">
+    <h2><a href="/post/${encodeURIComponent(p.slug)}">${escHtmlS(p.title)}</a></h2>
+    <div class="post-submeta"><span class="post-date">${fmtDateS(p.created_at)}</span></div>
+  </div></div>
+  <div class="excerpt">${escHtmlS(p.excerpt || "")}</div>
+</article>`)
+    .join("\n");
+  const head = `<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: title,
+    url: base + "/",
+    description,
+  })}</script>`;
+  const body = `<section class="hero"><div class="hero-inner">
+  <p class="hero-eyebrow">欢迎来到</p>
+  <h1 class="hero-title">${escHtmlS(title)}</h1>
+  <p class="hero-sub">${escHtmlS(description)}</p>
+  <div class="hero-stats"><span><b>${posts.length}</b> 篇文章</span> · <span><b>${tagSet.size}</b> 个标签</span> · <span><b>${days}</b> 天运行</span></div>
+</div></section>
+<div class="post-list">${cards}</div>`;
+  return new Response(htmlDoc({ title, description, head, body, base, image: base + "/og-default.png" }), {
+    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+  });
+}
+
+async function prerenderPost(env: Env, slug: string, req: Request): Promise<Response> {
+  let settings: Record<string, string> = {};
+  try { settings = await getSettings(env.DB); } catch {}
+  const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+  const row = await getPostBySlug(env.DB, slug, { admin: false });
+  if (!row) {
+    return new Response(
+      `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"/><title>页面不存在</title><meta name="robots" content="noindex"/></head><body><main class="container"><h1>页面不存在</h1><p><a href="/">返回首页</a></p></main></body></html>`,
+      { status: 404, headers: { "content-type": "text/html; charset=utf-8" } }
+    );
+  }
+  const siteTitle = settings.site_title || "AI Agent 博客";
+  const title = `${row.title} - ${siteTitle}`;
+  const description = (row.excerpt || "").slice(0, 200) || siteTitle;
+  const content = renderMarkdownSsr(row.content || "");
+  const cover = row.cover || (base + "/og-default.png");
+  const head = `<meta property="og:type" content="article" />
+<meta property="og:title" content="${escHtmlS(row.title)}" />
+<meta property="og:description" content="${escHtmlS(description)}" />
+<meta property="og:url" content="${escHtmlS(base + "/post/" + encodeURIComponent(row.slug))}" />
+<meta name="twitter:card" content="summary_large_image" />
+<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    headline: row.title,
+    description,
+    datePublished: new Date(row.created_at).toISOString(),
+    dateModified: new Date(row.updated_at).toISOString(),
+    image: cover,
+    author: { "@type": "Person", name: "hujinhuan-droid" },
+    publisher: { "@type": "Organization", name: siteTitle },
+    mainEntityOfPage: base + "/post/" + encodeURIComponent(row.slug),
+  })}</script>`;
+  const body = `<div class="post-detail">
+  <h1>${escHtmlS(row.title)}</h1>
+  <div class="meta">${fmtDateS(row.created_at)}</div>
+  <div class="content">${content}</div>
+</div>`;
+  return new Response(htmlDoc({ title, description, head, body, base, image: cover }), {
+    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+  });
+}
+
+function robotsTxt(req: Request): Response {
+  const base = (req.url ? new URL(req.url).origin : "").replace(/\/$/, "");
+  const txt = `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nSitemap: ${base}/sitemap.xml\n`;
+  return new Response(txt, { headers: { "content-type": "text/plain; charset=utf-8" } });
+}
+
 // ---------------- 路由 ----------------
 
 function escXml(s: string): string {
@@ -371,13 +582,13 @@ function escXml(s: string): string {
 }
 
 // RSS Feed（公开）：最近 50 篇公开文章
-async function handleFeed(env: Env): Promise<Response> {
+async function handleFeed(env: Env, req: Request): Promise<Response> {
   const posts = await listPosts(env.DB, { admin: false });
-  const base = (env.APP_URL || "").replace(/\/$/, "");
+  const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
   const items = posts
     .slice(0, 50)
     .map((p: any) => {
-      const link = `${base}/#/post/${encodeURIComponent(p.slug)}`;
+      const link = `${base}/post/${encodeURIComponent(p.slug)}`;
       const desc = (p.excerpt || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       return `    <item>
       <title>${escXml(p.title)}</title>
@@ -402,11 +613,11 @@ ${items}
 }
 
 // 站点地图（公开）
-async function handleSitemap(env: Env): Promise<Response> {
+async function handleSitemap(env: Env, req: Request): Promise<Response> {
   const posts = await listPosts(env.DB, { admin: false });
-  const base = (env.APP_URL || "").replace(/\/$/, "");
+  const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
   const urls = posts
-    .map((p: any) => `  <url><loc>${base}/#/post/${encodeURIComponent(p.slug)}</loc><lastmod>${new Date(p.updated_at).toISOString()}</lastmod></url>`)
+    .map((p: any) => `  <url><loc>${base}/post/${encodeURIComponent(p.slug)}</loc><lastmod>${new Date(p.updated_at).toISOString()}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`)
     .join("\n");
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -477,6 +688,10 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const url = new URL(req.url);
     const visibility = url.searchParams.get("visibility") || undefined;
     const rows = await listPosts(env.DB, { admin: isAdmin(user), visibility });
+    // summary=1：只返回卡片字段（剔除 content / embedding 等大字段），列表首屏流量下降 90%+
+    if (url.searchParams.has("summary")) {
+      return json(rows.map(cardOf));
+    }
     return json(rows);
   }
 
@@ -1110,8 +1325,9 @@ export default {
     const path = url.pathname.split("/").filter(Boolean); // ['api', ...] 或 []
 
     // 站点地图与 RSS（公开）
-    if (path[0] === "sitemap.xml") return await handleSitemap(env);
-    if (path[0] === "feed.xml") return await handleFeed(env);
+    if (path[0] === "robots.txt") return robotsTxt(req);
+    if (path[0] === "sitemap.xml") return await handleSitemap(env, req);
+    if (path[0] === "feed.xml") return await handleFeed(env, req);
 
     if (path[0] === "api") {
       // 兜底建表（幂等）：确保每日访问量表存在，避免迁移未 apply 时统计接口失败
@@ -1125,7 +1341,24 @@ export default {
       }
     }
 
+    // 爬虫 / 社交抓取：对内容路由返回服务端预渲染（含 title / 描述 / OG / JSON-LD / 正文），提升 SEO 与分享卡片
+    if (isCrawler(req.headers.get("user-agent") || "")) {
+      if (path.length === 0) return await prerenderHome(env, req);
+      if (path[0] === "post" && path.length === 2) return await prerenderPost(env, decodeURIComponent(path[1]), req);
+    }
+
     // 非 API 请求：交给静态资源（SPA 回退由 wrangler.toml 的 not_found_handling 处理）
-    return env.ASSETS.fetch(req);
+    const assetResp = await env.ASSETS.fetch(req);
+    // 对「文档型」SPA 路由（末段无文件扩展名，如 /、/post/xxx、/tag/xxx）禁用边缘缓存，
+    // 确保每次都回到 Worker：爬虫 UA 才能拿到预渲染 HTML，而不是被缓存的 SPA 空壳误导搜索引擎。
+    // 真实静态资源（/css、/js、/vendor、图片等带扩展名）不受影响，照常边缘缓存。
+    const lastSeg = path[path.length - 1] || "";
+    const isDocRoute = !/\.[a-z0-9]+$/i.test(lastSeg);
+    if (isDocRoute) {
+      const h = new Headers(assetResp.headers);
+      h.set("Cache-Control", "no-store");
+      return new Response(assetResp.body, { status: assetResp.status, headers: h });
+    }
+    return assetResp;
   },
 } satisfies ExportedHandler<Env>;

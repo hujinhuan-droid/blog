@@ -385,6 +385,22 @@ function applySeo(s) {
     setMeta("og:description", s.seo_description);
   }
   if (s.seo_keywords) setMeta("keywords", s.seo_keywords);
+  // 站点级 OG / Twitter 基础信息（文章页会再被 applyPostSeo 覆盖）
+  setMeta("og:type", "website");
+  setMeta("og:url", location.origin + "/");
+  setMeta("twitter:card", "summary_large_image");
+}
+
+// 文章页级 OG：覆盖站点级信息，确保分享单篇文章时卡片正确
+function applyPostSeo(p) {
+  const siteTitle = SITE_SETTINGS.site_title || "AI Agent 博客";
+  document.title = `${p.title} - ${siteTitle}`;
+  setMeta("og:type", "article");
+  setMeta("og:title", p.title);
+  setMeta("og:description", (p.excerpt || "").slice(0, 200));
+  setMeta("og:url", location.origin + "/post/" + encodeURIComponent(p.slug));
+  if (p.cover) setMeta("og:image", p.cover);
+  setMeta("twitter:card", "summary_large_image");
 }
 
 function renderNav() {
@@ -398,6 +414,12 @@ function renderNav() {
     // 手机端点菜单项后自动收起下拉
     link.onclick = () => document.querySelector(".topbar")?.classList.remove("open");
     menu.appendChild(link);
+    // 在「文章」(#/) 之后插入「AI 漫剧」文字入口：像顶部导航一样，点一下进入独立页面
+    if (m.hash === "#/" || m.key === "m_posts") {
+      const aimanju = el(`<a class="menu-link" href="ai-manju.html">AI模板</a>`);
+      aimanju.onclick = () => document.querySelector(".topbar")?.classList.remove("open");
+      menu.appendChild(aimanju);
+    }
   }
   nav.appendChild(menu);
 
@@ -438,7 +460,7 @@ async function renderSiteStats() {
   if (!box) return;
   let count = 0;
   try {
-    const r = await api("/posts");
+    const r = await api("/posts?summary=1");
     const p = await r.json();
     count = Array.isArray(p) ? p.length : 0;
   } catch {}
@@ -464,8 +486,10 @@ let homeSort = ""; // "" = 默认(全部/最新) | "views" = 最多观看 | "com
 async function renderHome() {
   const app = document.getElementById("app");
   app.innerHTML = `<div class="empty">${t("loading")}</div>`;
+  // 回到首页时重置为站点级 OG（避免停留在上一篇文章的 article 元信息）
+  applySeo(SITE_SETTINGS);
   if (!homeAll.length) {
-    const res = await api("/posts");
+    const res = await api("/posts?summary=1");
     homeAll = await res.json();
   }
   if (!homeAll.length) {
@@ -497,14 +521,6 @@ async function renderHome() {
         </div>
       </div>
     </section>
-    <a class="tool-banner" href="ai-manju.html">
-      <div class="tool-banner-text">
-        <span class="tool-banner-tag">新上线</span>
-        <h3 class="tool-banner-title">AI 漫剧 · 1000 套万能模板</h3>
-        <p class="tool-banner-desc">人物 / 场景 / 道具 全分类提示词，1000 套一键复制，附 AI 配图</p>
-      </div>
-      <span class="tool-banner-cta">进入 →</span>
-    </a>
     <div class="cat-filter" id="catFilter"></div>
     <div id="homeBody"></div>`;
 
@@ -586,7 +602,7 @@ async function renderPost(slug) {
     return;
   }
   const p = await res.json();
-  if (p.cover) setMeta("og:image", p.cover);
+  applyPostSeo(p);
   const detail = el(`<div class="post-detail"></div>`);
   detail.innerHTML = `
     <h1>${p.title}</h1>
@@ -595,6 +611,7 @@ async function renderPost(slug) {
       <span class="post-views" id="postViews"></span>
       <button type="button" class="react-btn" id="likeBtn"><i data-lucide="thumbs-up"></i> <span id="likeCount">0</span></button>
       <button type="button" class="react-btn" id="favBtn"><i data-lucide="star"></i> <span id="favCount">0</span></button>
+      <button type="button" class="react-btn" id="shareBtn"><i data-lucide="share-2"></i> <span>复制链接</span></button>
     </div>
     <div class="meta">${fmtDate(p.created_at)}${
       p.visibility === "private" ? " · " + t("private") : ""
@@ -627,6 +644,19 @@ async function renderPost(slug) {
       speaking = true; ttsBtn.classList.add("active"); ttsBtn.textContent = t("tts_stop");
     };
   }
+
+  // 复制规范分享链接（路径式 URL：/post/<slug>），便于微信 / QQ 等社交平台正确抓取 OG 与正文
+  const shareBtn = document.getElementById("shareBtn");
+  if (shareBtn) shareBtn.onclick = async () => {
+    const url = location.origin + "/post/" + encodeURIComponent(p.slug);
+    try {
+      await navigator.clipboard.writeText(url);
+      const sp = shareBtn.querySelector("span");
+      if (sp) sp.textContent = "已复制";
+      toast("链接已复制，可分享到微信 / QQ");
+      setTimeout(() => { if (sp) sp.textContent = "复制链接"; }, 2000);
+    } catch { toast(url); }
+  };
 }
 
 // 阅读量上报（每会话只报一次，避免刷新虚高）
@@ -863,7 +893,7 @@ async function loadComments(slug) {
 async function renderTimeline() {
   const app = document.getElementById("app");
   app.innerHTML = `<div class="empty">${t("loading")}</div>`;
-  const posts = await (await api("/posts")).json();
+  const posts = await (await api("/posts?summary=1")).json();
   if (!posts.length) {
     app.innerHTML = `<h1 class="page-title">${t("timeline_title")}</h1><div class="empty">${t("timeline_empty")}</div>`;
     return;
@@ -957,7 +987,7 @@ async function renderTagPosts(tag) {
   app.innerHTML = `<h1 class="page-title">${t("tags_title")}</h1><div class="empty">${t("loading")}</div>`;
   let posts = [];
   try {
-    posts = await (await api("/posts")).json();
+    posts = await (await api("/posts?summary=1")).json();
   } catch {
     app.innerHTML = `<h1 class="page-title">${t("tags_title")}：${escHtml(tag)}</h1><div class="empty">${t("post_load_fail")}</div>`;
     return;
@@ -1013,6 +1043,12 @@ function route() {
   const path = location.pathname;
   if (path === "/login" || path === "/admin") {
     location.replace("/#/admin");
+    return;
+  }
+  // 路径式文章入口（/post/<slug>）：供搜索引擎与社交平台抓取；人类访问时也由本分支渲染
+  const pm = path.match(/^\/post\/(.+)$/);
+  if (pm && !location.hash) {
+    renderPost(decodeURIComponent(pm[1]));
     return;
   }
   const hash = location.hash || "#/";
