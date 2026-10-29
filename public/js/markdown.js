@@ -33,9 +33,11 @@ function splitRow(line) {
 
 function renderToc(headings) {
   if (!headings.length) return "";
+  const minLevel = Math.min(...headings.map((h) => h.level));
   let out = '<nav class="toc"><div class="toc-title">📑 目录</div><ul>';
   for (const h of headings) {
-    out += `<li class="toc-l${h.level}"><a href="#${h.slug}" onclick="event.preventDefault();scrollToAnchor('${h.slug}')">${inlineMd(h.text)}</a></li>`;
+    const lvl = h.level - minLevel + 1;
+    out += `<li class="toc-l${lvl}"><a href="#${h.slug}" onclick="event.preventDefault();scrollToAnchor('${h.slug}')">${inlineMd(h.text)}</a></li>`;
   }
   out += "</ul></nav>\n";
   return out;
@@ -197,6 +199,15 @@ function renderMarkdown(src) {
     i++;
   }
   flushPara();
+  // 自动目录：未手写 [TOC] 且存在 >=2 个二级及以上标题时，自动在正文顶部插入
+  const subHeadings = headings.filter((h) => h.level >= 2);
+  if (!html.includes('class="toc"') && subHeadings.length >= 2) {
+    const toc = renderToc(subHeadings);
+    // 若正文以 H1 开头（文章内标题），把目录插到该 H1 之后，避免「目录浮在标题之上」
+    const m = html.match(/^<h1[^>]*>[\s\S]*?<\/h1>/);
+    if (m) html = html.slice(0, m[0].length) + "\n" + toc + html.slice(m[0].length);
+    else html = toc + html;
+  }
   return html;
 }
 

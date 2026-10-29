@@ -471,11 +471,12 @@ async function renderSiteStats() {
     const t = await (await api("/tags")).json();
     tagCount = Array.isArray(t) ? t.length : 0;
   } catch {}
+  const totalViews = p.reduce((s, x) => s + (x.views || 0), 0);
   box.innerHTML =
     `<span>文章 ${count}</span>` +
     `<span>标签 ${tagCount}</span>` +
     `<span>运行 ${days} 天</span>` +
-    `<span>访客 —</span>`;
+    `<span>阅读 ${totalViews.toLocaleString()}</span>`;
 }
 
 // 首页文章缓存 + 当前页码 + 当前分类筛选（用于客户端分页/筛选，避免每次切换都重新拉取）
@@ -918,7 +919,20 @@ async function renderTimeline() {
 
 function renderFeed() {
   const app = document.getElementById("app");
-  app.innerHTML = `<h1 class="page-title">${t("feed_title")}</h1><div class="empty">${t("feed_empty")}</div>`;
+  app.innerHTML = `<h1 class="page-title">${t("feed_title")}</h1><div class="empty">${t("loading")}</div>`;
+  let posts = [];
+  try {
+    posts = await (await api("/posts?summary=1")).json();
+  } catch {}
+  if (!posts.length) {
+    app.innerHTML = `<h1 class="page-title">${t("feed_title")}</h1><div class="empty">${t("feed_empty")}</div>`;
+    return;
+  }
+  const html = `<h1 class="page-title">${t("feed_title")}</h1><div class="post-list">` +
+    posts.slice(0, 12).map(postCardHtml).join("") +
+    `</div>`;
+  app.innerHTML = html;
+  bindPostCards(app);
 }
 
 // 搜索结果页：调用 /api/search（语义 + 关键词兜底），展示匹配文章
@@ -1009,11 +1023,14 @@ async function renderTagPosts(tag) {
 function renderFriends() {
   const app = document.getElementById("app");
   const friends = [
-    { name: "WorkBuddy", url: "https://www.workbuddy.cn" },
+    { name: "WorkBuddy", url: "https://www.workbuddy.cn", desc: "一站式 AI 工作平台" },
+    { name: "Cloudflare", url: "https://www.cloudflare.com", desc: "本博客的全球化基础设施" },
   ];
-  let html = `<h1 class="page-title">${t("friends_title")}</h1><div class="friend-list">`;
+  let html = `<h1 class="page-title">${t("friends_title")}</h1>`;
+  html += `<p class="muted" style="margin:-6px 0 18px">这里收录一些我常用或欣赏的站点。如需交换友链，欢迎在文章下方留言。</p>`;
+  html += `<div class="friend-list">`;
   for (const f of friends) {
-    html += `<a class="friend" href="${f.url}" target="_blank" rel="noopener">${f.name}</a>`;
+    html += `<a class="friend" href="${f.url}" target="_blank" rel="noopener"><b>${f.name}</b><span class="muted">${f.desc}</span></a>`;
   }
   html += `</div>`;
   app.innerHTML = html;
