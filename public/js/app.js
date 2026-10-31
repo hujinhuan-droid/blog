@@ -917,7 +917,7 @@ async function renderTimeline() {
   bindPostCards(app);
 }
 
-function renderFeed() {
+async function renderFeed() {
   const app = document.getElementById("app");
   app.innerHTML = `<h1 class="page-title">${t("feed_title")}</h1><div class="empty">${t("loading")}</div>`;
   let posts = [];
