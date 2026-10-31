@@ -459,9 +459,10 @@ async function renderSiteStats() {
   const box = document.getElementById("site-stats");
   if (!box) return;
   let count = 0;
+  let p = [];
   try {
     const r = await api("/posts?summary=1");
-    const p = await r.json();
+    p = await r.json();
     count = Array.isArray(p) ? p.length : 0;
   } catch {}
   const started = Date.parse("2026-08-13");
