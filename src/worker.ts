@@ -43,6 +43,31 @@ interface Env extends AuthEnv {
   DEEPSEEK_API_KEY?: string;
 }
 
+// ── 站点与 IndexNow 配置 ──
+const SITE_HOST = "hujinhuan.cc.cd";
+const INDEXNOW_KEY = "55cd7fd5fe894eac639af63f0f305d49";
+
+// IndexNow：文章发布/更新为公开时，主动通知 Bing/Naver/Yandex 等搜索引擎。
+// 密钥文件公开放置在站点根：/${INDEXNOW_KEY}.txt（已在 public/ 中部署）。
+async function submitIndexNow(env: Env, urls: string[]): Promise<void> {
+  if (!urls || !urls.length || !INDEXNOW_KEY) return;
+  const body = JSON.stringify({
+    host: SITE_HOST,
+    key: INDEXNOW_KEY,
+    keyLocation: `https://${SITE_HOST}/${INDEXNOW_KEY}.txt`,
+    urlList: urls,
+  });
+  try {
+    await fetch("https://api.indexnow.org/indexnow", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+  } catch {
+    // 推送失败不影响发布；可稍后通过脚本补推
+  }
+}
+
 function json(data: any, status = 200, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -191,6 +216,18 @@ async function genCoverImage(env: Env, prompt: string): Promise<string> {
   const key = `covers/${crypto.randomUUID()}.png`;
   await env.BUCKET.put(key, binary, { httpMetadata: { contentType: "image/png" } });
   return `/api/files/${key}`;
+}
+
+// 根据标题/标签推断封面画风：养生健康类走水墨植物风，技术/编程/AI 类走科技插画风，
+// 默认走中性极简插画风。避免给技术文章套上「养生」封面。
+const HEALTH_KEYWORDS = ["养生", "健康", "中医", "食疗", "睡眠", "气血", "穴位", "茶", "粥", "调理", "祛湿", "养肝", "护眼", "减脂", "脾胃", "润肺", "养生茶", "艾灸", "推拿"];
+function buildCoverPrompt(title: string, tags: string): string {
+  const text = `${title} ${tags}`;
+  const isHealth = HEALTH_KEYWORDS.some((k) => text.includes(k));
+  if (isHealth) {
+    return `极简扁平插画风格的中文养生健康博客封面，主题：「${title}」，相关标签：${tags}。柔和自然色调，水墨与植物元素，大量留白，无文字，适合作为文章头图。`;
+  }
+  return `极简科技扁平插画风格的中文技术博客封面，主题：「${title}」，相关标签：${tags}。深蓝紫渐变与几何线条、代码与电路板元素，现代感，大量留白，无文字，适合作为文章头图。`;
 }
 
 // 用 Workers AI 文本模型生成文本（写作用途，独立于 Gemini 配额）
@@ -722,6 +759,9 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       tags: body.tags,
       embedding: emb || undefined,
     });
+    if ((body.status || "draft") === "published" && (row as any)?.slug) {
+      await submitIndexNow(env, [`https://${SITE_HOST}/post/${(row as any).slug}`]);
+    }
     return json(row, 201);
   }
 
@@ -747,6 +787,9 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
         tags: body.tags,
         embedding: emb || undefined,
       });
+      if (row && row.status === "published") {
+        await submitIndexNow(env, [`https://${SITE_HOST}/post/${row.slug}`]);
+      }
       return row ? json(row) : json({ error: "文章不存在" }, 404);
     }
     if (method === "DELETE") {
@@ -959,7 +1002,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const tags = Array.isArray(body.tags) ? body.tags.join("、") : (body.tags || "").toString();
     const prompt =
       (body.prompt && body.prompt.trim()) ||
-      `极简扁平插画风格的中文养生博客封面，主题：「${title}」，相关标签：${tags}。柔和自然色调，水墨与植物元素，大量留白，无文字，适合作为文章头图。`;
+      buildCoverPrompt(title, tags);
     try {
       const url = await genCoverImage(env, prompt);
       return json({ url });
