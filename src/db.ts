@@ -16,6 +16,7 @@ export interface PostRow {
   embedding: string | null;
   created_at: number;
   updated_at: number;
+  deleted_at: number | null;
   author_id: number | null;
 }
 
@@ -72,44 +73,55 @@ export function slugify(title: string): string {
   return `${clean}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-/** 列表：非管理员只能看 public + 已发布 + 未到定时时间的文章；管理员可见全部（可再按 visibility 过滤） */
+/** 列表：非管理员只能看 public + 已发布 + 未到定时时间的文章；管理员可见全部（可再按 visibility 过滤）。
+ *  回收站：opts.trash=true（仅管理员）只列出已软删文章；否则默认排除已软删（deleted_at IS NOT NULL）。 */
 export async function listPosts(
   db: DB,
-  opts: { admin?: boolean; visibility?: string } = {}
+  opts: { admin?: boolean; visibility?: string; trash?: boolean } = {}
 ): Promise<PostRow[]> {
   const where: string[] = [];
   const params: any[] = [];
-  if (!opts.admin) {
-    where.push("visibility = ?");
-    params.push("public");
-    where.push("status = ?");
-    params.push("published");
-    where.push("(scheduled_at IS NULL OR scheduled_at <= ?)");
-    params.push(now());
-  } else if (opts.visibility) {
-    where.push("visibility = ?");
-    params.push(opts.visibility);
+  if (opts.trash) {
+    where.push("deleted_at IS NOT NULL");
+  } else {
+    where.push("deleted_at IS NULL");
+    if (!opts.admin) {
+      where.push("visibility = ?");
+      params.push("public");
+      where.push("status = ?");
+      params.push("published");
+      where.push("(scheduled_at IS NULL OR scheduled_at <= ?)");
+      params.push(now());
+    } else if (opts.visibility) {
+      where.push("visibility = ?");
+      params.push(opts.visibility);
+    }
   }
   const sql =
     "SELECT posts.*, COALESCE(c.cnt, 0) AS comment_count " +
     "FROM posts " +
     "LEFT JOIN (SELECT post_slug, COUNT(*) AS cnt FROM comments GROUP BY post_slug) c ON c.post_slug = posts.slug " +
     (where.length ? " WHERE " + where.join(" AND ") : "") +
-    " ORDER BY created_at DESC";
+    " ORDER BY " + (opts.trash ? "deleted_at DESC" : "created_at DESC");
   const r = await db.prepare(sql).bind(...params).all();
-  return (r.results as PostRow[]) || [];
+  return (r.results as unknown as PostRow[]) || [];
 }
 
 export async function getPostBySlug(
   db: DB,
   slug: string,
-  opts: { admin?: boolean } = {}
+  opts: { admin?: boolean; trash?: boolean } = {}
 ): Promise<PostRow | null> {
   const row = (await db
     .prepare("SELECT * FROM posts WHERE slug = ?")
     .bind(slug)
     .first()) as PostRow | null;
   if (!row) return null;
+  // 已进回收站：非管理员一律不可见；管理员仅在显式 trash 时才可访问
+  if (row.deleted_at) {
+    if (!opts.admin) return null;
+    if (!opts.trash) return null;
+  }
   if (!opts.admin) {
     if (row.visibility !== "public") return null;
     if (row.status && row.status !== "published") return null;
@@ -121,19 +133,52 @@ export async function getPostBySlug(
 export async function getPostById(
   db: DB,
   id: number,
-  opts: { admin?: boolean } = {}
+  opts: { admin?: boolean; trash?: boolean } = {}
 ): Promise<PostRow | null> {
   const row = (await db
     .prepare("SELECT * FROM posts WHERE id = ?")
     .bind(id)
     .first()) as PostRow | null;
   if (!row) return null;
+  if (row.deleted_at) {
+    if (!opts.admin) return null;
+    if (!opts.trash) return null;
+  }
   if (!opts.admin) {
     if (row.visibility !== "public") return null;
     if (row.status && row.status !== "published") return null;
     if (row.scheduled_at && row.scheduled_at > now()) return null;
   }
   return row;
+}
+
+/** 软删除（进回收站） */
+export async function softDeletePost(db: DB, id: number): Promise<boolean> {
+  const r = await db
+    .prepare("UPDATE posts SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+    .bind(now(), now(), id)
+    .run();
+  return (r.meta?.changes ?? 0) > 0;
+}
+
+/** 从回收站恢复 */
+export async function restorePost(db: DB, id: number): Promise<boolean> {
+  const r = await db
+    .prepare("UPDATE posts SET deleted_at = NULL, updated_at = ? WHERE id = ?")
+    .bind(now(), id)
+    .run();
+  return (r.meta?.changes ?? 0) > 0;
+}
+
+/** 彻底删除（从回收站清除） */
+export async function purgePost(db: DB, id: number): Promise<boolean> {
+  const r = await db.prepare("DELETE FROM posts WHERE id = ?").bind(id).run();
+  return (r.meta?.changes ?? 0) > 0;
+}
+
+/** 回收站列表（管理员） */
+export async function listTrash(db: DB): Promise<PostRow[]> {
+  return listPosts(db, { admin: true, trash: true });
 }
 
 export async function createPost(
@@ -327,6 +372,7 @@ export const SETTING_KEYS = [
   "moderation_enabled",
   "banned_words",
   "notify_email",
+  "webhooks",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -367,8 +413,80 @@ export async function incMeta(db: DB, k: string, by = 1): Promise<void> {
 
 // 站点总阅读量（看板用）
 export async function getTotalViews(db: DB): Promise<number> {
-  const r = (await db.prepare("SELECT COALESCE(SUM(views),0) v FROM posts").first()) as { v: number } | null;
+  const r = (await db.prepare("SELECT COALESCE(SUM(views),0) v FROM posts WHERE deleted_at IS NULL").first()) as { v: number } | null;
   return r ? Number(r.v) || 0 : 0;
+}
+
+// ---------------- 审计日志 ----------------
+
+export async function logAudit(
+  db: DB,
+  data: { actor?: string | null; action: string; target?: string; detail?: string }
+): Promise<void> {
+  try {
+    await db
+      .prepare("INSERT INTO audit_log (actor, action, target, detail, created_at) VALUES (?, ?, ?, ?, ?)")
+      .bind(data.actor || "system", data.action, data.target || "", data.detail || "", now())
+      .run();
+  } catch {
+    // 审计失败不应阻断主流程
+  }
+}
+
+export async function listAudit(db: DB, limit = 200): Promise<any[]> {
+  const r = await db
+    .prepare("SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?")
+    .bind(limit)
+    .all();
+  return (r.results as any[]) || [];
+}
+
+// ---------------- 数据分析 ----------------
+
+/** 热门文章 TOP n（按阅读量，排除回收站） */
+export async function getPopularPosts(db: DB, n = 10): Promise<any[]> {
+  const r = await db
+    .prepare("SELECT id, slug, title, cover, views FROM posts WHERE deleted_at IS NULL AND status = 'published' ORDER BY views DESC LIMIT ?")
+    .bind(n)
+    .all();
+  return (r.results as any[]) || [];
+}
+
+/** 流量来源（按天/域名聚合，最近 days 天） */
+export async function getRefererStats(db: DB, days = 30): Promise<{ domain: string; cnt: number }[]> {
+  const day = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const r = await db
+    .prepare(
+      "SELECT domain, SUM(cnt) AS cnt FROM referer_daily WHERE day >= ? GROUP BY domain ORDER BY cnt DESC LIMIT 50"
+    )
+    .bind(day)
+    .all();
+  return (r.results as any[]) || [];
+}
+
+export async function recordReferer(db: DB, domain: string): Promise<void> {
+  const day = new Date().toISOString().slice(0, 10);
+  await db
+    .prepare(
+      "INSERT INTO referer_daily (day, domain, cnt) VALUES (?, ?, 1) ON CONFLICT(day, domain) DO UPDATE SET cnt = cnt + 1"
+    )
+    .bind(day, domain)
+    .run();
+}
+
+/** IndexNow 推送日志 */
+export async function logIndexNow(db: DB, url: string, status: number, resp: string): Promise<void> {
+  try {
+    await db
+      .prepare("INSERT INTO indexnow_log (url, status, resp, created_at) VALUES (?, ?, ?, ?)")
+      .bind(url, status, String(resp).slice(0, 500), now())
+      .run();
+  } catch {}
+}
+
+export async function listIndexNowLog(db: DB, limit = 100): Promise<any[]> {
+  const r = await db.prepare("SELECT * FROM indexnow_log ORDER BY created_at DESC LIMIT ?").bind(limit).all();
+  return (r.results as any[]) || [];
 }
 
 // ---------------- 评论（支持嵌套） ----------------
@@ -380,26 +498,54 @@ export interface CommentRow {
   email: string | null;
   content: string;
   parent_id: number;
+  status: string;
   created_at: number;
 }
 
-export async function listComments(db: DB, postSlug: string): Promise<CommentRow[]> {
+export async function listComments(
+  db: DB,
+  postSlug: string,
+  opts: { status?: string } = {}
+): Promise<CommentRow[]> {
+  let sql = "SELECT * FROM comments WHERE post_slug = ?";
+  const params: any[] = [postSlug];
+  if (opts.status) {
+    sql += " AND status = ?";
+    params.push(opts.status);
+  }
+  sql += " ORDER BY created_at ASC";
+  const r = await db.prepare(sql).bind(...params).all();
+  return (r.results as unknown as CommentRow[]) || [];
+}
+
+export async function listCommentsByStatus(
+  db: DB,
+  status: string
+): Promise<(CommentRow & { post_title?: string })[]> {
   const r = await db
-    .prepare("SELECT * FROM comments WHERE post_slug = ? ORDER BY created_at ASC")
-    .bind(postSlug)
+    .prepare(
+      "SELECT c.*, p.title AS post_title FROM comments c LEFT JOIN posts p ON p.slug = c.post_slug WHERE c.status = ? ORDER BY c.created_at DESC"
+    )
+    .bind(status)
     .all();
-  return (r.results as CommentRow[]) || [];
+  return (r.results as any[]) || [];
+}
+
+export async function setCommentStatus(db: DB, id: number, status: string): Promise<boolean> {
+  const r = await db.prepare("UPDATE comments SET status = ? WHERE id = ?").bind(status, id).run();
+  return (r.meta?.changes ?? 0) > 0;
 }
 
 export async function createComment(
   db: DB,
-  data: { post_slug: string; author: string; email?: string | null; content: string; parent_id?: number }
+  data: { post_slug: string; author: string; email?: string | null; content: string; parent_id?: number; status?: string }
 ): Promise<CommentRow> {
   const ts = now();
   const parent_id = data.parent_id || 0;
+  const status = data.status || "approved";
   await db
-    .prepare("INSERT INTO comments (post_slug, author, email, content, parent_id, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(data.post_slug, data.author, data.email || null, data.content, parent_id, ts)
+    .prepare("INSERT INTO comments (post_slug, author, email, content, parent_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(data.post_slug, data.author, data.email || null, data.content, parent_id, status, ts)
     .run();
   return (await db
     .prepare("SELECT * FROM comments WHERE post_slug = ? ORDER BY created_at DESC LIMIT 1")

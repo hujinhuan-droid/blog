@@ -20,9 +20,15 @@ import {
   createPost,
   updatePost,
   deletePost,
+  softDeletePost,
+  restorePost,
+  purgePost,
+  listTrash,
   getSettings,
   setSettings,
   listComments,
+  listCommentsByStatus,
+  setCommentStatus,
   createComment,
   listTags,
   parseTags,
@@ -31,6 +37,13 @@ import {
   getReactionCounts,
   toggleReaction,
   getTotalViews,
+  logAudit,
+  listAudit,
+  getPopularPosts,
+  getRefererStats,
+  recordReferer,
+  logIndexNow,
+  listIndexNowLog,
 } from "./db";
 
 interface Env extends AuthEnv {
@@ -58,18 +71,50 @@ async function submitIndexNow(env: Env, urls: string[]): Promise<void> {
     urlList: urls,
   });
   try {
-    await fetch("https://api.indexnow.org/indexnow", {
+    const resp = await fetch("https://api.indexnow.org/indexnow", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body,
     });
-  } catch {
+    // 记录推送日志（收录监控）
+    try {
+      await logIndexNow(env.DB, urls[0], resp.status, resp.status === 200 ? "accepted" : await resp.text().catch(() => ""));
+    } catch {}
+  } catch (e: any) {
     // 推送失败不影响发布；可稍后通过脚本补推
+    try {
+      await logIndexNow(env.DB, urls[0], 0, "network error: " + (e?.message || ""));
+    } catch {}
   }
 }
 
-function json(data: any, status = 200, extra: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(data), {
+// 发布联动 Webhook：文章发布/更新为公开时，按设置中的 webhooks 列表逐个回调（best-effort，不阻塞发布）。
+async function fireWebhooks(env: Env, post: any): Promise<void> {
+  let hooks: any[] = [];
+  try {
+    const s = await getSettings(env.DB);
+    if (s.webhooks) hooks = JSON.parse(s.webhooks);
+  } catch {}
+  if (!Array.isArray(hooks) || !hooks.length) return;
+  const payload = JSON.stringify({
+    event: "post_published",
+    post: { id: post.id, slug: post.slug, title: post.title, excerpt: post.excerpt, cover: post.cover, url: `https://${SITE_HOST}/post/${post.slug}` },
+  });
+  const targets = hooks.filter((h) => h && h.url && (!h.events || h.events.includes("publish")));
+  await Promise.all(
+    targets.map((h) =>
+      fetch(h.url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: payload,
+      })
+        .then(() => logAudit(env.DB, { action: "webhook_fire", target: h.url, detail: "post_published ok" }))
+        .catch((e: any) => logAudit(env.DB, { action: "webhook_fire", target: h.url, detail: "err: " + (e?.message || "") }))
+    )
+  );
+}
+
+function json(data: any, status = 200, extra: Record<string, string> = {}): Response {  return new Response(JSON.stringify(data), {
     status,
     headers: { "content-type": "application/json; charset=utf-8", ...extra },
   });
@@ -717,6 +762,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       if (body[k] !== undefined && body[k] !== null) clean[k] = String(body[k]);
     }
     await setSettings(env.DB, clean);
+    await logAudit(env.DB, { actor: user ? user.username : "admin", action: "settings_update", target: Object.keys(clean).join(",") });
     return json({ ok: true });
   }
 
@@ -724,7 +770,8 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
   if (method === "GET" && seg.length === 2 && seg[1] === "posts") {
     const url = new URL(req.url);
     const visibility = url.searchParams.get("visibility") || undefined;
-    const rows = await listPosts(env.DB, { admin: isAdmin(user), visibility });
+    const trash = url.searchParams.get("trash") === "1";
+    const rows = await listPosts(env.DB, { admin: isAdmin(user), visibility, trash });
     // summary=1：只返回卡片字段（剔除 content / embedding 等大字段），列表首屏流量下降 90%+
     if (url.searchParams.has("summary")) {
       return json(rows.map(cardOf));
@@ -761,7 +808,9 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     });
     if ((body.status || "draft") === "published" && (row as any)?.slug) {
       await submitIndexNow(env, [`https://${SITE_HOST}/post/${(row as any).slug}`]);
+      await fireWebhooks(env, row);
     }
+    await logAudit(env.DB, { actor: user!.username, action: "post_create", target: `#${(row as any).id} ${(row as any).title}`, detail: body.status || "draft" });
     return json(row, 201);
   }
 
@@ -789,14 +838,75 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       });
       if (row && row.status === "published") {
         await submitIndexNow(env, [`https://${SITE_HOST}/post/${row.slug}`]);
+        await fireWebhooks(env, row);
       }
+      await logAudit(env.DB, { actor: user!.username, action: "post_update", target: `#${id} ${row?.title || ""}` });
       return row ? json(row) : json({ error: "文章不存在" }, 404);
     }
     if (method === "DELETE") {
       if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
-      const ok = await deletePost(env.DB, id);
+      const existing = await getPostById(env.DB, id, { admin: true });
+      if (!existing) return json({ error: "文章不存在" }, 404);
+      const ok = await softDeletePost(env.DB, id);
+      await logAudit(env.DB, { actor: user!.username, action: "post_delete", target: `#${id} ${existing.title}`, detail: "移入回收站" });
       return ok ? json({ ok: true }) : json({ error: "文章不存在" }, 404);
     }
+  }
+
+  // 回收站：恢复 / 彻底删除（管理员，路径式）
+  if (seg.length === 4 && seg[1] === "posts") {
+    const id = Number(seg[2]);
+    if (!Number.isInteger(id)) return json({ error: "无效 id" }, 400);
+    if (seg[3] === "restore" && method === "POST") {
+      if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+      const existing = await getPostById(env.DB, id, { admin: true, trash: true });
+      if (!existing) return json({ error: "文章不存在" }, 404);
+      await restorePost(env.DB, id);
+      await logAudit(env.DB, { actor: user!.username, action: "post_restore", target: `#${id} ${existing.title}` });
+      return json({ ok: true });
+    }
+    if (seg[3] === "purge" && method === "DELETE") {
+      if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+      const existing = await getPostById(env.DB, id, { admin: true, trash: true });
+      if (!existing) return json({ error: "文章不存在" }, 404);
+      await purgePost(env.DB, id);
+      await logAudit(env.DB, { actor: user!.username, action: "post_purge", target: `#${id} ${existing.title}` });
+      return json({ ok: true });
+    }
+  }
+
+  // 文章批量操作（管理员）：delete(进回收站) / publish / draft / private / purge(彻底删)
+  if (method === "POST" && seg.length === 3 && seg[1] === "posts" && seg[2] === "bulk") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const ids = Array.isArray(body.ids) ? body.ids.map((x: any) => Number(x)).filter((x: number) => x) : [];
+    const action = body.action;
+    if (!ids.length || !["delete", "publish", "draft", "private", "purge"].includes(action)) {
+      return json({ error: "参数无效" }, 400);
+    }
+    let n = 0;
+    for (const id of ids) {
+      const ex = await getPostById(env.DB, id, { admin: true });
+      if (!ex) continue;
+      if (action === "delete") {
+        if (await softDeletePost(env.DB, id)) n++;
+      } else if (action === "purge") {
+        if (await purgePost(env.DB, id)) n++;
+      } else {
+        const newStatus = action === "publish" ? "published" : action === "draft" ? "draft" : "private";
+        const vis = action === "private" ? "private" : ex.visibility;
+        const row = await updatePost(env.DB, id, { status: newStatus, visibility: vis });
+        if (row) {
+          n++;
+          if (row.status === "published") {
+            await submitIndexNow(env, [`https://${SITE_HOST}/post/${row.slug}`]);
+            await fireWebhooks(env, row);
+          }
+        }
+      }
+    }
+    await logAudit(env.DB, { actor: user!.username, action: "post_bulk", target: action, detail: `${n} 篇` });
+    return json({ ok: true, count: n });
   }
 
   // 鉴权：登录入口（GET = GitHub 跳转；POST = 密码登录）
@@ -814,6 +924,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       const u = await passwordLogin(env, body.username, body.password);
       if (!u) return json({ error: "账号或密码错误" }, 401);
       const s = await startSession(env, u);
+      await logAudit(env.DB, { actor: u.username, action: "login", target: "password" });
       return json({ user: s.user }, 200, { "set-cookie": s.cookie });
     }
     // GitHub OAuth 跳转（兜底）
@@ -858,6 +969,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const res = await changePassword(env, user!.id, body.current_password || "", body.new_password || "");
     if (res === "wrong") return json({ error: "当前密码不正确" }, 400);
     if (res === "weak") return json({ error: "新密码至少 6 位" }, 400);
+    await logAudit(env.DB, { actor: user!.username, action: "change_password" });
     return json({ ok: true });
   }
 
@@ -1294,11 +1406,31 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
   // 媒体库（管理员）：列出 / 删除 R2 对象
   if (method === "GET" && seg.length === 2 && seg[1] === "media") {
     if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
-    const listed = await env.BUCKET.list({ limit: 1000 });
-    const items = (listed.objects || [])
-      .map((o: any) => ({ key: o.key, url: `/api/files/${o.key}`, size: o.size, uploaded: o.uploaded ? o.uploaded.getTime() : null }))
+    const url = new URL(req.url);
+    const prefix = url.searchParams.get("prefix") || "";
+    const cursor = url.searchParams.get("cursor") || undefined;
+    const listed = await env.BUCKET.list({ prefix, cursor, limit: 200 });
+    const referenced = new Set<string>();
+    const allPosts = (await env.DB.prepare("SELECT content, cover, excerpt FROM posts").all()).results as any[];
+    const re = /\/api\/files\/([^\s"'<>)+?]+)/g;
+    for (const p of allPosts) {
+      for (const field of [p.content, p.cover, p.excerpt]) {
+        if (!field) continue;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(field))) referenced.add(m[1]);
+      }
+    }
+    const objects = (listed.objects || [])
+      .map((o: any) => ({
+        key: o.key,
+        size: o.size,
+        uploaded: o.uploaded ? new Date(o.uploaded).getTime() : null,
+        url: `/api/files/${o.key}`,
+        orphan: !referenced.has(o.key),
+      }))
       .sort((a: any, b: any) => (b.uploaded || 0) - (a.uploaded || 0));
-    return json({ items });
+    const totalSize = (listed.objects || []).reduce((s: number, o: any) => s + (o.size || 0), 0);
+    return json({ objects, truncated: !!listed.truncated, cursor: (listed as any).cursor || null, totalSize });
   }
   if (method === "DELETE" && seg.length === 2 && seg[1] === "media") {
     if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
@@ -1318,18 +1450,44 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     });
   }
 
-  // 读取文章评论（公开）
+  // 读取文章评论（公开）；管理员可用 ?status=pending 拉取待审核、?status=approved 已通过
   if (method === "GET" && seg.length === 2 && seg[1] === "comments") {
     const url = new URL(req.url);
     const slug = url.searchParams.get("post");
+    const status = url.searchParams.get("status");
     if (!slug) {
-      // 管理员可在不下钻时获取全部评论（用于看板「评论」卡片下钻）
+      // 管理员：不下钻时按 status 获取评论（用于审核队列 / 看板下钻）
       if (!isAdmin(user)) return json({ error: "需要 post 参数或管理员权限" }, 400);
+      if (status) {
+        return json(await listCommentsByStatus(env.DB, status));
+      }
       const rows = (await env.DB.prepare("SELECT * FROM comments ORDER BY created_at DESC").all()) as any;
       return json(rows.results || []);
     }
-    const rows = await listComments(env.DB, slug);
+    const rows = await listComments(env.DB, slug, { status: status || undefined });
     return json(rows);
+  }
+
+  // 评论批量操作（管理员）：approve / delete
+  if (method === "POST" && seg.length === 3 && seg[1] === "comments" && seg[2] === "bulk") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const ids = Array.isArray(body.ids) ? body.ids.map((x: any) => Number(x)).filter((x: number) => x) : [];
+    const action = body.action;
+    if (!ids.length || (action !== "approve" && action !== "delete")) {
+      return json({ error: "参数无效" }, 400);
+    }
+    let n = 0;
+    for (const id of ids) {
+      if (action === "approve") {
+        if (await setCommentStatus(env.DB, id, "approved")) n++;
+      } else {
+        const r = await env.DB.prepare("DELETE FROM comments WHERE id = ?").bind(id).run();
+        if ((r.meta?.changes ?? 0) > 0) n++;
+      }
+    }
+    await logAudit(env.DB, { actor: user!.username, action: "comment_bulk", target: action, detail: `${n} 条` });
+    return json({ ok: true, count: n });
   }
 
   // 提交评论（公开；含蜜罐字段防机器人；支持 parent_id 嵌套回复）
@@ -1346,8 +1504,18 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     if (author.length > 40 || content.length > 1000) return json({ error: "内容过长" }, 400);
     const post = await getPostBySlug(env.DB, slug);
     if (!post) return json({ error: "文章不存在" }, 404);
-    const row = await createComment(env.DB, { post_slug: slug, author, email, content, parent_id });
-    return json(row, 201);
+    // 审核开关：开启时新评论先进入「待审核」，避免不当内容直接公开
+    const settings = await getSettings(env.DB);
+    const moderated = settings.moderation_enabled !== "0";
+    const row = await createComment(env.DB, {
+      post_slug: slug,
+      author,
+      email,
+      content,
+      parent_id,
+      status: moderated ? "pending" : "approved",
+    });
+    return json({ ...row, pending: moderated }, 201);
   }
 
   // 删除评论（管理员）
@@ -1357,6 +1525,138 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     if (!id) return json({ error: "缺少评论 id" }, 400);
     await env.DB.prepare("DELETE FROM comments WHERE id = ?").bind(id).run();
     return json({ ok: true });
+  }
+
+  // 审计日志（管理员）
+  if (method === "GET" && seg.length === 2 && seg[1] === "audit") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    return json(await listAudit(env.DB, 300));
+  }
+
+  // 数据备份导出（管理员）：导出全部文章（含回收站）、评论、设置
+  if (method === "GET" && seg.length === 3 && seg[1] === "backup" && seg[2] === "export") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const posts = (await env.DB.prepare("SELECT * FROM posts ORDER BY id ASC").all()).results as any[];
+    const comments = (await env.DB.prepare("SELECT * FROM comments ORDER BY id ASC").all()).results as any[];
+    const settings = await getSettings(env.DB);
+    const audit = await listAudit(env.DB, 500);
+    return json({
+      type: "ai-agent-blog-backup",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      posts,
+      comments,
+      settings,
+      audit,
+    });
+  }
+
+  // 数据备份导入（管理员）：合并/更新（不会删除备份中不存在的记录）
+  if (method === "POST" && seg.length === 3 && seg[1] === "backup" && seg[2] === "import") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    if (!body || body.type !== "ai-agent-blog-backup") return json({ error: "备份文件格式不正确" }, 400);
+    let nPosts = 0, nComments = 0, nSettings = 0;
+    if (Array.isArray(body.posts)) {
+      for (const p of body.posts) {
+        const existing = await env.DB.prepare("SELECT id FROM posts WHERE id = ?").bind(p.id).first();
+        if (existing) {
+          await env.DB.prepare(
+            "UPDATE posts SET slug=?, title=?, content=?, excerpt=?, cover=?, visibility=?, status=?, scheduled_at=?, ai_notes=?, tags=?, embedding=?, created_at=?, updated_at=?, deleted_at=? WHERE id=?"
+          ).bind(p.slug, p.title, p.content, p.excerpt, p.cover, p.visibility, p.status, p.scheduled_at, p.ai_notes, p.tags, p.embedding, p.created_at, p.updated_at, p.deleted_at ?? null, p.id).run();
+        } else {
+          await env.DB.prepare(
+            "INSERT INTO posts (id, slug, title, content, excerpt, cover, visibility, status, scheduled_at, ai_notes, tags, embedding, created_at, updated_at, deleted_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+          ).bind(p.id, p.slug, p.title, p.content, p.excerpt, p.cover, p.visibility, p.status, p.scheduled_at, p.ai_notes, p.tags, p.embedding, p.created_at, p.updated_at, p.deleted_at ?? null).run();
+        }
+        nPosts++;
+      }
+    }
+    if (Array.isArray(body.comments)) {
+      for (const c of body.comments) {
+        const existing = await env.DB.prepare("SELECT id FROM comments WHERE id = ?").bind(c.id).first();
+        if (existing) {
+          await env.DB.prepare("UPDATE comments SET post_slug=?, author=?, email=?, content=?, parent_id=?, status=?, created_at=? WHERE id=?")
+            .bind(c.post_slug, c.author, c.email, c.content, c.parent_id, c.status, c.created_at, c.id).run();
+        } else {
+          await env.DB.prepare("INSERT INTO comments (id, post_slug, author, email, content, parent_id, status, created_at) VALUES (?,?,?,?,?,?,?,?)")
+            .bind(c.id, c.post_slug, c.author, c.email, c.content, c.parent_id, c.status, c.created_at).run();
+        }
+        nComments++;
+      }
+    }
+    if (body.settings && typeof body.settings === "object") {
+      const clean: Record<string, string> = {};
+      for (const [k, v] of Object.entries(body.settings)) clean[k] = String(v);
+      await setSettings(env.DB, clean);
+      nSettings = Object.keys(clean).length;
+    }
+    await logAudit(env.DB, { actor: user!.username, action: "backup_import", target: `posts=${nPosts},comments=${nComments},settings=${nSettings}` });
+    return json({ ok: true, posts: nPosts, comments: nComments, settings: nSettings });
+  }
+
+  // 数据分析（管理员）：热门文章 / 流量来源 / IndexNow 日志 / 概览计数
+  if (method === "GET" && seg.length === 2 && seg[1] === "analytics") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const popular = await getPopularPosts(env.DB, 10);
+    const referers = await getRefererStats(env.DB, 30);
+    const indexnow = await listIndexNowLog(env.DB, 50);
+    const idxRow = (await env.DB.prepare("SELECT COUNT(*) c FROM indexnow_log").first()) as any;
+    const refRow = (await env.DB.prepare("SELECT COALESCE(SUM(cnt),0) c FROM referer_daily").first()) as any;
+    return json({
+      popular,
+      referers,
+      indexnow,
+      indexnowTotal: idxRow ? Number(idxRow.c) || 0 : 0,
+      refererTotal: refRow ? Number(refRow.c) || 0 : 0,
+    });
+  }
+
+  // 媒体库：列出 R2 对象 + 孤儿检测（实现见上方 GET /api/media，已统一）
+
+  // 媒体库：批量删除（管理员）
+  if (method === "POST" && seg.length === 3 && seg[1] === "media" && seg[2] === "delete") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const keys = Array.isArray(body.keys) ? body.keys.map((x: any) => String(x)).filter(Boolean) : [];
+    if (!keys.length) return json({ error: "请选择文件" }, 400);
+    let n = 0;
+    for (const k of keys) {
+      await env.BUCKET.delete(k);
+      n++;
+    }
+    await logAudit(env.DB, { actor: user!.username, action: "media_delete", target: `${n} 个文件` });
+    return json({ ok: true, count: n });
+  }
+
+  // 媒体库：清理孤儿文件（未被任何文章引用）
+  if (method === "POST" && seg.length === 3 && seg[1] === "media" && seg[2] === "cleanup") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    // 复用上面的引用收集 + 列表逻辑
+    const referenced = new Set<string>();
+    const allPosts = (await env.DB.prepare("SELECT content, cover, excerpt FROM posts").all()).results as any[];
+    const re = /\/api\/files\/([^\s"'<>)+?]+)/g;
+    for (const p of allPosts) {
+      for (const field of [p.content, p.cover, p.excerpt]) {
+        if (!field) continue;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(field))) referenced.add(m[1]);
+      }
+    }
+    let cursor: string | undefined;
+    let n = 0;
+    do {
+      const listed = await env.BUCKET.list({ cursor, limit: 500 });
+      for (const o of listed.objects || []) {
+        if (!referenced.has(o.key)) {
+          await env.BUCKET.delete(o.key);
+          n++;
+        }
+      }
+      cursor = listed.truncated ? listed.cursor || undefined : undefined;
+    } while (cursor);
+    await logAudit(env.DB, { actor: user!.username, action: "media_cleanup", target: `${n} 个孤儿` });
+    return json({ ok: true, count: n });
   }
 
   return json({ error: "Not Found" }, 404);
@@ -1398,6 +1698,17 @@ export default {
     const lastSeg = path[path.length - 1] || "";
     const isDocRoute = !/\.[a-z0-9]+$/i.test(lastSeg);
     if (isDocRoute) {
+      // 流量来源采集：仅记录来自外部/搜索引擎的访问（同站内部跳转不计），按天+域名聚合，写入 referer_daily
+      try {
+        const ref = req.headers.get("referer");
+        if (ref) {
+          const refHost = new URL(ref).host.toLowerCase();
+          const selfHost = new URL(req.url).host.toLowerCase();
+          if (refHost && refHost !== selfHost && !refHost.endsWith("." + selfHost) && !selfHost.endsWith("." + refHost)) {
+            await recordReferer(env.DB, refHost);
+          }
+        }
+      } catch {}
       const h = new Headers(assetResp.headers);
       h.set("Cache-Control", "no-store");
       return new Response(assetResp.body, { status: assetResp.status, headers: h });

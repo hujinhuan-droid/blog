@@ -34,7 +34,11 @@ function buildAdminShell() {
         <nav class="admin-nav">
           <a class="admin-nav-item" href="#/admin" data-nav="overview"><span class="ico"><i data-lucide="layout-dashboard"></i></span><span>概览</span></a>
           <a class="admin-nav-item" href="#/admin/posts" data-nav="posts"><span class="ico"><i data-lucide="file-text"></i></span><span>文章</span></a>
+          <a class="admin-nav-item" href="#/admin/comments" data-nav="comments"><span class="ico"><i data-lucide="message-square"></i></span><span>评论审核</span></a>
           <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico"><i data-lucide="images"></i></span><span>媒体库</span></a>
+          <a class="admin-nav-item" href="#/admin/trash" data-nav="trash"><span class="ico"><i data-lucide="trash-2"></i></span><span>回收站</span></a>
+          <a class="admin-nav-item" href="#/admin/analytics" data-nav="analytics"><span class="ico"><i data-lucide="bar-chart-2"></i></span><span>数据分析</span></a>
+          <a class="admin-nav-item" href="#/admin/audit" data-nav="audit"><span class="ico"><i data-lucide="shield"></i></span><span>审计日志</span></a>
           <a class="admin-nav-item" href="#/admin/settings" data-nav="settings"><span class="ico"><i data-lucide="settings"></i></span><span>设置</span></a>
         </nav>
         <div class="admin-side-foot">
@@ -206,6 +210,10 @@ function setAdminActive() {
     [/^#\/admin\/(edit|new)/, "posts"],
     [/^#\/admin\/posts/, "posts"],
     [/^#\/admin\/drill/, "posts"],
+    [/^#\/admin\/comments/, "comments"],
+    [/^#\/admin\/trash/, "trash"],
+    [/^#\/admin\/analytics/, "analytics"],
+    [/^#\/admin\/audit/, "audit"],
     [/^#\/admin\/media/, "media"],
     [/^#\/admin\/settings/, "settings"],
     [/^#\/admin(\/)?$/, "overview"],
@@ -227,10 +235,20 @@ function setAdminActive() {
     else if (/^#\/admin\/new/.test(hash)) crumb = "新建文章";
     else if (/^#\/admin\/posts/.test(hash)) crumb = "文章";
     else if (/^#\/admin\/drill/.test(hash)) crumb = "文章列表";
+    else if (/^#\/admin\/comments/.test(hash)) crumb = "评论审核";
+    else if (/^#\/admin\/trash/.test(hash)) crumb = "回收站";
+    else if (/^#\/admin\/analytics/.test(hash)) crumb = "数据分析";
+    else if (/^#\/admin\/audit/.test(hash)) crumb = "审计日志";
     else if (/^#\/admin\/media/.test(hash)) crumb = "媒体库";
     else if (/^#\/admin\/settings/.test(hash)) crumb = "设置";
     titleEl.textContent = crumb;
   }
+}
+
+// 设置后台顶栏标题
+function setTitle(t) {
+  const elx = document.getElementById("admin-top-title");
+  if (elx) elx.textContent = t;
 }
 
 function renderAdmin() {
@@ -261,6 +279,22 @@ function renderAdmin() {
   }
   if (hash.startsWith("#/admin/posts")) {
     renderPostsTable();
+    return;
+  }
+  if (hash.startsWith("#/admin/comments")) {
+    renderCommentsModeration();
+    return;
+  }
+  if (hash.startsWith("#/admin/trash")) {
+    renderTrash();
+    return;
+  }
+  if (hash.startsWith("#/admin/analytics")) {
+    renderAnalytics();
+    return;
+  }
+  if (hash.startsWith("#/admin/audit")) {
+    renderAudit();
     return;
   }
   if (hash.startsWith("#/admin/drill/")) {
@@ -415,7 +449,15 @@ async function renderPostsTable() {
   tbar.innerHTML = `
     <button class="btn" id="reindex"><i data-lucide="brain"></i> 重建搜索索引</button>
     <button class="btn" id="batch-notes" disabled><i data-lucide="bot"></i> 批量 AI 备注</button>
-    <button class="btn" id="batch-tags" disabled><i data-lucide="tags"></i> 批量 AI 分类</button>`;
+    <button class="btn" id="batch-tags" disabled><i data-lucide="tags"></i> 批量 AI 分类</button>
+    <div class="bulk-bar" id="bulkBar" style="display:none">
+      <span class="bulk-info">已选 <b id="bulkCount">0</b> 篇：</span>
+      <button class="btn btn-sm" data-act="publish">发布</button>
+      <button class="btn btn-sm" data-act="draft">转草稿</button>
+      <button class="btn btn-sm" data-act="private">转私密</button>
+      <button class="btn btn-sm btn-warn" data-act="delete">进回收站</button>
+      <button class="btn btn-sm btn-danger" data-act="purge">彻底删除</button>
+    </div>`;
   wrap.appendChild(tbar);
 
   if (!posts.length) {
@@ -441,12 +483,12 @@ async function renderPostsTable() {
         <button class="btn btn-sm btn-danger" data-id="${p.id}">删除</button>
       </td>`;
     tr.querySelector(".btn-danger").onclick = async () => {
-      if (!confirm(`确定删除《${p.title}》？`)) return;
+      if (!confirm(`确定将《${p.title}》移入回收站？可在回收站恢复。`)) return;
       const r = await api("/posts/" + p.id, { method: "DELETE" });
       if (r.ok) {
-        toast("已删除");
+        toast("已移入回收站");
         renderPostsTable();
-      } else toast("删除失败");
+      } else toast("操作失败");
     };
     tbody.appendChild(tr);
   }
@@ -465,6 +507,12 @@ async function renderPostsTable() {
     batchBtn.innerHTML = n ? `<i data-lucide="bot"></i> 批量 AI 备注(${n})` : `<i data-lucide="bot"></i> 批量 AI 备注`;
     batchTagsBtn.disabled = n === 0;
     batchTagsBtn.innerHTML = n ? `<i data-lucide="tags"></i> 批量 AI 分类(${n})` : `<i data-lucide="tags"></i> 批量 AI 分类`;
+    const bar = document.getElementById("bulkBar");
+    if (bar) {
+      bar.style.display = n ? "inline-flex" : "none";
+      const c = document.getElementById("bulkCount");
+      if (c) c.textContent = n;
+    }
   };
   if (selAll)
     selAll.onchange = () => {
@@ -510,6 +558,29 @@ async function renderPostsTable() {
       batchTagsBtn.textContent = old;
     }
   };
+  const bulkBar = document.getElementById("bulkBar");
+  if (bulkBar)
+    bulkBar.onclick = async (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      const act = btn.dataset.act;
+      const ids = [...app.querySelectorAll(".row-sel:checked")].map((cb) => Number(cb.dataset.id));
+      if (!ids.length) return;
+      const labels = { publish: "发布", draft: "转草稿", private: "转私密", delete: "移入回收站", purge: "彻底删除" };
+      if (!confirm(`确定对选中的 ${ids.length} 篇文章执行「${labels[act]}」？` + (act === "purge" ? "（彻底删除不可恢复）" : ""))) return;
+      btn.disabled = true;
+      try {
+        const res = await api("/posts/bulk", { method: "POST", body: JSON.stringify({ ids, action: act }) });
+        const r = await res.json().catch(() => ({}));
+        if (res.ok) toast(`已${labels[act]} ${r.count} 篇`);
+        else toast(r.error || "操作失败");
+        renderPostsTable();
+      } catch {
+        toast("请求异常");
+      } finally {
+        btn.disabled = false;
+      }
+    };
   reindexBtn.onclick = async () => {
     reindexBtn.disabled = true;
     const old = reindexBtn.textContent;
@@ -528,46 +599,70 @@ async function renderPostsTable() {
   };
 }
 
-// 媒体库整页
+// 媒体库整页（增强：统计 / 批量删 / 孤儿清理 / 大图预览）
 async function renderMediaPage() {
   const app = adminMain();
   app.innerHTML = `<div class="empty">加载中…</div>`;
   const wrap = el(`<div class="dash"></div>`);
   wrap.innerHTML = `<div class="dash-head"><div>
       <h1 class="dash-title">媒体库</h1>
-      <p class="dash-sub">管理已上传到 R2 的图片</p>
+      <p class="dash-sub">管理已上传到 R2 的图片（含孤儿检测与批量清理）</p>
     </div></div>`;
   const tool = el(`<div class="media-toolbar"></div>`);
   tool.innerHTML = `
-    <input type="file" id="media-file" accept="image/*" />
+    <input type="file" id="media-file" accept="image/*" multiple />
     <button class="btn btn-primary" id="media-upload">上传</button>
-    <span class="muted">也可在编辑文章时通过「媒体库」按钮插入正文</span>`;
+    <span class="muted" id="media-stats">统计中…</span>
+    <span style="flex:1"></span>
+    <button class="btn" id="media-clean-orphans">清理孤儿文件</button>
+    <button class="btn btn-danger" id="media-bulk-del" disabled>批量删除选中</button>`;
   wrap.appendChild(tool);
   const grid = el(`<div class="media-grid" id="media-grid"></div>`);
   wrap.appendChild(grid);
   app.innerHTML = "";
   app.appendChild(wrap);
 
+  let selected = new Set();
+
+  const fmtSize = (b) => {
+    if (!b && b !== 0) return "-";
+    if (b < 1024) return b + " B";
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+    return (b / 1024 / 1024).toFixed(2) + " MB";
+  };
+
   const load = async () => {
     grid.innerHTML = `<div class="empty">加载中…</div>`;
     const res = await api("/media");
-    const d = await res.json().catch(() => ({ items: [] }));
-    const items = d.items || [];
+    const d = await res.json().catch(() => ({ objects: [] }));
+    const items = d.objects || [];
+    selected = new Set();
+    const orphans = items.filter((x) => x.orphan).length;
+    const stats = document.getElementById("media-stats");
+    if (stats) stats.textContent = `共 ${items.length} 个文件 · 占用 ${fmtSize(d.totalSize)} · 孤儿 ${orphans} 个`;
+    const bulkBtn = document.getElementById("media-bulk-del");
+    if (bulkBtn) bulkBtn.disabled = true;
     if (!items.length) {
       grid.innerHTML = `<div class="empty">还没有图片，先上传一张吧。</div>`;
       return;
     }
     grid.innerHTML = "";
     for (const it of items) {
-      const cell = el(`<div class="media-cell"></div>`);
+      const cell = el(`<div class="media-cell ${it.orphan ? "media-orphan" : ""}"></div>`);
       const fname = String(it.key || it.url || "").split("/").pop();
+      const sizeStr = fmtSize(it.size);
       cell.innerHTML = `
+        <label class="media-check"><input type="checkbox" data-key="${escHtml(it.key)}" /></label>
         <img src="${it.url}" alt="" loading="lazy" />
         <div class="media-meta" title="${escHtml(fname)}">${escHtml(fname)}</div>
+        <div class="media-sub">${sizeStr}${it.orphan ? " · <span class='warn'>孤儿</span>" : ""}</div>
         <div class="media-actions">
-          <button class="btn btn-sm" data-act="copy">复制链接</button>
+          <button class="btn btn-sm" data-act="copy">链接</button>
+          <button class="btn btn-sm" data-act="preview">预览</button>
           <button class="btn btn-sm btn-danger" data-act="del">删除</button>
         </div>`;
+      cell.querySelector("img").onclick = () => previewImage(it.url, fname);
+      cell.querySelector('[data-act="preview"]').onclick = () => previewImage(it.url, fname);
       cell.querySelector('[data-act="copy"]').onclick = async () => {
         try {
           await navigator.clipboard.writeText(it.url);
@@ -582,21 +677,60 @@ async function renderMediaPage() {
         if (r.ok) load();
         else toast("删除失败");
       };
+      const cb = cell.querySelector("input[type=checkbox]");
+      cb.onchange = () => {
+        if (cb.checked) selected.add(it.key);
+        else selected.delete(it.key);
+        const b = document.getElementById("media-bulk-del");
+        if (b) b.disabled = selected.size === 0;
+      };
       grid.appendChild(cell);
     }
   };
-  document.getElementById("media-upload").onclick = async () => {
-    const f = document.getElementById("media-file").files[0];
-    if (!f) return toast("请选择文件");
-    const data = await fileToBase64(f);
-    const r = await api("/upload", { method: "POST", body: JSON.stringify({ name: f.name, type: f.type, data }) });
+
+  document.getElementById("media-bulk-del").onclick = async () => {
+    if (!selected.size) return;
+    if (!confirm(`确定批量删除选中的 ${selected.size} 个文件？此操作不可恢复。`)) return;
+    const r = await api("/media/delete", {
+      method: "POST",
+      body: JSON.stringify({ keys: Array.from(selected) }),
+    });
     const d = await r.json().catch(() => ({}));
-    if (r.ok) {
-      toast("已上传");
-      load();
-    } else toast(d.error || "上传失败");
+    if (r.ok) { toast(`已删除 ${d.count || selected.size} 个文件`); load(); }
+    else toast(d.error || "批量删除失败");
+  };
+
+  document.getElementById("media-clean-orphans").onclick = async () => {
+    if (!confirm("将删除所有未被任何文章引用的图片（孤儿文件），不可恢复。继续？")) return;
+    const r = await api("/media/cleanup", { method: "POST", body: "{}" });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok) { toast(`已清理 ${d.count || 0} 个孤儿文件`); load(); }
+    else toast(d.error || "清理失败");
+  };
+
+  document.getElementById("media-upload").onclick = async () => {
+    const input = document.getElementById("media-file");
+    const files = Array.from(input.files || []);
+    if (!files.length) return toast("请选择文件");
+    let ok = 0;
+    for (const f of files) {
+      const data = await fileToBase64(f);
+      const r = await api("/upload", { method: "POST", body: JSON.stringify({ name: f.name, type: f.type, data }) });
+      if (r.ok) ok++; else toast("上传失败：" + f.name);
+    }
+    toast(`已上传 ${ok}/${files.length}`);
+    input.value = "";
+    load();
   };
   load();
+}
+
+// 大图预览
+function previewImage(url, name) {
+  const ov = el(`<div class="img-preview-overlay"></div>`);
+  ov.innerHTML = `<img src="${url}" alt="" /><div class="img-name">${escHtml(name || "")}</div>`;
+  ov.onclick = () => ov.remove();
+  document.body.appendChild(ov);
 }
 
 // 看板统计卡片下钻：按类型过滤文章，列出标题，点标题进入编辑
@@ -790,8 +924,11 @@ async function renderEditor(slug) {
     </div>
     <div style="margin-top:18px; display:flex; gap:10px;">
       <button class="btn btn-primary" id="save">保存</button>
+      <button class="btn" id="precheck" type="button"><i data-lucide="shield-check"></i> 发布前 AI 检查</button>
       <a class="btn" href="#/admin/posts">取消</a>
     </div>
+    <div class="seo-check" id="seoCheck" style="margin-top:14px"></div>
+    <div id="precheckResult" class="muted" style="margin-top:8px"></div>
     ${slug ? `<div id="comment-admin" class="comment-admin"></div>` : ""}`;
   app.innerHTML = "";
   app.appendChild(form);
@@ -1393,6 +1530,8 @@ async function renderEditor(slug) {
     const opt = { method: post ? "PUT" : "POST", body: JSON.stringify(payload) };
     const res = post ? await api("/posts/" + post.id, opt) : await api("/posts", opt);
     if (res.ok) {
+      // 保存成功：清除自动草稿
+      try { localStorage.removeItem(draftKey); } catch {}
       toast("已保存");
       location.hash = "#/admin/posts";
     } else {
@@ -1400,6 +1539,104 @@ async function renderEditor(slug) {
       toast(r.error || "保存失败");
     }
   };
+
+  // ── SEO 实时体检 + 草稿自动保存 + 发布前 AI 检查 ──
+  const draftKey = "draft:" + (slug || "new");
+  const seoBox = document.getElementById("seoCheck");
+  function runSeoCheck() {
+    if (!seoBox) return;
+    const title = (document.getElementById("f-title").value || "").trim();
+    const excerpt = (document.getElementById("f-excerpt").value || "").trim();
+    const cover = (document.getElementById("f-cover").value || "").trim();
+    const tags = (document.getElementById("f-tags").value || "").trim();
+    const status = document.getElementById("f-status").value;
+    const titleLen = [...title].length;
+    const checks = [
+      { ok: titleLen >= 10 && titleLen <= 60, label: `标题长度合适（${titleLen} 字，建议 10–60）` },
+      { ok: !!excerpt, label: "已填写摘要（利于列表与 SEO）" },
+      { ok: !!cover, label: "已设置封面图（利于分享卡片）" },
+      { ok: !!tags, label: "已添加标签（利于归档与推荐）" },
+    ];
+    seoBox.innerHTML = `<div class="seo-title">SEO 实时体检 ${status === "published" ? "（发布前建议全部通过）" : ""}</div>` +
+      checks.map((c) => `<div class="seo-item ${c.ok ? "ok" : "warn"}">${c.ok ? "✓" : "⚠"} ${c.label}</div>`).join("");
+  }
+  ["f-title", "f-excerpt", "f-cover", "f-tags", "f-status"].forEach((id) => {
+    const elx = document.getElementById(id);
+    if (elx) elx.addEventListener("input", runSeoCheck);
+    if (elx) elx.addEventListener("change", runSeoCheck);
+  });
+  runSeoCheck();
+
+  // 草稿自动保存（每 8 秒，仅当内容非空）
+  const autosaveTimer = setInterval(() => {
+    try {
+      const t = (document.getElementById("f-title").value || "").trim();
+      const ct = (content && content.value) || "";
+      if (!t && !ct) return;
+      localStorage.setItem(draftKey, JSON.stringify({
+        title: document.getElementById("f-title").value,
+        content: ct,
+        visibility: document.getElementById("f-visibility").value,
+        status: document.getElementById("f-status").value,
+        scheduled: document.getElementById("f-scheduled").value,
+        cover: document.getElementById("f-cover").value,
+        excerpt: document.getElementById("f-excerpt").value,
+        tags: document.getElementById("f-tags").value,
+        ts: Date.now(),
+      }));
+    } catch {}
+  }, 8000);
+  window.addEventListener("hashchange", () => clearInterval(autosaveTimer), { once: true });
+
+  // 打开时若存在本地草稿，提示恢复
+  try {
+    const raw = localStorage.getItem(draftKey);
+    if (raw) {
+      const d = JSON.parse(raw);
+      const banner = el(`<div class="draft-banner">检测到本地未提交草稿（${new Date(d.ts).toLocaleString()}），<button class="btn btn-sm" id="draft-restore">恢复</button> <button class="btn btn-sm" id="draft-discard">丢弃</button></div>`);
+      seoBox.parentNode.insertBefore(banner, seoBox);
+      banner.querySelector("#draft-restore").onclick = () => {
+        document.getElementById("f-title").value = d.title || "";
+        if (content) content.value = d.content || "";
+        document.getElementById("f-visibility").value = d.visibility || "public";
+        document.getElementById("f-status").value = d.status || "published";
+        document.getElementById("f-scheduled").value = d.scheduled || "";
+        document.getElementById("f-cover").value = d.cover || "";
+        document.getElementById("f-excerpt").value = d.excerpt || "";
+        document.getElementById("f-tags").value = d.tags || "";
+        runSeoCheck();
+        toast("已恢复本地草稿");
+        banner.remove();
+      };
+      banner.querySelector("#draft-discard").onclick = () => {
+        localStorage.removeItem(draftKey);
+        banner.remove();
+      };
+    }
+  } catch {}
+
+  // 发布前 AI 检查（违禁词 / 错别字预检）
+  const precheckBtn = document.getElementById("precheck");
+  const precheckRes = document.getElementById("precheckResult");
+  if (precheckBtn)
+    precheckBtn.onclick = async () => {
+      const title = (document.getElementById("f-title").value || "").trim();
+      const ct = (content && content.value) || "";
+      if (!ct && !title) return toast("请先填写标题或正文");
+      precheckBtn.disabled = true;
+      const old = precheckBtn.textContent;
+      precheckBtn.textContent = "检查中…";
+      try {
+        const res = await api("/ai/process", { method: "POST", body: JSON.stringify({ action: "moderate", title, content: ct }) });
+        const r = await res.json().catch(() => ({}));
+        if (res.ok) {
+          const flagged = r.result && r.result.flagged ? r.result.flagged : [];
+          if (flagged.length) precheckRes.innerHTML = `⚠ 发现可能需留意的词：${flagged.map((w) => `<b>${escHtml(w)}</b>`).join("、")}`;
+          else precheckRes.textContent = "✓ 未发现明显违禁词/风险表述。";
+        } else precheckRes.textContent = r.error || "检查失败";
+      } catch { precheckRes.textContent = "请求异常"; }
+      finally { precheckBtn.disabled = false; precheckBtn.textContent = old; }
+    };
 }
 
 function toLocalInput(ts) {
@@ -1444,15 +1681,15 @@ function openMediaLibrary(content) {
   const load = async () => {
     grid.innerHTML = `<div class="empty">加载中…</div>`;
     const res = await api("/media");
-    const d = await res.json().catch(() => ({ items: [] }));
-    const items = d.items || [];
+    const d = await res.json().catch(() => ({ objects: [] }));
+    const items = d.objects || [];
     if (!items.length) {
       grid.innerHTML = `<div class="empty">还没有图片，先上传一张吧。</div>`;
       return;
     }
     grid.innerHTML = "";
     for (const it of items) {
-      const cell = el(`<div class="media-cell"></div>`);
+      const cell = el(`<div class="media-cell ${it.orphan ? "media-orphan" : ""}"></div>`);
       cell.innerHTML = `
         <img src="${it.url}" alt="" loading="lazy" />
         <div class="media-actions">
@@ -1653,6 +1890,23 @@ async function renderSettings() {
       <textarea id="s-banned_words" style="min-height:90px" placeholder="如：治愈、根治、包治百病、降血压、抗癌…">${escHtml(s.banned_words || "")}</textarea>
     </fieldset>
 
+    <fieldset class="set-group">
+      <legend>⑨ 数据备份与恢复</legend>
+      <p class="muted">一键导出全部文章（含回收站）、评论、设置为 JSON 文件；导入时按 id 合并更新，不会删除已有数据。</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+        <button type="button" class="btn" id="btn-backup-export"><i data-lucide="download"></i> 导出备份</button>
+        <label class="btn" style="cursor:pointer">导入备份<input type="file" id="btn-backup-import" accept="application/json" style="display:none" /></label>
+      </div>
+      <div id="backup-msg" class="muted" style="margin-top:8px"></div>
+    </fieldset>
+
+    <fieldset class="set-group">
+      <legend>⑩ 发布联动（Webhook）</legend>
+      <p class="muted">文章发布/更新为公开时，自动向以下地址 POST 通知（用于自行接入微信/Telegram/Discord 等）。每行一个 URL。</p>
+      <textarea id="s-webhooks" style="min-height:90px" placeholder="https://your-webhook.example.com/notify&#10;https://discord.com/api/webhooks/...">${escHtml(((s.webhooks && JSON.parse(s.webhooks || "[]")) || []).join("\n"))}</textarea>
+      <div style="margin-top:10px"><button type="button" class="btn" id="btn-webhook-test"><i data-lucide="plug-zap"></i> 测试发送</button> <span id="webhook-msg" class="muted"></span></div>
+    </fieldset>
+
     <div style="margin-top:18px;display:flex;gap:10px;align-items:center">
       <button class="btn btn-primary" id="save-settings">保存设置</button>
       <span id="settings-msg" class="muted"></span>
@@ -1793,6 +2047,9 @@ async function renderSettings() {
       seo_keywords: document.getElementById("s-seo_keywords").value.trim(),
       moderation_enabled: document.getElementById("s-moderation_enabled").checked ? "1" : "0",
       banned_words: document.getElementById("s-banned_words").value,
+      webhooks: JSON.stringify(
+        document.getElementById("s-webhooks").value.split("\n").map((x) => x.trim()).filter(Boolean)
+      ),
     };
     const res = await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
     const r = await res.json().catch(() => ({}));
@@ -1806,4 +2063,308 @@ async function renderSettings() {
       msg.textContent = r.error || "保存失败";
     }
   };
+
+  // 数据备份：导出
+  const btnExport = document.getElementById("btn-backup-export");
+  const backupMsg = document.getElementById("backup-msg");
+  if (btnExport)
+    btnExport.onclick = async () => {
+      btnExport.disabled = true;
+      backupMsg.textContent = "正在导出…";
+      try {
+        const d = await (await api("/backup/export")).json();
+        const blob = new Blob([JSON.stringify(d, null, 2)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `blog-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        backupMsg.textContent = `已导出：${d.posts.length} 篇文章 / ${d.comments.length} 条评论`;
+      } catch {
+        backupMsg.textContent = "导出失败";
+      } finally {
+        btnExport.disabled = false;
+      }
+    };
+  // 数据备份：导入
+  const btnImport = document.getElementById("btn-backup-import");
+  if (btnImport)
+    btnImport.onchange = async () => {
+      const file = btnImport.files && btnImport.files[0];
+      if (!file) return;
+      if (!confirm("导入将按 id 合并更新现有数据，不会删除已有文章/评论。确定继续？")) return;
+      backupMsg.textContent = "正在导入…";
+      try {
+        const text = await file.text();
+        const res = await api("/backup/import", { method: "POST", body: text });
+        const r = await res.json().catch(() => ({}));
+        if (res.ok) backupMsg.textContent = `导入完成：文章 ${r.posts} / 评论 ${r.comments} / 设置 ${r.settings}`;
+        else backupMsg.textContent = r.error || "导入失败";
+      } catch {
+        backupMsg.textContent = "导入失败";
+      }
+      btnImport.value = "";
+    };
+  // 发布联动 Webhook 测试
+  const btnWhTest = document.getElementById("btn-webhook-test");
+  const whMsg = document.getElementById("webhook-msg");
+  if (btnWhTest)
+    btnWhTest.onclick = async () => {
+      const urls = document.getElementById("s-webhooks").value.split("\n").map((x) => x.trim()).filter(Boolean);
+      if (!urls.length) {
+        whMsg.textContent = "请先填写至少一个 Webhook URL";
+        return;
+      }
+      btnWhTest.disabled = true;
+      whMsg.textContent = "发送中…";
+      try {
+        let ok = 0, fail = 0;
+        await Promise.all(
+          urls.map((u) =>
+            fetch(u, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ event: "test", post: { title: "测试文章" } }) })
+              .then(() => ok++)
+              .catch(() => fail++)
+          )
+        );
+        whMsg.textContent = `结果：成功 ${ok} / 失败 ${fail}`;
+      } finally {
+        btnWhTest.disabled = false;
+      }
+    };
+}
+
+// ───────────────────────── 评论审核队列 ─────────────────────────
+async function renderCommentsModeration() {
+  const app = adminMain();
+  setTitle("评论审核");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  let moderationOn = true;
+  try {
+    const s = await (await api("/settings")).json();
+    moderationOn = s.moderation_enabled !== "0";
+  } catch {}
+  const wrap = el(`<div class="dash"></div>`);
+  const head = el(`<div class="dash-head"></div>`);
+  head.innerHTML = `<div><h1 class="dash-title">评论审核</h1>
+    <p class="dash-sub">${moderationOn ? "已开启审核：新评论需通过后才会公开" : "未开启审核（新评论直接公开）"}</p></div>
+    <div class="bulk-bar">
+      <button class="btn btn-sm" id="cm-all-approve">全部通过</button>
+      <button class="btn btn-sm btn-danger" id="cm-all-delete">全部删除</button>
+    </div>`;
+  wrap.appendChild(head);
+
+  const list = el(`<div class="comment-mod-list"></div>`);
+  wrap.appendChild(list);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+
+  const load = async () => {
+    const res = await api("/comments?status=pending");
+    const cs = await res.json();
+    if (!Array.isArray(cs) || !cs.length) {
+      list.innerHTML = `<div class="empty">暂无待审核评论 🎉</div>`;
+      const a = document.getElementById("cm-all-approve");
+      const d = document.getElementById("cm-all-delete");
+      if (a) a.style.display = "none";
+      if (d) d.style.display = "none";
+      return;
+    }
+    list.innerHTML = "";
+    for (const c of cs) {
+      const item = el(`<div class="comment-mod-item" data-id="${c.id}">
+        <div class="cm-meta"><b>${escHtml(c.author)}</b> · 评《${escHtml(c.post_title || c.post_slug)}》 · ${fmtDate(c.created_at)}</div>
+        <div class="cm-content">${escHtml(c.content)}</div>
+        <div class="cm-ops">
+          <button class="btn btn-sm btn-primary" data-act="approve">通过</button>
+          <button class="btn btn-sm btn-danger" data-act="delete">删除</button>
+        </div></div>`);
+      item.querySelector('[data-act="approve"]').onclick = async () => {
+        await api("/comments/bulk", { method: "POST", body: JSON.stringify({ ids: [c.id], action: "approve" }) });
+        load();
+      };
+      item.querySelector('[data-act="delete"]').onclick = async () => {
+        if (!confirm("确定删除这条评论？")) return;
+        await api("/comments/bulk", { method: "POST", body: JSON.stringify({ ids: [c.id], action: "delete" }) });
+        load();
+      };
+      list.appendChild(item);
+    }
+  };
+  await load();
+
+  const aa = document.getElementById("cm-all-approve");
+  const ad = document.getElementById("cm-all-delete");
+  if (aa) aa.onclick = async () => {
+    const res = await api("/comments?status=pending");
+    const cs = await res.json();
+    const ids = (cs || []).map((c) => c.id);
+    if (!ids.length) return;
+    await api("/comments/bulk", { method: "POST", body: JSON.stringify({ ids, action: "approve" }) });
+    toast(`已通过 ${ids.length} 条`);
+    load();
+  };
+  if (ad) ad.onclick = async () => {
+    if (!confirm("确定删除全部待审核评论？")) return;
+    const res = await api("/comments?status=pending");
+    const cs = await res.json();
+    const ids = (cs || []).map((c) => c.id);
+    if (!ids.length) return;
+    await api("/comments/bulk", { method: "POST", body: JSON.stringify({ ids, action: "delete" }) });
+    toast(`已删除 ${ids.length} 条`);
+    load();
+  };
+}
+
+// ───────────────────────── 回收站 ─────────────────────────
+async function renderTrash() {
+  const app = adminMain();
+  setTitle("回收站");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  const res = await api("/posts?trash=1&summary=1");
+  const posts = await res.json();
+  const wrap = el(`<div class="dash"></div>`);
+  const head = el(`<div class="dash-head"></div>`);
+  head.innerHTML = `<div><h1 class="dash-title">回收站</h1>
+    <p class="dash-sub">共 ${Array.isArray(posts) ? posts.length : 0} 篇已删除 · 可恢复或彻底删除</p></div>
+    <div class="bulk-bar">
+      <button class="btn btn-sm btn-primary" id="trash-restore-all">全部恢复</button>
+      <button class="btn btn-sm btn-danger" id="trash-purge-all">全部彻底删除</button>
+    </div>`;
+  wrap.appendChild(head);
+
+  if (!Array.isArray(posts) || !posts.length) {
+    wrap.appendChild(el(`<div class="empty">回收站是空的。</div>`));
+    app.innerHTML = "";
+    app.appendChild(wrap);
+    return;
+  }
+  const table = el(`<table class="admin-table"></table>`);
+  table.innerHTML = `<thead><tr><th style="width:36px"><input type="checkbox" id="trash-sel-all" /></th><th>标题</th><th>删除时间</th><th>操作</th></tr></thead>`;
+  const tbody = el(`<tbody></tbody>`);
+  for (const p of posts) {
+    const tr = el(`<tr></tr>`);
+    tr.innerHTML = `
+      <td><input type="checkbox" class="trash-sel" data-id="${p.id}" /></td>
+      <td class="cell-title">${escHtml(p.title)}</td>
+      <td>${fmtDate(p.deleted_at)}</td>
+      <td class="cell-ops">
+        <button class="btn btn-sm btn-primary" data-act="restore" data-id="${p.id}">恢复</button>
+        <button class="btn btn-sm btn-danger" data-act="purge" data-id="${p.id}">彻底删除</button>
+      </td>`;
+    tr.querySelector('[data-act="restore"]').onclick = async () => {
+      await api("/posts/" + p.id + "/restore", { method: "POST" });
+      toast("已恢复");
+      renderTrash();
+    };
+    tr.querySelector('[data-act="purge"]').onclick = async () => {
+      if (!confirm(`彻底删除《${p.title}》？不可恢复！`)) return;
+      await api("/posts/" + p.id + "/purge", { method: "DELETE" });
+      toast("已彻底删除");
+      renderTrash();
+    };
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+
+  const selAll = document.getElementById("trash-sel-all");
+  if (selAll) selAll.onchange = () => app.querySelectorAll(".trash-sel").forEach((cb) => (cb.checked = selAll.checked));
+  const restoreAll = document.getElementById("trash-restore-all");
+  const purgeAll = document.getElementById("trash-purge-all");
+  const ids = () => [...document.querySelectorAll(".trash-sel:checked")].map((cb) => Number(cb.dataset.id));
+  if (restoreAll) restoreAll.onclick = async () => {
+    const sel = ids();
+    const target = sel.length ? sel : (posts || []).map((p) => p.id);
+    if (!sel.length && !confirm("确定恢复回收站全部文章？")) return;
+    for (const id of target) await api("/posts/" + id + "/restore", { method: "POST" });
+    toast("已恢复");
+    renderTrash();
+  };
+  if (purgeAll) purgeAll.onclick = async () => {
+    if (!confirm("确定彻底删除所选/全部文章？不可恢复！")) return;
+    const sel = ids();
+    const target = sel.length ? sel : (posts || []).map((p) => p.id);
+    for (const id of target) await api("/posts/" + id + "/purge", { method: "DELETE" });
+    toast("已彻底删除");
+    renderTrash();
+  };
+}
+
+// ───────────────────────── 数据分析 ─────────────────────────
+async function renderAnalytics() {
+  const app = adminMain();
+  setTitle("数据分析");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  const data = await (await api("/analytics")).json();
+  const wrap = el(`<div class="dash"></div>`);
+  wrap.innerHTML = `<div class="dash-head"><div><h1 class="dash-title">数据分析</h1>
+    <p class="dash-sub">热门文章 · 流量来源 · 收录推送</p></div></div>`;
+
+  const popular = data.popular || [];
+  const referers = data.referers || [];
+  const indexnow = data.indexnow || [];
+
+  const sec1 = el(`<div class="analytic-card"></div>`);
+  sec1.innerHTML = `<h2>🔥 热门文章 TOP ${popular.length || 10}</h2>` + (popular.length
+    ? `<ol class="rank-list">${popular.map((p) => `<li><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a><span class="rank-views">${p.views} 阅读</span></li>`).join("")}</ol>`
+    : `<div class="empty">暂无数据</div>`);
+  wrap.appendChild(sec1);
+
+  const sec2 = el(`<div class="analytic-card"></div>`);
+  sec2.innerHTML = `<h2>🌐 流量来源（近 30 天，共 ${data.refererTotal || 0} 次外链访问）</h2>` + (referers.length
+    ? `<ol class="rank-list">${referers.slice(0, 20).map((r) => `<li><span>${escHtml(r.domain)}</span><span class="rank-views">${r.cnt}</span></li>`).join("")}</ol>`
+    : `<div class="empty">暂无外部来源（多为直接访问或未统计）</div>`);
+  wrap.appendChild(sec2);
+
+  const sec3 = el(`<div class="analytic-card"></div>`);
+  sec3.innerHTML = `<h2>🔎 收录推送（IndexNow，共 ${data.indexnowTotal || 0} 次）</h2>
+    <p class="muted">文章发布/更新时自动通知 Bing/Naver/Yandex；下方为最近推送记录。</p>` +
+    (indexnow.length
+      ? `<table class="admin-table"><thead><tr><th>时间</th><th>状态</th><th>URL</th><th>响应</th></tr></thead><tbody>${indexnow
+          .slice(0, 30)
+          .map((r) => `<tr><td>${fmtDate(r.created_at)}</td><td><span class="badge ${r.status === 200 ? "badge-public" : "badge-lock"}">${r.status || "网络错误"}</span></td><td>${escHtml(r.url)}</td><td class="muted">${escHtml((r.resp || "").slice(0, 60))}</td></tr>`)
+          .join("")}</tbody></table>`
+      : `<div class="empty">暂无推送记录</div>`);
+  wrap.appendChild(sec3);
+
+  app.innerHTML = "";
+  app.appendChild(wrap);
+}
+
+// ───────────────────────── 审计日志 ─────────────────────────
+const AUDIT_LABELS = {
+  login: "登录", change_password: "修改密码", post_create: "新建文章", post_update: "更新文章",
+  post_delete: "移入回收站", post_restore: "恢复文章", post_purge: "彻底删除文章",
+  post_bulk: "批量操作文章", comment_bulk: "批量操作评论", settings_update: "修改设置",
+  backup_import: "导入备份", media_delete: "删除媒体", media_cleanup: "清理孤儿媒体",
+  webhook_fire: "触发 Webhook",
+};
+async function renderAudit() {
+  const app = adminMain();
+  setTitle("审计日志");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  const logs = await (await api("/audit")).json();
+  const wrap = el(`<div class="dash"></div>`);
+  wrap.innerHTML = `<div class="dash-head"><div><h1 class="dash-title">审计日志</h1>
+    <p class="dash-sub">关键操作留痕（最近 ${Array.isArray(logs) ? logs.length : 0} 条）</p></div></div>`;
+  const table = el(`<table class="admin-table"></table>`);
+  table.innerHTML = `<thead><tr><th>时间</th><th>操作者</th><th>操作</th><th>对象</th><th>详情</th></tr></thead>`;
+  const tbody = el(`<tbody></tbody>`);
+  if (Array.isArray(logs) && logs.length) {
+    for (const l of logs) {
+      const tr = el(`<tr></tr>`);
+      tr.innerHTML = `<td>${fmtDate(l.created_at)}</td><td>${escHtml(l.actor || "")}</td>
+        <td><span class="badge">${AUDIT_LABELS[l.action] || l.action}</span></td>
+        <td>${escHtml(l.target || "")}</td><td class="muted">${escHtml(l.detail || "")}</td>`;
+      tbody.appendChild(tr);
+    }
+  } else {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">暂无记录</td></tr>`;
+  }
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  app.innerHTML = "";
+  app.appendChild(wrap);
 }
