@@ -771,6 +771,8 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const url = new URL(req.url);
     const visibility = url.searchParams.get("visibility") || undefined;
     const trash = url.searchParams.get("trash") === "1";
+    // 回收站列表仅管理员可见，防止软删除文章被匿名枚举
+    if (trash && !isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
     const rows = await listPosts(env.DB, { admin: isAdmin(user), visibility, trash });
     // summary=1：只返回卡片字段（剔除 content / embedding 等大字段），列表首屏流量下降 90%+
     if (url.searchParams.has("summary")) {
