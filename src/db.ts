@@ -325,20 +325,21 @@ export async function getUserById(db: DB, id: number): Promise<UserRow | null> {
   return (await db.prepare("SELECT * FROM users WHERE id = ?").bind(id).first()) as UserRow | null;
 }
 
-export async function createSession(db: DB, userId: number): Promise<string> {
+export async function createSession(db: DB, userId: number, expiresAt?: number): Promise<string> {
   const token = crypto.randomUUID();
   await db
-    .prepare("INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)")
-    .bind(token, userId, now())
+    .prepare("INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
+    .bind(token, userId, now(), expiresAt ?? null)
     .run();
   return token;
 }
 
 export async function getUserBySession(db: DB, token: string | undefined): Promise<UserRow | null> {
   if (!token) return null;
-  const s = (await db.prepare("SELECT user_id FROM sessions WHERE token = ?").bind(token).first()) as
-    | { user_id: number }
-    | null;
+  const s = (await db
+    .prepare("SELECT user_id FROM sessions WHERE token = ? AND (expires_at IS NULL OR expires_at > ?)")
+    .bind(token, now())
+    .first()) as { user_id: number } | null;
   if (!s) return null;
   return getUserById(db, s.user_id);
 }
@@ -356,6 +357,7 @@ export const SETTING_KEYS = [
   "footer_text",
   "nav",
   "theme_primary",
+  "theme_preset",
   "theme_dark",
   "ai_model",
   "ai_provider",
@@ -373,6 +375,15 @@ export const SETTING_KEYS = [
   "banned_words",
   "notify_email",
   "webhooks",
+  // —— 高级自定义（D 组） ——
+  "custom_css",
+  "maintenance_mode",
+  "maintenance_text",
+  "rss_title",
+  "rss_count",
+  "rss_full",
+  "cache_ttl",
+  "session_ttl",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];

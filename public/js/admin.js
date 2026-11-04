@@ -1907,6 +1907,33 @@ async function renderSettings() {
       <div style="margin-top:10px"><button type="button" class="btn" id="btn-webhook-test"><i data-lucide="plug-zap"></i> 测试发送</button> <span id="webhook-msg" class="muted"></span></div>
     </fieldset>
 
+    <fieldset class="set-group">
+      <legend>⑪ 高级自定义</legend>
+
+      <label>自定义 CSS（注入全站 &lt;head&gt;，用于微调主题/布局，无需改源码）</label>
+      <textarea id="s-custom_css" style="min-height:120px;font-family:monospace" placeholder=":root{--primary:#ff6600}\n.post-card{border-radius:16px}">${escHtml(s.custom_css || "")}</textarea>
+
+      <label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer">
+        <input type="checkbox" id="s-maintenance_mode" ${s.maintenance_mode === "1" ? "checked" : ""} /> 开启维护模式（访客看到「网站维护中」页，仅管理员可正常访问）
+      </label>
+      <label style="margin-top:12px">维护页提示文案</label>
+      <input type="text" id="s-maintenance_text" value="${escHtml(s.maintenance_text || "")}" placeholder="网站正在维护中，请稍后再访问。" />
+
+      <label style="margin-top:16px">RSS 标题（留空用站点名称）</label>
+      <input type="text" id="s-rss_title" value="${escHtml(s.rss_title || "")}" placeholder="AI Agent Blog" />
+      <label style="margin-top:12px">RSS 条目数（默认 50，上限 200）</label>
+      <input type="number" id="s-rss_count" min="1" max="200" value="${escHtml(s.rss_count || "50")}" />
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="s-rss_full" ${s.rss_full === "1" ? "checked" : ""} /> RSS 输出全文（而非摘要）
+      </label>
+
+      <label style="margin-top:16px">页面缓存时长（秒，0 = 不缓存 / no-store；建议 0 以保证内容即时更新）</label>
+      <input type="number" id="s-cache_ttl" min="0" max="86400" value="${escHtml(s.cache_ttl || "0")}" />
+
+      <label style="margin-top:16px">登录会话有效期（天，默认 30；过期后需重新登录）</label>
+      <input type="number" id="s-session_ttl" min="1" max="365" value="${escHtml(s.session_ttl || "30")}" />
+    </fieldset>
+
     <div style="margin-top:18px;display:flex;gap:10px;align-items:center">
       <button class="btn btn-primary" id="save-settings">保存设置</button>
       <span id="settings-msg" class="muted"></span>
@@ -2050,6 +2077,14 @@ async function renderSettings() {
       webhooks: JSON.stringify(
         document.getElementById("s-webhooks").value.split("\n").map((x) => x.trim()).filter(Boolean)
       ),
+      custom_css: document.getElementById("s-custom_css").value,
+      maintenance_mode: document.getElementById("s-maintenance_mode").checked ? "1" : "0",
+      maintenance_text: document.getElementById("s-maintenance_text").value.trim(),
+      rss_title: document.getElementById("s-rss_title").value.trim(),
+      rss_count: document.getElementById("s-rss_count").value.trim() || "50",
+      rss_full: document.getElementById("s-rss_full").checked ? "1" : "0",
+      cache_ttl: document.getElementById("s-cache_ttl").value.trim() || "0",
+      session_ttl: document.getElementById("s-session_ttl").value.trim() || "30",
     };
     const res = await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
     const r = await res.json().catch(() => ({}));

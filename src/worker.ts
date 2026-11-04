@@ -527,6 +527,13 @@ function isCrawler(ua: string): boolean {
   return /(bot|spider|crawl|slurp|baiduspider|googlebot|bingbot|yandex|sogou|360spider|bytespider|duckduckbot|teoma|facebookexternalhit|twitterbot|discordbot|whatsapp|telegrambot|pinterest|linkedinbot|embedly|quora link|showyoubot|outbrain|pocket|slackbot|vkshare|w3c_validator|redditbot|applebot|semrush|ahrefs|mj12|dotbot|dataprovider|netcraft|rogerbot|developers\.google\.com)/.test(s);
 }
 
+// 根据 settings.cache_ttl 生成 Cache-Control：0 或空 → no-store；>0 → public, max-age=秒
+function cacheControlHeader(settings: Record<string, string>): string {
+  const ttl = parseInt(settings.cache_ttl || "", 10);
+  if (Number.isFinite(ttl) && ttl > 0) return `public, max-age=${ttl}`;
+  return "no-store";
+}
+
 function fmtDateS(ts: number): string {
   if (!ts) return "";
   const d = new Date(ts);
@@ -534,11 +541,14 @@ function fmtDateS(ts: number): string {
 }
 
 // 通用 HTML 文档骨架（含站点级 OG / Twitter / 样式，供预渲染页复用）
-function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string }): string {
+function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string; customCss?: string }): string {
   const { title, description, head, body } = opts;
   const ogImage = opts.image
     ? `<meta property="og:image" content="${escHtmlS(opts.image)}" />
 <meta name="twitter:image" content="${escHtmlS(opts.image)}" />`
+    : "";
+  const customCss = opts.customCss
+    ? `<style data-custom-css>\n${opts.customCss}\n</style>`
     : "";
   return `<!doctype html>
 <html lang="zh-CN">
@@ -555,6 +565,7 @@ function htmlDoc(opts: { title: string; description: string; head: string; body:
 ${ogImage}
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="stylesheet" href="/css/style.css" />
+${customCss}
 ${head}
 </head>
 <body>
@@ -563,6 +574,59 @@ ${head}
 ${body}
 </main>
 <footer class="footer"><div class="wrap"><div class="copyright">© ${escHtmlS(title)} · Powered by Cloudflare</div></div></footer>
+</body>
+</html>`;
+}
+
+// 维护模式页面（公开访客可见；含内嵌管理员登录框，保证站长仍能进入后台）
+function maintenancePage(settings: Record<string, string>, base: string): string {
+  const title = settings.site_title || "AI Agent 博客";
+  const text = settings.maintenance_text || "网站正在维护中，请稍后再访问。";
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>维护中 - ${escHtmlS(title)}</title>
+<meta name="robots" content="noindex" />
+<style data-custom-css>
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.main-box{max-width:420px;width:90%;background:#1e293b;border:1px solid #334155;border-radius:16px;padding:32px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.main-box h1{margin:0 0 8px;font-size:22px}
+.main-box p{color:#94a3b8;margin:0 0 24px;line-height:1.6}
+.login{display:none;margin-top:8px;text-align:left}
+.login input{width:100%;box-sizing:border-box;margin:6px 0;padding:10px 12px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0}
+.login button{width:100%;margin-top:8px;padding:10px;border:0;border-radius:8px;background:#3b82f6;color:#fff;cursor:pointer;font-size:14px}
+.toggle{margin-top:18px;font-size:13px;color:#64748b;cursor:pointer;text-decoration:underline}
+#msg{margin-top:10px;font-size:13px;min-height:18px}
+</style>
+</head>
+<body>
+<div class="main-box">
+  <h1>🛠️ 维护中</h1>
+  <p>${escHtmlS(text)}</p>
+  <div class="toggle" id="toggle">管理员登录</div>
+  <div class="login" id="login">
+    <input id="u" placeholder="用户名" autocomplete="username" />
+    <input id="p" type="password" placeholder="密码" autocomplete="current-password" />
+    <button id="go">登录</button>
+    <div id="msg"></div>
+  </div>
+</div>
+<script>
+document.getElementById('toggle').onclick=function(){var l=document.getElementById('login');l.style.display=l.style.display==='block'?'none':'block';};
+document.getElementById('go').onclick=async function(){
+  var u=document.getElementById('u').value.trim(),p=document.getElementById('p').value,m=document.getElementById('msg');
+  if(!u||!p){m.style.color='#f87171';m.textContent='请输入用户名和密码';return;}
+  m.style.color='#94a3b8';m.textContent='登录中…';
+  try{
+    var r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+    var d=await r.json().catch(function(){return{};});
+    if(r.ok){m.style.color='#4ade80';m.textContent='登录成功，正在刷新…';setTimeout(function(){location.reload();},600);}
+    else{m.style.color='#f87171';m.textContent=d.error||'登录失败';}
+  }catch(e){m.style.color='#f87171';m.textContent='网络错误';}
+};
+</script>
 </body>
 </html>`;
 }
@@ -603,8 +667,8 @@ async function prerenderHome(env: Env, req: Request): Promise<Response> {
   <div class="hero-stats"><span><b>${posts.length}</b> 篇文章</span> · <span><b>${tagSet.size}</b> 个标签</span> · <span><b>${days}</b> 天运行</span></div>
 </div></section>
 <div class="post-list">${cards}</div>`;
-  return new Response(htmlDoc({ title, description, head, body, base, image: base + "/og-default.png" }), {
-    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+  return new Response(htmlDoc({ title, description, head, body, base, image: base + "/og-default.png", customCss: settings.custom_css }), {
+    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }
 
@@ -646,8 +710,8 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
   <div class="meta">${fmtDateS(row.created_at)}</div>
   <div class="content">${content}</div>
 </div>`;
-  return new Response(htmlDoc({ title, description, head, body, base, image: cover }), {
-    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+  return new Response(htmlDoc({ title, description, head, body, base, image: cover, customCss: settings.custom_css }), {
+    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }
 
@@ -665,13 +729,22 @@ function escXml(s: string): string {
 
 // RSS Feed（公开）：最近 50 篇公开文章
 async function handleFeed(env: Env, req: Request): Promise<Response> {
+  let settings: Record<string, string> = {};
+  try { settings = await getSettings(env.DB); } catch {}
   const posts = await listPosts(env.DB, { admin: false });
   const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+  // RSS 配置（设置页 ⑪）：标题默认站点名；条目数默认 50；rss_full=1 时输出全文而非摘要
+  const feedTitle = settings.rss_title || settings.site_title || "AI Agent Blog";
+  const feedDesc = settings.seo_description || settings.about_content || "AI Agent 博客";
+  const count = Math.max(1, Math.min(200, parseInt(settings.rss_count || "", 10) || 50));
+  const full = settings.rss_full === "1";
   const items = posts
-    .slice(0, 50)
+    .slice(0, count)
     .map((p: any) => {
       const link = `${base}/post/${encodeURIComponent(p.slug)}`;
-      const desc = (p.excerpt || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const excerpt = (p.excerpt || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const body = (p.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const desc = full ? body : excerpt;
       return `    <item>
       <title>${escXml(p.title)}</title>
       <link>${link}</link>
@@ -684,9 +757,9 @@ async function handleFeed(env: Env, req: Request): Promise<Response> {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>AI Agent Blog</title>
+    <title>${escXml(feedTitle)}</title>
     <link>${base}/</link>
-    <description>AI Agent 博客</description>
+    <description>${escXml(feedDesc)}</description>
     <language>zh-CN</language>
 ${items}
   </channel>
@@ -758,6 +831,14 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       "seo_keywords",
       "moderation_enabled",
       "banned_words",
+      "custom_css",
+      "maintenance_mode",
+      "maintenance_text",
+      "rss_title",
+      "rss_count",
+      "rss_full",
+      "cache_ttl",
+      "session_ttl",
     ]) {
       if (body[k] !== undefined && body[k] !== null) clean[k] = String(body[k]);
     }
@@ -1686,6 +1767,17 @@ export default {
       }
     }
 
+    // 维护模式：非管理员访问内容页（爬虫与真人一致） → 返回维护页（含管理员登录框）
+    const user = await currentUser(req, env);
+    let docSettings: Record<string, string> = {};
+    try { docSettings = await getSettings(env.DB); } catch {}
+    if (docSettings.maintenance_mode === "1" && !user) {
+      const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+      return new Response(maintenancePage(docSettings, base), {
+        headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+      });
+    }
+
     // 爬虫 / 社交抓取：对内容路由返回服务端预渲染（含 title / 描述 / OG / JSON-LD / 正文），提升 SEO 与分享卡片
     if (isCrawler(req.headers.get("user-agent") || "")) {
       if (path.length === 0) return await prerenderHome(env, req);
@@ -1713,6 +1805,13 @@ export default {
       } catch {}
       const h = new Headers(assetResp.headers);
       h.set("Cache-Control", "no-store");
+      // 注入自定义 CSS（设置页 ⑪ 高级自定义）：在 </head> 前插入，作用于前端 SPA 整站
+      const customCss = docSettings.custom_css || "";
+      if (customCss) {
+        const txt = await assetResp.text();
+        const injected = txt.replace("</head>", `<style data-custom-css>\n${customCss}\n</style>\n</head>`);
+        return new Response(injected, { status: assetResp.status, headers: h });
+      }
       return new Response(assetResp.body, { status: assetResp.status, headers: h });
     }
     return assetResp;

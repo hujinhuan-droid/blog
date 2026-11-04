@@ -1,6 +1,6 @@
 // 鉴权：GitHub OAuth + 账号密码登录 + 会话 cookie
 
-import { UserRow, DB, createSession, upsertGithubUser } from "./db";
+import { UserRow, DB, createSession, upsertGithubUser, getSettings } from "./db";
 
 const SESSION_COOKIE = "sid";
 const PBKDF2_ITERATIONS = 100_000;
@@ -40,9 +40,10 @@ export function clearSessionCookie(): string {
 export async function currentUser(req: Request, env: AuthEnv): Promise<UserRow | null> {
   const token = parseCookies(req)[SESSION_COOKIE];
   if (!token) return null;
-  const s = (await env.DB.prepare("SELECT user_id FROM sessions WHERE token = ?").bind(token).first()) as
-    | { user_id: number }
-    | null;
+  const s = (await env.DB
+    .prepare("SELECT user_id FROM sessions WHERE token = ? AND (expires_at IS NULL OR expires_at > ?)")
+    .bind(token, Date.now())
+    .first()) as { user_id: number } | null;
   if (!s) return null;
   return (await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(s.user_id).first()) as UserRow | null;
 }
@@ -206,6 +207,14 @@ export interface LoginResult {
 }
 
 export async function startSession(env: AuthEnv, user: UserRow): Promise<LoginResult> {
-  const token = await createSession(env.DB, user.id);
-  return { user, token, cookie: sessionCookie(token) };
+  // 会话有效期：读取 settings.session_ttl（天），为空或 <=0 时默认 30 天（保持旧行为）
+  let ttlDays = 30;
+  try {
+    const settings = await getSettings(env.DB);
+    const raw = parseInt(settings.session_ttl || "", 10);
+    if (Number.isFinite(raw) && raw > 0) ttlDays = raw;
+  } catch {}
+  const expiresAt = Date.now() + ttlDays * 86400000;
+  const token = await createSession(env.DB, user.id, expiresAt);
+  return { user, token, cookie: sessionCookie(token, ttlDays * 86400) };
 }
