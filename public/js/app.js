@@ -195,6 +195,110 @@ function applySettings(s) {
   SITE_ABOUT = s.about_content || "";
   // SEO
   applySeo(s);
+  // 品牌与合规（Logo / 社交链接 / 备案号 / 隐私政策 / 友链）
+  applyBranding(s);
+}
+
+// 品牌与合规：动态渲染头部 Logo 与页脚社交/备案/隐私/友链（使用 DOM API，避免 XSS）
+function applyBranding(s) {
+  if (!s || typeof s !== "object") return;
+  const safeUrl = (u) => (/^(https?:\/\/|mailto:|\/|#)/i.test(u) ? u : "");
+  const parseLinks = (raw) =>
+    String(raw || "")
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => {
+        const i = l.indexOf("|");
+        if (i < 0) return null;
+        const label = l.slice(0, i).trim();
+        const url = l.slice(i + 1).trim();
+        return label && safeUrl(url) ? { label, url } : null;
+      })
+      .filter(Boolean);
+
+  // 1) 品牌 Logo（头部）
+  const brand = document.querySelector(".brand");
+  if (brand) {
+    const title = s.site_title || "AI Agent Blog";
+    const logo = String(s.site_logo || "").trim();
+    brand.innerHTML = "";
+    brand.classList.toggle("has-logo", !!logo);
+    if (logo) {
+      const img = document.createElement("img");
+      img.className = "brand-logo";
+      img.alt = "";
+      img.src = logo;
+      brand.appendChild(img);
+    }
+    const span = document.createElement("span");
+    span.textContent = title;
+    brand.appendChild(span);
+  }
+
+  // 2) 页脚品牌/合规信息
+  const wrap = document.querySelector(".footer .wrap");
+  if (!wrap) return;
+  const old = wrap.querySelector(".site-branding");
+  if (old) old.remove();
+  const rows = [];
+  const social = parseLinks(s.social_links);
+  if (social.length) {
+    const row = document.createElement("div");
+    row.className = "branding-row social-links";
+    social.forEach((x) => {
+      const a = document.createElement("a");
+      a.className = "social-link";
+      a.href = x.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = x.label;
+      row.appendChild(a);
+    });
+    rows.push(row);
+  }
+  const legal = document.createElement("div");
+  legal.className = "branding-row legal-links";
+  const sep = () => { if (legal.childNodes.length) legal.appendChild(document.createTextNode(" · ")); };
+  const addLink = (text, url) => {
+    sep();
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = text;
+    legal.appendChild(a);
+  };
+  const privacy = String(s.privacy_url || "").trim();
+  if (safeUrl(privacy)) addLink("隐私政策", privacy);
+  const friends = parseLinks(s.friend_links);
+  if (friends.length) {
+    sep();
+    const box = document.createElement("span");
+    box.className = "friend-links";
+    box.appendChild(document.createTextNode("友链："));
+    friends.forEach((x, i) => {
+      if (i) box.appendChild(document.createTextNode(" · "));
+      const a = document.createElement("a");
+      a.href = x.url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.textContent = x.label;
+      box.appendChild(a);
+    });
+    legal.appendChild(box);
+  }
+  const icp = String(s.beian_icp || "").trim();
+  if (icp) addLink(icp, "https://beian.miit.gov.cn/");
+  const gongan = String(s.beian_gongan || "").trim();
+  if (gongan) addLink(gongan, "https://www.beian.gov.cn/");
+  if (legal.childNodes.length) rows.push(legal);
+  if (rows.length) {
+    const branding = document.createElement("div");
+    branding.className = "site-branding";
+    rows.forEach((r) => branding.appendChild(r));
+    wrap.appendChild(branding);
+  }
 }
 
 function api(path, opts) {

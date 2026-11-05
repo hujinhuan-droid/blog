@@ -1177,6 +1177,22 @@ body.admin-mode .site-theme-fab { display: none; }
 .foot-links a { color: var(--primary); text-decoration: none; }
 .foot-links a:hover { text-decoration: underline; }
 
+/* ---------- 品牌与合规（A 组）：站点 Logo / 社交 / 备案 / 隐私 / 友链 ---------- */
+.brand-logo { width: 28px; height: 28px; border-radius: 8px; object-fit: cover; margin-right: 9px; flex: none; }
+.brand:has(.brand-logo)::before, .brand.has-logo::before { display: none; }
+.site-branding { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.branding-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.social-links .social-link {
+  display: inline-flex; align-items: center; padding: 3px 10px; border: 1px solid var(--border);
+  border-radius: 999px; color: var(--muted); text-decoration: none; font-size: 12px; background: var(--surface);
+}
+.social-links .social-link:hover { color: var(--primary); border-color: var(--primary); text-decoration: none; }
+.legal-links { color: var(--muted); font-size: 12px; }
+.legal-links a { color: var(--muted); text-decoration: none; }
+.legal-links a:hover { color: var(--primary); text-decoration: underline; }
+.friend-links a { color: var(--primary); text-decoration: none; }
+.friend-links a:hover { text-decoration: underline; }
+
 
 /* ---------- 首页工具横幅：AI 漫剧 1000 套模板入口 ---------- */
 .tool-banner {

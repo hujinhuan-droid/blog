@@ -384,6 +384,17 @@ export const SETTING_KEYS = [
   "rss_full",
   "cache_ttl",
   "session_ttl",
+  // —— 品牌与合规（A 组） ——
+  "site_logo",
+  "social_links",
+  "beian_icp",
+  "beian_gongan",
+  "privacy_url",
+  "friend_links",
+  // —— 登录安全（失败锁定） ——
+  "login_lock_enabled",
+  "login_max_attempts",
+  "login_lock_minutes",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];

@@ -534,6 +534,51 @@ function cacheControlHeader(settings: Record<string, string>): string {
   return "no-store";
 }
 
+// 解析「每行 标签|URL」格式，过滤非法协议
+function parseLinkLines(raw: string | undefined): { label: string; url: string }[] {
+  return String(raw || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const i = l.indexOf("|");
+      if (i < 0) return null;
+      const label = l.slice(0, i).trim();
+      const url = l.slice(i + 1).trim();
+      if (!label || !url || !/^(https?:\/\/|mailto:|\/|#)/i.test(url)) return null;
+      return { label, url };
+    })
+    .filter(Boolean) as { label: string; url: string }[];
+}
+
+// 生成品牌/合规 HTML（Logo + 社交链接 + 备案号 + 隐私政策/友链），供预渲染页复用
+function brandingHtml(settings: Record<string, string>, siteTitle: string): { brand: string; footer: string } {
+  const logo = String(settings.site_logo || "").trim();
+  const brand = logo
+    ? `<img src="${escHtmlS(logo)}" alt="" class="brand-logo" /><span>${escHtmlS(siteTitle)}</span>`
+    : escHtmlS(siteTitle);
+  const parts: string[] = [];
+  const social = parseLinkLines(settings.social_links);
+  if (social.length) {
+    parts.push(`<div class="branding-row social-links">${social.map((x) => `<a class="social-link" href="${escHtmlS(x.url)}" target="_blank" rel="noopener">${escHtmlS(x.label)}</a>`).join("")}</div>`);
+  }
+  const legal: string[] = [];
+  const privacy = String(settings.privacy_url || "").trim();
+  if (privacy && /^(https?:\/\/|\/|#)/i.test(privacy)) {
+    legal.push(`<a href="${escHtmlS(privacy)}" target="_blank" rel="noopener">隐私政策</a>`);
+  }
+  const friends = parseLinkLines(settings.friend_links);
+  if (friends.length) {
+    legal.push(`<span class="friend-links">友链：${friends.map((x) => `<a href="${escHtmlS(x.url)}" target="_blank" rel="noopener">${escHtmlS(x.label)}</a>`).join(" · ")}</span>`);
+  }
+  const icp = String(settings.beian_icp || "").trim();
+  if (icp) legal.push(`<a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener">${escHtmlS(icp)}</a>`);
+  const gongan = String(settings.beian_gongan || "").trim();
+  if (gongan) legal.push(`<a href="https://www.beian.gov.cn/" target="_blank" rel="noopener">${escHtmlS(gongan)}</a>`);
+  if (legal.length) parts.push(`<div class="branding-row legal-links">${legal.join(" · ")}</div>`);
+  return { brand, footer: parts.length ? `<div class="site-branding">${parts.join("")}</div>` : "" };
+}
+
 function fmtDateS(ts: number): string {
   if (!ts) return "";
   const d = new Date(ts);
@@ -541,7 +586,7 @@ function fmtDateS(ts: number): string {
 }
 
 // 通用 HTML 文档骨架（含站点级 OG / Twitter / 样式，供预渲染页复用）
-function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string; customCss?: string }): string {
+function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string; customCss?: string; brand?: string; footerExtra?: string }): string {
   const { title, description, head, body } = opts;
   const ogImage = opts.image
     ? `<meta property="og:image" content="${escHtmlS(opts.image)}" />
@@ -569,11 +614,11 @@ ${customCss}
 ${head}
 </head>
 <body>
-<header class="topbar"><div class="wrap"><a class="brand" href="/">${escHtmlS(title)}</a></div></header>
+<header class="topbar"><div class="wrap"><a class="brand" href="/">${opts.brand || escHtmlS(title)}</a></div></header>
 <main class="container">
 ${body}
 </main>
-<footer class="footer"><div class="wrap"><div class="copyright">© ${escHtmlS(title)} · Powered by Cloudflare</div></div></footer>
+<footer class="footer"><div class="wrap"><div class="copyright">© ${escHtmlS(title)} · Powered by Cloudflare</div>${opts.footerExtra || ""}</div></footer>
 </body>
 </html>`;
 }
@@ -667,7 +712,8 @@ async function prerenderHome(env: Env, req: Request): Promise<Response> {
   <div class="hero-stats"><span><b>${posts.length}</b> 篇文章</span> · <span><b>${tagSet.size}</b> 个标签</span> · <span><b>${days}</b> 天运行</span></div>
 </div></section>
 <div class="post-list">${cards}</div>`;
-  return new Response(htmlDoc({ title, description, head, body, base, image: base + "/og-default.png", customCss: settings.custom_css }), {
+  const branding = brandingHtml(settings, settings.site_title || "AI Agent 博客");
+  return new Response(htmlDoc({ title, description, head, body, base, image: base + "/og-default.png", customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer }), {
     headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }
@@ -710,7 +756,8 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
   <div class="meta">${fmtDateS(row.created_at)}</div>
   <div class="content">${content}</div>
 </div>`;
-  return new Response(htmlDoc({ title, description, head, body, base, image: cover, customCss: settings.custom_css }), {
+  const branding = brandingHtml(settings, siteTitle);
+  return new Response(htmlDoc({ title, description, head, body, base, image: cover, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer }), {
     headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }
@@ -839,6 +886,15 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       "rss_full",
       "cache_ttl",
       "session_ttl",
+      "site_logo",
+      "social_links",
+      "beian_icp",
+      "beian_gongan",
+      "privacy_url",
+      "friend_links",
+      "login_lock_enabled",
+      "login_max_attempts",
+      "login_lock_minutes",
     ]) {
       if (body[k] !== undefined && body[k] !== null) clean[k] = String(body[k]);
     }
@@ -1004,8 +1060,43 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     // 账号密码登录（主路径）
     if (body.username && body.password) {
       await ensureAdminAccount(env);
+      // —— 登录失败锁定（可配置，默认关闭；表缺失时安全降级为不锁定） ——
+      let lockOn = false, maxAttempts = 5, lockMinutes = 15, key = "";
+      try {
+        const ls = await getSettings(env.DB);
+        lockOn = ls.login_lock_enabled === "1";
+        maxAttempts = Math.max(1, parseInt(ls.login_max_attempts || "", 10) || 5);
+        lockMinutes = Math.max(1, parseInt(ls.login_lock_minutes || "", 10) || 15);
+      } catch {}
+      if (lockOn) {
+        try {
+          const ip = req.headers.get("CF-Connecting-IP") || "unknown";
+          key = ip + ":" + String(body.username || "").trim().slice(0, 64);
+          const rec = (await env.DB.prepare("SELECT attempts, locked_until FROM login_attempts WHERE key = ?").bind(key).first()) as { attempts: number; locked_until: number | null } | null;
+          if (rec?.locked_until && rec.locked_until > Date.now()) {
+            return json({ error: `尝试次数过多，请 ${Math.ceil((rec.locked_until - Date.now()) / 60000)} 分钟后再试` }, 429);
+          }
+        } catch {}
+      }
       const u = await passwordLogin(env, body.username, body.password);
-      if (!u) return json({ error: "账号或密码错误" }, 401);
+      if (!u) {
+        if (lockOn && key) {
+          try {
+            const rec = (await env.DB.prepare("SELECT attempts, locked_until FROM login_attempts WHERE key = ?").bind(key).first()) as { attempts: number; locked_until: number | null } | null;
+            const attempts = rec && (!rec.locked_until || rec.locked_until <= Date.now()) ? (rec.attempts || 0) + 1 : 1;
+            await env.DB.prepare("INSERT INTO login_attempts (key, attempts, locked_until) VALUES (?, ?, NULL) ON CONFLICT(key) DO UPDATE SET attempts = excluded.attempts, locked_until = NULL").bind(key, attempts).run();
+            if (attempts >= maxAttempts) {
+              await env.DB.prepare("UPDATE login_attempts SET locked_until = ? WHERE key = ?").bind(Date.now() + lockMinutes * 60000, key).run();
+              return json({ error: `密码错误次数过多，已锁定 ${lockMinutes} 分钟` }, 429);
+            }
+            return json({ error: `账号或密码错误（还可尝试 ${maxAttempts - attempts} 次）` }, 401);
+          } catch {}
+        }
+        return json({ error: "账号或密码错误" }, 401);
+      }
+      if (lockOn && key) {
+        try { await env.DB.prepare("DELETE FROM login_attempts WHERE key = ?").bind(key).run(); } catch {}
+      }
       const s = await startSession(env, u);
       await logAudit(env.DB, { actor: u.username, action: "login", target: "password" });
       return json({ user: s.user }, 200, { "set-cookie": s.cookie });
@@ -1756,9 +1847,12 @@ export default {
     if (path[0] === "feed.xml") return await handleFeed(env, req);
 
     if (path[0] === "api") {
-      // 兜底建表（幂等）：确保每日访问量表存在，避免迁移未 apply 时统计接口失败
+      // 兜底建表（幂等）：确保每日访问量表 / 登录失败锁定表存在，避免迁移未 apply 时接口失败
       try {
         await env.DB.exec("CREATE TABLE IF NOT EXISTS views_daily (day TEXT PRIMARY KEY, views INTEGER NOT NULL DEFAULT 0)");
+      } catch {}
+      try {
+        await env.DB.exec("CREATE TABLE IF NOT EXISTS login_attempts (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, locked_until INTEGER)");
       } catch {}
       try {
         return await handleApi(req, env, path, req.method);

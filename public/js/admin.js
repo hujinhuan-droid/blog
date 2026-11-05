@@ -1934,6 +1934,45 @@ async function renderSettings() {
       <input type="number" id="s-session_ttl" min="1" max="365" value="${escHtml(s.session_ttl || "30")}" />
     </fieldset>
 
+    <fieldset class="set-group">
+      <legend>⑫ 品牌与合规</legend>
+      <label>站点 Logo（显示在顶栏品牌名旁，建议正方形透明 PNG）</label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="s-site_logo" value="${escHtml(s.site_logo || "")}" placeholder="/api/files/images/xxx.png 或 https://..." style="flex:1;min-width:220px" />
+        <input type="file" id="s-logo-file" accept="image/*" style="display:none" />
+        <button type="button" class="btn" id="btn-logo-upload"><i data-lucide="upload"></i> 上传</button>
+      </div>
+      <div id="logo-preview" style="margin-top:8px">${s.site_logo ? `<img src="${escHtml(s.site_logo)}" style="max-height:48px;max-width:120px;border-radius:8px" />` : `<span class="muted">未设置</span>`}</div>
+
+      <label style="margin-top:16px">社交链接（每行一个，格式：标签|URL）</label>
+      <textarea id="s-social_links" style="min-height:90px" placeholder="GitHub|https://github.com/hujinhuan-droid&#10;知乎|https://www.zhihu.com/people/xxx&#10;邮箱|mailto:me@example.com">${escHtml(s.social_links || "")}</textarea>
+
+      <label style="margin-top:14px">ICP 备案号</label>
+      <input type="text" id="s-beian_icp" value="${escHtml(s.beian_icp || "")}" placeholder="京ICP备12345678号" />
+
+      <label style="margin-top:12px">公安备案号</label>
+      <input type="text" id="s-beian_gongan" value="${escHtml(s.beian_gongan || "")}" placeholder="京公网安备 11010502030123号" />
+
+      <label style="margin-top:12px">隐私政策页 URL</label>
+      <input type="text" id="s-privacy_url" value="${escHtml(s.privacy_url || "")}" placeholder="https://... 或 /#/about" />
+
+      <label style="margin-top:12px">友链（每行一个，格式：标签|URL）</label>
+      <textarea id="s-friend_links" style="min-height:80px" placeholder="某某的博客|https://example.com">${escHtml(s.friend_links || "")}</textarea>
+    </fieldset>
+
+    <fieldset class="set-group">
+      <legend>⑬ 登录安全（失败锁定）</legend>
+      <p class="muted">按「IP + 用户名」统计密码错误次数，超限后临时锁定登录，防止暴力破解。</p>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer">
+        <input type="checkbox" id="s-login_lock_enabled" ${s.login_lock_enabled === "1" ? "checked" : ""} /> 启用登录失败锁定
+      </label>
+      <label style="margin-top:14px">最大失败次数（达到后锁定，默认 5）</label>
+      <input type="number" id="s-login_max_attempts" min="1" max="50" value="${escHtml(s.login_max_attempts || "5")}" />
+      <label style="margin-top:12px">锁定时长（分钟，默认 15）</label>
+      <input type="number" id="s-login_lock_minutes" min="1" max="1440" value="${escHtml(s.login_lock_minutes || "15")}" />
+      <p class="set-hint">关闭时不生效；开启后登录成功会立即清零计数。</p>
+    </fieldset>
+
     <div style="margin-top:18px;display:flex;gap:10px;align-items:center">
       <button class="btn btn-primary" id="save-settings">保存设置</button>
       <span id="settings-msg" class="muted"></span>
@@ -2051,6 +2090,28 @@ async function renderSettings() {
     if (window.applyThemePreset) window.applyThemePreset(btn.dataset.theme); // 实时预览
   });
 
+  // 站点 Logo 上传（复用 /api/upload → R2），填入 URL 后仍需点「保存设置」
+  const btnLogoUpload = document.getElementById("btn-logo-upload");
+  if (btnLogoUpload) btnLogoUpload.onclick = async () => {
+    const f = document.getElementById("s-logo-file").files[0];
+    if (!f) return toast("请先选择图片");
+    btnLogoUpload.disabled = true;
+    try {
+      const data = await fileToBase64(f);
+      const r = await api("/upload", { method: "POST", body: JSON.stringify({ name: f.name, type: f.type, data }) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.url) {
+        document.getElementById("s-site_logo").value = d.url;
+        document.getElementById("logo-preview").innerHTML = `<img src="${escHtml(d.url)}" style="max-height:48px;max-width:120px;border-radius:8px" />`;
+        toast("Logo 已上传，记得点保存设置");
+      } else toast(d.error || "上传失败");
+    } catch (e) {
+      toast("上传失败");
+    } finally {
+      btnLogoUpload.disabled = false;
+    }
+  };
+
   document.getElementById("save-settings").onclick = async () => {
     const payload = {
       site_title: document.getElementById("s-site_title").value.trim(),
@@ -2085,6 +2146,15 @@ async function renderSettings() {
       rss_full: document.getElementById("s-rss_full").checked ? "1" : "0",
       cache_ttl: document.getElementById("s-cache_ttl").value.trim() || "0",
       session_ttl: document.getElementById("s-session_ttl").value.trim() || "30",
+      site_logo: document.getElementById("s-site_logo").value.trim(),
+      social_links: document.getElementById("s-social_links").value,
+      beian_icp: document.getElementById("s-beian_icp").value.trim(),
+      beian_gongan: document.getElementById("s-beian_gongan").value.trim(),
+      privacy_url: document.getElementById("s-privacy_url").value.trim(),
+      friend_links: document.getElementById("s-friend_links").value,
+      login_lock_enabled: document.getElementById("s-login_lock_enabled").checked ? "1" : "0",
+      login_max_attempts: document.getElementById("s-login_max_attempts").value.trim() || "5",
+      login_lock_minutes: document.getElementById("s-login_lock_minutes").value.trim() || "15",
     };
     const res = await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
     const r = await res.json().catch(() => ({}));
