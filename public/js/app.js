@@ -59,6 +59,9 @@ const I18N = {
     translate: "翻译", orig: "原文", trans: "译文",
     ask_title: "站内问答", ask_ph: "问我关于博客的任何问题…", send: "发送",
     rss: "RSS", sitemap: "站点地图",
+    side_about: "关于本站", side_popular: "热门文章", side_tags: "标签",
+    side_all_tags: "全部标签", post_back: "← 全部文章", all_posts: "全部文章",
+    side_l_posts: "篇文章", side_l_tags: "个标签", side_l_days: "天运行", side_l_views: "次阅读",
   },
   zht: {
     m_posts: "文章", m_timeline: "時間軸", m_feed: "動態", m_tags: "標籤", m_friends: "朋友們", m_about: "關於",
@@ -90,6 +93,9 @@ const I18N = {
     translate: "翻譯", orig: "原文", trans: "譯文",
     ask_title: "站內問答", ask_ph: "問我關於部落格的任何問題…", send: "傳送",
     rss: "RSS", sitemap: "網站地圖",
+    side_about: "關於本站", side_popular: "熱門文章", side_tags: "標籤",
+    side_all_tags: "全部標籤", post_back: "← 全部文章", all_posts: "全部文章",
+    side_l_posts: "篇文章", side_l_tags: "個標籤", side_l_days: "天運行", side_l_views: "次閱讀",
   },
   en: {
     m_posts: "Posts", m_timeline: "Timeline", m_feed: "Feed", m_tags: "Tags", m_friends: "Friends", m_about: "About",
@@ -121,6 +127,9 @@ const I18N = {
     translate: "Translate", orig: "Original", trans: "Translation",
     ask_title: "Ask the blog", ask_ph: "Ask me anything about this blog…", send: "Send",
     rss: "RSS", sitemap: "Sitemap",
+    side_about: "About", side_popular: "Popular", side_tags: "Tags",
+    side_all_tags: "All tags", post_back: "← All posts", all_posts: "All posts",
+    side_l_posts: " posts", side_l_tags: " tags", side_l_days: " days", side_l_views: " views",
   },
 };
 let LANG = "zh";
@@ -391,35 +400,29 @@ function pickIcon(p) {
   return "file-text";
 }
 
-// 估算阅读时间（优先用正文，其次摘要；无内容则返回空）
+// 估算阅读时间：优先用列表接口回传的正文字符数，其次用完整正文；都没有则不显示（避免用摘要低估）
 function calcReadTime(p) {
-  const text = p.content || p.excerpt || "";
-  if (!text) return "";
-  const n = Math.max(1, Math.round(text.replace(/\s+/g, "").length / 350));
-  return `约 ${n} 分钟`;
+  let n = Number(p && p.content_length) || 0;
+  if (!n && p && p.content) n = String(p.content).replace(/\s+/g, "").length;
+  if (!n) return "";
+  return `约 ${Math.max(1, Math.round(n / 400))} 分钟`;
 }
 
 // 统一的文章卡片 HTML：首页 / 时间轴 / 搜索 / 标签页共用，保证视觉一致
+// 采用「列表行」而非卡片盒子：元信息 → 标题 → 摘要 → 标签，靠一条细分割线分隔，
+// 视觉更接近成熟技术博客，长中文标题也不会让两列卡片高度参差不齐。
 function postCardHtml(p) {
-  const icon = pickIcon(p);
   const cat = parseTags(p.tags)[0] || "";
   const read = calcReadTime(p);
   return `<article class="post-card">
-    <div class="post-card-head">
-      <span class="post-icon" aria-hidden="true"><i data-lucide="${icon}"></i></span>
-      <div class="post-head-body">
-        <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
-          p.visibility === "private" ? `<span class="badge">${t("private")}</span>` : ""
-        }</h2>
-        <div class="post-submeta">
-          ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
-          <span class="post-date">${fmtDate(p.created_at)}</span>
-          ${read ? `<span class="post-read">${read}</span>` : ""}
-        </div>
-      </div>
+    <div class="post-submeta">
+      ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
+      <span class="post-date">${fmtDate(p.created_at)}</span>
+      ${read ? `<span class="post-sep">·</span><span class="post-read">${read}</span>` : ""}
+      ${p.visibility === "private" ? `<span class="badge">${t("private")}</span>` : ""}
     </div>
-    <div class="excerpt">${escHtml(p.excerpt || "")}</div>
-    ${aiNotesHtml(p.ai_notes, true)}
+    <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a></h2>
+    ${p.excerpt ? `<p class="excerpt">${escHtml(p.excerpt)}</p>` : ""}
     ${tagsHtml(p)}
   </article>`;
 }
@@ -436,31 +439,23 @@ function bindPostCards(root) {
   });
 }
 
-// 首页「精选」大卡：整宽、更大图标与标题，形成主次层级
+// 首页「精选」大卡：整宽、更大标题与摘要，形成主次层级
 function featuredHtml(p) {
-  const icon = pickIcon(p);
   const cat = parseTags(p.tags)[0] || "";
   const read = calcReadTime(p);
   return `<article class="post-card featured">
-    <div class="post-card-head">
-      <span class="post-icon" aria-hidden="true"><i data-lucide="${icon}"></i></span>
-      <div class="post-head-body">
-        <span class="featured-tag">${t("featured_tag")}</span>
-        <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
-          p.visibility === "private" ? `<span class="badge">${t("private")}</span>` : ""
-        }</h2>
-        <div class="post-submeta">
-          ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
-          <span class="post-date">${fmtDate(p.created_at)}</span>
-          ${read ? `<span class="post-read">${read}</span>` : ""}
-        </div>
-      </div>
-    </div>
-    <div class="excerpt">${escHtml(p.excerpt || "")}</div>
-    ${aiNotesHtml(p.ai_notes, true)}
+    <span class="featured-tag">${t("featured_tag")}</span>
+    <h2><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a>${
+      p.visibility === "private" ? `<span class="badge">${t("private")}</span>` : ""
+    }</h2>
+    <p class="excerpt">${escHtml(p.excerpt || "")}</p>
     <div class="featured-foot">
-      <a class="btn btn-sm btn-primary" href="#/post/${encodeURIComponent(p.slug)}">${t("read_more")}</a>
-      ${tagsHtml(p)}
+      <div class="post-submeta">
+        ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
+        <span class="post-date">${fmtDate(p.created_at)}</span>
+        ${read ? `<span class="post-sep">·</span><span class="post-read">${read}</span>` : ""}
+      </div>
+      <a class="featured-cta" href="#/post/${encodeURIComponent(p.slug)}">${t("read_more")}</a>
     </div>
   </article>`;
 }
@@ -525,6 +520,16 @@ function renderNav() {
       menu.appendChild(aimanju);
     }
   }
+  // 当前路由高亮：「文章」涵盖首页与文章详情
+  const curHash = location.hash || "#/";
+  menu.querySelectorAll(".menu-link").forEach((a) => {
+    const href = a.getAttribute("href") || "";
+    if (!href.startsWith("#")) return;
+    const active = href === "#/"
+      ? (curHash === "#/" || curHash === "" || curHash.startsWith("#/post/"))
+      : curHash.startsWith(href);
+    a.classList.toggle("active", active);
+  });
   nav.appendChild(menu);
 
   // 站内搜索框
@@ -613,25 +618,82 @@ async function renderHome() {
   const sub = SITE_SETTINGS.seo_description || SITE_SETTINGS.about_content || "记录 AI Agent 的探索、实践与思考";
 
   app.innerHTML = `
-    <section class="hero">
-      <div class="hero-inner">
-        <p class="hero-eyebrow">${t("hero_eyebrow")}</p>
-        <h1 class="hero-title">${escHtml(title)}</h1>
-        <p class="hero-sub">${escHtml(sub)}</p>
-        <div class="hero-stats">
-          <span><b>${homeAll.length}</b> ${t("stat_posts")}</span>
-          <span class="dot">·</span>
-          <span><b>${tagCount}</b> ${t("stat_tags")}</span>
-          <span class="dot">·</span>
-          <span><b>${days}</b> ${t("stat_days")}</span>
-        </div>
+    <div class="home">
+      <div class="home-main">
+        <section class="hero">
+          <div class="hero-inner">
+            <p class="hero-eyebrow">${t("hero_eyebrow")}</p>
+            <h1 class="hero-title">${escHtml(title)}</h1>
+            <p class="hero-sub">${escHtml(sub)}</p>
+            <div class="hero-stats">
+              <span><b>${homeAll.length}</b> ${t("stat_posts")}</span>
+              <span class="dot">·</span>
+              <span><b>${tagCount}</b> ${t("stat_tags")}</span>
+              <span class="dot">·</span>
+              <span><b>${days}</b> ${t("stat_days")}</span>
+            </div>
+          </div>
+        </section>
+        <div class="cat-filter" id="catFilter"></div>
+        <div id="homeBody"></div>
       </div>
-    </section>
-    <div class="cat-filter" id="catFilter"></div>
-    <div id="homeBody"></div>`;
+      <aside class="home-side" id="homeSide"></aside>
+    </div>`;
 
   renderCatFilter();
+  renderHomeSide();
   renderHomeBody();
+}
+
+// 首页右侧栏：关于本站 / 热门文章 / 标签
+function renderHomeSide() {
+  const box = document.getElementById("homeSide");
+  if (!box) return;
+  const title = SITE_SETTINGS.site_title || "AI Agent 博客";
+  const sub = SITE_SETTINGS.seo_description || SITE_SETTINGS.site_subtitle || "记录 AI Agent 的探索、实践与思考";
+  const logo = String(SITE_SETTINGS.site_logo || "").trim();
+  const initial = (title || "A").trim().charAt(0).toUpperCase();
+  const started = Date.parse("2026-08-13");
+  const days = Math.max(1, Math.floor((Date.now() - started) / 86400000) + 1);
+  const views = homeAll.reduce((s, x) => s + (Number(x.views) || 0), 0);
+
+  const popular = homeAll
+    .slice()
+    .filter((p) => (Number(p.views) || 0) > 0)
+    .sort((a, b) => (Number(b.views) || 0) - (Number(a.views) || 0))
+    .slice(0, 5);
+
+  const counts = new Map();
+  homeAll.forEach((p) => parseTags(p.tags).forEach((x) => x && counts.set(x, (counts.get(x) || 0) + 1)));
+  const tagList = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14);
+
+  box.innerHTML = `
+    <div class="side-card side-about">
+      <div class="side-ava">${logo ? `<img src="${escHtml(logo)}" alt="" />` : escHtml(initial)}</div>
+      <div>
+        <div class="side-name">${escHtml(title)}</div>
+        <p class="side-desc">${escHtml(sub)}</p>
+      </div>
+      <div class="side-stats">
+        <span><b>${homeAll.length}</b>${t("side_l_posts")}</span>
+        <span><b>${counts.size}</b>${t("side_l_tags")}</span>
+        <span><b>${days}</b>${t("side_l_days")}</span>
+        <span><b>${views.toLocaleString()}</b>${t("side_l_views")}</span>
+      </div>
+    </div>
+    ${popular.length ? `<div class="side-card">
+      <h3>${t("side_popular")}</h3>
+      <ol class="side-ranks">
+        ${popular.map((p) => `<li><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a></li>`).join("")}
+      </ol>
+    </div>` : ""}
+    ${tagList.length ? `<div class="side-card">
+      <h3>${t("side_tags")}</h3>
+      <div class="side-tags">
+        ${tagList.map(([tag, n]) => `<a href="#/tags/${encodeURIComponent(tag)}">${escHtml(tag)}<i>${n}</i></a>`).join("")}
+      </div>
+      <a class="side-more" href="#/tags">${t("side_all_tags")} →</a>
+    </div>` : ""}`;
 }
 
 // 渲染首页排序筛选：全部 / 最多观看(按浏览) / 最多互动(按评论数)
@@ -709,30 +771,43 @@ async function renderPost(slug) {
   }
   const p = await res.json();
   applyPostSeo(p);
+  const cat = parseTags(p.tags)[0] || "";
+  const read = calcReadTime(p);
   const detail = el(`<div class="post-detail"></div>`);
   detail.innerHTML = `
-    <h1>${p.title}</h1>
-    <div class="post-actions">
-      <button type="button" class="tts-btn" id="ttsBtn">${t("tts_read")}</button>
-      <span class="post-views" id="postViews"></span>
-      <button type="button" class="react-btn" id="likeBtn"><i data-lucide="thumbs-up"></i> <span id="likeCount">0</span></button>
-      <button type="button" class="react-btn" id="favBtn"><i data-lucide="star"></i> <span id="favCount">0</span></button>
-      <button type="button" class="react-btn" id="shareBtn"><i data-lucide="share-2"></i> <span>复制链接</span></button>
-    </div>
-    <div class="meta">${fmtDate(p.created_at)}${
-      p.visibility === "private" ? " · " + t("private") : ""
-    }</div>
+    <a class="post-back" href="#/">${t("post_back")}</a>
+    <header class="article-head">
+      <div class="post-submeta">
+        ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
+        <span class="post-date">${fmtDate(p.created_at)}</span>
+        ${read ? `<span class="post-sep">·</span><span class="post-read">${read}</span>` : ""}
+        ${p.visibility === "private" ? `<span class="badge">${t("private")}</span>` : ""}
+      </div>
+      <h1>${escHtml(p.title)}</h1>
+      <div class="post-actions">
+        <button type="button" class="tts-btn" id="ttsBtn">${t("tts_read")}</button>
+        <button type="button" class="react-btn" id="likeBtn"><i data-lucide="thumbs-up"></i> <span id="likeCount">0</span></button>
+        <button type="button" class="react-btn" id="favBtn"><i data-lucide="star"></i> <span id="favCount">0</span></button>
+        <button type="button" class="react-btn" id="shareBtn"><i data-lucide="share-2"></i> <span>复制链接</span></button>
+        <span class="post-views" id="postViews"></span>
+      </div>
+    </header>
     <div class="content" id="postContent">${renderMarkdown(p.content)}</div>
     ${aiNotesHtml(p.ai_notes)}
     ${tagsHtml(p)}`;
   app.innerHTML = "";
   app.appendChild(detail);
+  // 正文常以「# 标题」开头，会与文章页 H1 重复：内容首行 H1 与标题一致时去掉，避免标题出现两次
+  const bodyEl = detail.querySelector("#postContent");
+  const firstH1 = bodyEl && bodyEl.querySelector("h1");
+  if (firstH1 && firstH1.textContent.trim() === String(p.title || "").trim()) firstH1.remove();
   window.highlightCode(detail);
   reportView(p.slug);
   loadReactions(p.slug);
   bindTranslate(detail, p);
   loadRelated(p.slug);
   attachComments(p.slug);
+  startReadProgress();
   // 文章朗读（浏览器内置语音合成，零配额、纯前端）
   const ttsBtn = document.getElementById("ttsBtn");
   if (ttsBtn && "speechSynthesis" in window) {
@@ -763,6 +838,36 @@ async function renderPost(slug) {
       setTimeout(() => { if (sp) sp.textContent = "复制链接"; }, 2000);
     } catch { toast(url); }
   };
+}
+
+// ---------- 文章页顶部阅读进度条 ----------
+let READ_PROGRESS = null;
+function stopReadProgress() {
+  if (!READ_PROGRESS) return;
+  window.removeEventListener("scroll", READ_PROGRESS.onScroll);
+  window.removeEventListener("resize", READ_PROGRESS.onScroll);
+  if (READ_PROGRESS.el && READ_PROGRESS.el.parentNode) READ_PROGRESS.el.parentNode.removeChild(READ_PROGRESS.el);
+  READ_PROGRESS = null;
+}
+function startReadProgress() {
+  stopReadProgress();
+  const bar = el(`<div class="read-progress" aria-hidden="true"><i></i></div>`);
+  document.body.appendChild(bar);
+  const fill = bar.firstElementChild;
+  const onScroll = () => {
+    const content = document.getElementById("postContent");
+    if (!content) return;
+    const rect = content.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const total = rect.height - vh * 0.5;
+    const passed = -rect.top + vh * 0.25;
+    const pct = total > 0 ? Math.min(100, Math.max(0, (passed / total) * 100)) : 0;
+    fill.style.width = pct + "%";
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  READ_PROGRESS = { el: bar, onScroll };
+  onScroll();
 }
 
 // 阅读量上报（每会话只报一次，避免刷新虚高）
@@ -1161,6 +1266,7 @@ function bindNavToggle() {
 }
 
 function route() {
+  stopReadProgress();
   // 路径式入口（/login、/admin）重定向到哈希路由，避免用户直接输入地址时只看到首页
   const path = location.pathname;
   if (path === "/login" || path === "/admin") {

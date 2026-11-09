@@ -443,6 +443,8 @@ function cardOf(p: any): any {
     views: p.views || 0,
     comment_count: p.comment_count || 0,
     created_at: p.created_at,
+    // 列表首屏需要「阅读时长」但不含正文：只回传正文字符数（几十字节）
+    content_length: String(p.content || "").length,
   };
 }
 
@@ -691,11 +693,9 @@ async function prerenderHome(env: Env, req: Request): Promise<Response> {
   const cards = posts
     .slice(0, 20)
     .map((p) => `<article class="post-card">
-  <div class="post-card-head"><div class="post-head-body">
-    <h2><a href="/post/${encodeURIComponent(p.slug)}">${escHtmlS(p.title)}</a></h2>
-    <div class="post-submeta"><span class="post-date">${fmtDateS(p.created_at)}</span></div>
-  </div></div>
-  <div class="excerpt">${escHtmlS(p.excerpt || "")}</div>
+  <div class="post-submeta"><span class="post-date">${fmtDateS(p.created_at)}</span></div>
+  <h2><a href="/post/${encodeURIComponent(p.slug)}">${escHtmlS(p.title)}</a></h2>
+  <p class="excerpt">${escHtmlS(p.excerpt || "")}</p>
 </article>`)
     .join("\n");
   const head = `<script type="application/ld+json">${JSON.stringify({
@@ -752,8 +752,10 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
     mainEntityOfPage: base + "/post/" + encodeURIComponent(row.slug),
   })}</script>`;
   const body = `<div class="post-detail">
-  <h1>${escHtmlS(row.title)}</h1>
-  <div class="meta">${fmtDateS(row.created_at)}</div>
+  <div class="article-head">
+    <div class="post-submeta"><span class="post-date">${fmtDateS(row.created_at)}</span></div>
+    <h1>${escHtmlS(row.title)}</h1>
+  </div>
   <div class="content">${content}</div>
 </div>`;
   const branding = brandingHtml(settings, siteTitle);
