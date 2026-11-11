@@ -620,3 +620,300 @@ export async function toggleReaction(
   const counts = await getReactionCounts(db, postId);
   return { ...counts, acted: !existing };
 }
+
+/* ============================================================================
+   v3.1 后台增强：文章版本历史 / 站内搜索分析 / 标签管理
+   ----------------------------------------------------------------------------
+   这三块都只在管理侧使用，不改动任何前台读取路径的行为。
+   所有新表由 migrations/0013_admin_plus.sql 创建，worker 侧另有幂等兜底。
+   ========================================================================== */
+
+// ── 文章版本历史 ────────────────────────────────────────────────────────────
+
+export interface RevisionRow {
+  id: number;
+  post_id: number;
+  title: string;
+  content: string;
+  excerpt: string;
+  tags: string;
+  status: string | null;
+  actor: string | null;
+  note: string | null;
+  created_at: number;
+}
+
+/** 每篇文章保留的版本上限：超出后删最老的，防止 D1 体积失控 */
+const REVISION_KEEP = 30;
+/** 同一篇文章两次快照的最小间隔（毫秒）：连续自动保存不刷屏。
+    注意：全站时间戳统一用毫秒（与 db.now() / posts.scheduled_at 一致）。 */
+const REVISION_MIN_GAP = 90 * 1000;
+
+/**
+ * 为「更新前」的文章状态留一份快照。
+ * 调用时机：updatePost 真正改动 title/content 之前。
+ * 内容与上一版完全相同则跳过，避免重复快照。
+ */
+export async function snapshotRevision(
+  db: DB,
+  postId: number,
+  actor: string,
+  note = "",
+  force = false
+): Promise<boolean> {
+  const row = (await db.prepare("SELECT * FROM posts WHERE id = ?").bind(postId).first()) as PostRow | null;
+  if (!row) return false;
+
+  const last = (await db
+    .prepare("SELECT title, content, created_at FROM post_revisions WHERE post_id = ? ORDER BY id DESC LIMIT 1")
+    .bind(postId)
+    .first()) as { title: string; content: string; created_at: number } | null;
+
+  const ts = Date.now();
+  if (last && last.title === row.title && last.content === row.content) return false;
+  // force：回滚等关键动作必须留档，不受间隔合并影响
+  if (!force && last && ts - Number(last.created_at) < REVISION_MIN_GAP) {
+    // 间隔太近但内容确有变化：覆盖上一版，而不是堆一串近似版本
+    await db
+      .prepare("UPDATE post_revisions SET title = ?, content = ?, excerpt = ?, tags = ?, status = ?, actor = ?, note = ?, created_at = ? WHERE post_id = ? AND id = (SELECT id FROM post_revisions WHERE post_id = ? ORDER BY id DESC LIMIT 1)")
+      .bind(row.title, row.content, row.excerpt, row.tags || "[]", row.status, actor, note, ts, postId, postId)
+      .run();
+    return true;
+  }
+
+  await db
+    .prepare(
+      "INSERT INTO post_revisions (post_id, title, content, excerpt, tags, status, actor, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(postId, row.title, row.content, row.excerpt, row.tags || "[]", row.status, actor, note, ts)
+    .run();
+
+  // 裁剪：只留最近 REVISION_KEEP 条
+  await db
+    .prepare(
+      "DELETE FROM post_revisions WHERE post_id = ? AND id NOT IN (SELECT id FROM post_revisions WHERE post_id = ? ORDER BY id DESC LIMIT ?)"
+    )
+    .bind(postId, postId, REVISION_KEEP)
+    .run();
+  return true;
+}
+
+/** 版本列表（不含 content，只带长度与摘要，列表页轻量） */
+export async function listRevisions(
+  db: DB,
+  postId: number
+): Promise<Array<Omit<RevisionRow, "content"> & { content_length: number }>> {
+  const { results } = await db
+    .prepare(
+      "SELECT id, post_id, title, excerpt, tags, status, actor, note, created_at, LENGTH(content) AS content_length FROM post_revisions WHERE post_id = ? ORDER BY id DESC LIMIT ?"
+    )
+    .bind(postId, REVISION_KEEP)
+    .all();
+  return (results || []) as any;
+}
+
+export async function getRevision(db: DB, postId: number, revId: number): Promise<RevisionRow | null> {
+  return ((await db
+    .prepare("SELECT * FROM post_revisions WHERE id = ? AND post_id = ?")
+    .bind(revId, postId)
+    .first()) as RevisionRow) || null;
+}
+
+/**
+ * 回滚到指定版本：先把「当前状态」存成新版本（回滚本身可再撤销），再写回。
+ * 返回回滚后的文章行。
+ */
+export async function restoreRevision(
+  db: DB,
+  postId: number,
+  revId: number,
+  actor: string
+): Promise<{ ok: boolean; msg: string; post?: PostRow }> {
+  const rev = await getRevision(db, postId, revId);
+  if (!rev) return { ok: false, msg: "版本不存在" };
+  const cur = (await db.prepare("SELECT * FROM posts WHERE id = ?").bind(postId).first()) as PostRow | null;
+  if (!cur) return { ok: false, msg: "文章不存在" };
+
+  // 回滚前留档，保证「回滚」这个动作也能被回滚
+  await snapshotRevision(db, postId, actor, `回滚到 #${revId} 之前`, true);
+
+  const ts = Date.now();
+  await db
+    .prepare("UPDATE posts SET title = ?, content = ?, excerpt = ?, tags = ?, updated_at = ? WHERE id = ?")
+    .bind(rev.title, rev.content, rev.excerpt, rev.tags || "[]", ts, postId)
+    .run();
+  const post = (await getPostById(db, postId, { admin: true })) || undefined;
+  return { ok: true, msg: `已回滚到 ${new Date(Number(rev.created_at)).toLocaleString("zh-CN")} 的版本`, post };
+}
+
+// ── 站内搜索分析 ────────────────────────────────────────────────────────────
+
+/** 记录一次搜索。空关键词不记；同一关键词 10 秒内合并计数，避免连打多次刷量。 */
+export async function logSearch(db: DB, keyword: string, hits: number): Promise<void> {
+  const kw = String(keyword || "").trim().slice(0, 60);
+  if (!kw) return;
+  const ts = Date.now();
+  try {
+    const last = (await db
+      .prepare("SELECT id, created_at FROM search_log WHERE keyword = ? ORDER BY id DESC LIMIT 1")
+      .bind(kw)
+      .first()) as { id: number; created_at: number } | null;
+    if (last && ts - Number(last.created_at) < 10000) {
+      await db.prepare("UPDATE search_log SET hits = ?, created_at = ? WHERE id = ?").bind(hits, ts, last.id).run();
+      return;
+    }
+    await db.prepare("INSERT INTO search_log (keyword, hits, created_at) VALUES (?, ?, ?)").bind(kw, hits, ts).run();
+  } catch {
+    // 日志失败绝不影响搜索本身
+  }
+}
+
+export interface SearchStat {
+  keyword: string;
+  count: number;
+  last_at: number;
+  empty: boolean;
+}
+
+/** 搜索统计：Top 关键词、零结果词、总量与近 7 日趋势 */
+export async function getSearchStats(db: DB, days = 30): Promise<{
+  total: number;
+  unique: number;
+  emptyRate: number;
+  top: SearchStat[];
+  empty: SearchStat[];
+  daily: Array<{ day: string; count: number }>;
+}> {
+  const since = Date.now() - days * 86400000;
+  const { results } = await db
+    .prepare(
+      `SELECT keyword, COUNT(*) AS count, MAX(created_at) AS last_at,
+              SUM(CASE WHEN hits = 0 THEN 1 ELSE 0 END) AS empty_hits
+       FROM search_log WHERE created_at >= ? GROUP BY keyword
+       ORDER BY count DESC LIMIT 60`
+    )
+    .bind(since)
+    .all();
+  const rows = (results || []) as any[];
+  const toStat = (r: any): SearchStat => ({
+    keyword: r.keyword,
+    count: Number(r.count) || 0,
+    last_at: Number(r.last_at) || 0,
+    empty: (Number(r.empty_hits) || 0) * 2 >= (Number(r.count) || 1),
+  });
+  const all = rows.map(toStat);
+  const total = all.reduce((s, x) => s + x.count, 0);
+  const emptyCount = rows.reduce((s, r) => s + (Number(r.empty_hits) || 0), 0);
+
+  const { results: dailyRows } = await db
+    .prepare(
+      `SELECT date(created_at / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS count
+       FROM search_log WHERE created_at >= ? GROUP BY day ORDER BY day`
+    )
+    .bind(Date.now() - 7 * 86400000)
+    .all();
+
+  return {
+    total,
+    unique: all.length,
+    emptyRate: total ? Math.round((emptyCount / total) * 100) : 0,
+    top: all.slice(0, 15),
+    empty: all.filter((x) => x.empty).sort((a, b) => b.count - a.count).slice(0, 15),
+    // 补齐最近 7 天（缺失的天记 0），否则柱状图在只有一两天数据时会只剩孤零零一根
+    daily: (() => {
+      const map = new Map<string, number>();
+      for (const r of (dailyRows || []) as any[]) map.set(String(r.day), Number(r.count) || 0);
+      const out: Array<{ day: string; count: number }> = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        out.push({ day: key, count: map.get(key) || 0 });
+      }
+      return out;
+    })(),
+  };
+}
+
+// ── 标签管理（重命名 / 合并 / 删除）────────────────────────────────────────
+
+/** 带文章数的标签清单（管理侧） */
+export async function listTagStats(db: DB): Promise<{ tag: string; count: number }[]> {
+  return listTags(db, { admin: true });
+}
+
+/**
+ * 批量改写所有文章的标签。
+ * mapper 收到当前标签数组，返回新数组；为空则整条跳过（不写库）。
+ * 返回被改动的文章数。逐条串行更新，避免 D1 batch 的语句数上限。
+ */
+async function rewriteTags(db: DB, mapper: (arr: string[]) => string[] | null): Promise<number> {
+  const { results } = await db.prepare("SELECT id, tags FROM posts WHERE deleted_at IS NULL").all();
+  let changed = 0;
+  for (const row of (results || []) as any[]) {
+    const before = parseTags(row.tags);
+    const after = mapper(before.slice());
+    if (!after) continue;
+    if (after.length === before.length && after.every((x, i) => x === before[i])) continue;
+    await db.prepare("UPDATE posts SET tags = ? WHERE id = ?").bind(stringifyTags(after), row.id).run();
+    changed++;
+  }
+  return changed;
+}
+
+/** 重命名标签：所有使用旧名的文章改为新名；同名冲突自动去重；旧名写入别名表 */
+export async function renameTag(db: DB, from: string, to: string): Promise<{ ok: boolean; msg: string; changed: number }> {
+  const a = String(from || "").trim();
+  const b = String(to || "").trim();
+  if (!a || !b) return { ok: false, msg: "标签名不能为空", changed: 0 };
+  if (a === b) return { ok: false, msg: "新旧标签相同", changed: 0 };
+  const changed = await rewriteTags(db, (arr) => {
+    if (!arr.includes(a)) return null;
+    const out = arr.map((x) => (x === a ? b : x));
+    return Array.from(new Set(out));
+  });
+  if (changed === 0) return { ok: false, msg: `没有文章使用「${a}」`, changed: 0 };
+  await db
+    .prepare("INSERT INTO tag_aliases (alias, target, created_at) VALUES (?, ?, ?) ON CONFLICT(alias) DO UPDATE SET target = excluded.target")
+    .bind(a, b, Date.now())
+    .run();
+  return { ok: true, msg: `「${a}」已重命名为「${b}」，影响 ${changed} 篇文章`, changed };
+}
+
+/** 合并多个标签到一个目标标签 */
+export async function mergeTags(db: DB, fromList: string[], to: string): Promise<{ ok: boolean; msg: string; changed: number }> {
+  const target = String(to || "").trim();
+  const sources = Array.from(new Set((fromList || []).map((x) => String(x).trim()).filter((x) => x && x !== target)));
+  if (!target) return { ok: false, msg: "目标标签不能为空", changed: 0 };
+  if (!sources.length) return { ok: false, msg: "请选择至少一个要合并的标签", changed: 0 };
+  const changed = await rewriteTags(db, (arr) => {
+    if (!arr.some((x) => sources.includes(x))) return null;
+    const out = arr.map((x) => (sources.includes(x) ? target : x));
+    return Array.from(new Set(out));
+  });
+  const ts = Date.now();
+  for (const s of sources) {
+    await db
+      .prepare("INSERT INTO tag_aliases (alias, target, created_at) VALUES (?, ?, ?) ON CONFLICT(alias) DO UPDATE SET target = excluded.target")
+      .bind(s, target, ts)
+      .run();
+  }
+  return { ok: true, msg: `已把 ${sources.length} 个标签合并到「${target}」，影响 ${changed} 篇文章`, changed };
+}
+
+/** 删除标签：从所有文章中移除，不改动文章其它内容 */
+export async function deleteTag(db: DB, name: string): Promise<{ ok: boolean; msg: string; changed: number }> {
+  const a = String(name || "").trim();
+  if (!a) return { ok: false, msg: "标签名不能为空", changed: 0 };
+  const changed = await rewriteTags(db, (arr) => (arr.includes(a) ? arr.filter((x) => x !== a) : null));
+  if (changed === 0) return { ok: false, msg: `没有文章使用「${a}」`, changed: 0 };
+  await db.prepare("DELETE FROM tag_aliases WHERE alias = ?").bind(a).run();
+  return { ok: true, msg: `已删除标签「${a}」，影响 ${changed} 篇文章`, changed };
+}
+
+/** 标签别名映射（前台访问旧标签时用于提示 / 跳转） */
+export async function getTagAliases(db: DB): Promise<Record<string, string>> {
+  const { results } = await db.prepare("SELECT alias, target FROM tag_aliases").all();
+  const map: Record<string, string> = {};
+  for (const r of (results || []) as any[]) map[r.alias] = r.target;
+  return map;
+}

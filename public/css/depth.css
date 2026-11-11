@@ -1,0 +1,469 @@
+/* ============================================================================
+   depth.css — 景深皮肤（3D 空间感 + 玻璃拟态 + 指针视差）
+   ----------------------------------------------------------------------------
+   设计约束（很重要，避免推翻上一版的排版结构）：
+   1. 只改「观感层」：背景、阴影、层次、动效。不改任何栅格列宽、字号、行高。
+   2. 3D 倾斜仅在「支持 hover 的精确指针设备」+「用户未要求减少动效」时启用；
+      触屏与 reduced-motion 走静态深度阴影，功能完全一致。
+   3. 正文阅读区（.post-detail 正文段落）不加倾斜，长时间阅读不晕。
+   4. 所有 3D 变换只用 transform / opacity / filter，不触发布局重排。
+   ========================================================================== */
+
+/* ── 1. 光与深度令牌 ───────────────────────────────────────────────────── */
+:root {
+  /* 页面底色不再是纯白：一层极浅冷灰，让白色卡片能「浮」出来 */
+  --bg: #f1f3f9;
+  --glow-1: rgba(37, 99, 235, 0.34);
+  --glow-2: rgba(124, 58, 237, 0.3);
+  --glow-3: rgba(6, 182, 212, 0.24);
+  --grid-line: rgba(15, 20, 35, 0.08);
+
+  --panel-bg: rgba(255, 255, 255, 0.78);
+  --panel-brd: rgba(15, 20, 35, 0.08);
+  --panel-sheen: rgba(255, 255, 255, 0.9);
+  --spot: rgba(37, 99, 235, 0.09);
+
+  /* 三级投影：近实、中散、远虚，模拟真实光源高度 */
+  --depth-sm: 0 1px 2px rgba(15, 18, 32, 0.06), 0 8px 20px -10px rgba(15, 18, 32, 0.2);
+  --depth-md: 0 2px 6px rgba(15, 18, 32, 0.07), 0 18px 38px -14px rgba(15, 18, 32, 0.24),
+    0 48px 80px -48px rgba(15, 18, 32, 0.34);
+  --depth-lg: 0 14px 30px -16px rgba(15, 18, 32, 0.26), 0 50px 100px -44px rgba(15, 18, 32, 0.46);
+}
+
+body.dark {
+  --bg: #08090e;
+  --glow-1: rgba(59, 130, 246, 0.4);
+  --glow-2: rgba(139, 92, 246, 0.34);
+  --glow-3: rgba(34, 211, 238, 0.2);
+  --grid-line: rgba(255, 255, 255, 0.075);
+
+  --panel-bg: rgba(23, 26, 37, 0.66);
+  --panel-brd: rgba(255, 255, 255, 0.09);
+  --panel-sheen: rgba(255, 255, 255, 0.1);
+  --spot: rgba(96, 165, 250, 0.16);
+
+  --depth-sm: 0 1px 2px rgba(0, 0, 0, 0.55), 0 8px 20px -8px rgba(0, 0, 0, 0.6);
+  --depth-md: 0 2px 6px rgba(0, 0, 0, 0.5), 0 18px 44px -14px rgba(0, 0, 0, 0.72),
+    0 60px 100px -60px rgba(0, 0, 0, 0.9);
+  --depth-lg: 0 16px 40px -18px rgba(0, 0, 0, 0.8), 0 50px 110px -50px rgba(0, 0, 0, 0.95);
+}
+
+/* ── 2. 空间背景：顶部光晕 + 透视网格地面 ─────────────────────────────── */
+.bg-fx {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+.bg-fx .bg-glow {
+  position: absolute;
+  top: -34vh;
+  left: -12%;
+  right: -12%;
+  height: 96vh;
+  background:
+    radial-gradient(42% 46% at 16% 12%, var(--glow-1) 0%, transparent 64%),
+    radial-gradient(36% 42% at 84% 6%, var(--glow-2) 0%, transparent 66%),
+    radial-gradient(34% 38% at 54% 0%, var(--glow-3) 0%, transparent 68%);
+  filter: blur(28px);
+  opacity: 1;
+}
+.bg-fx .bg-grid {
+  position: absolute;
+  top: 0;
+  left: -30%;
+  right: -30%;
+  height: 540px;
+  background-image:
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  transform: perspective(460px) rotateX(63deg);
+  transform-origin: top center;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 52%, transparent 82%);
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.35) 52%, transparent 82%);
+}
+/* 内容层抬到背景之上（背景是 fixed + z-index:0） */
+.topbar,
+main.container,
+.footer {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── 3. 顶栏：玻璃 + 下沿渐隐 ──────────────────────────────────────────── */
+.topbar {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  -webkit-backdrop-filter: saturate(170%) blur(20px);
+  backdrop-filter: saturate(170%) blur(20px);
+  border-bottom: 1px solid var(--panel-brd);
+  transition: box-shadow 0.24s ease, height 0.24s ease;
+}
+.topbar.is-stuck {
+  box-shadow: 0 1px 0 var(--panel-brd), 0 12px 28px -22px rgba(15, 18, 32, 0.5);
+}
+
+/* ── 4. Hero：左文字 + 右 3D 悬浮卡堆 ─────────────────────────────────── */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 286px;
+  gap: 34px;
+  align-items: center;
+  margin: 18px 0 34px;
+}
+.hero .hero-inner { max-width: none; }
+.hero-title {
+  background: linear-gradient(112deg, var(--text) 26%, var(--primary) 68%, var(--accent-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--text);
+}
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px 4px 9px;
+  border: 1px solid var(--panel-brd);
+  border-radius: 999px;
+  background: var(--panel-bg);
+  box-shadow: var(--depth-sm);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.hero-eyebrow::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.16);
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.16); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.04); }
+}
+
+/* 3D 舞台 */
+.hero-stage {
+  position: relative;
+  height: 306px;
+  margin-top: 8px;
+  perspective: 1100px;
+  perspective-origin: 55% 42%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.stage-stack {
+  position: relative;
+  width: 220px;
+  height: 268px;
+  transform-style: preserve-3d;
+  transform: rotateX(calc(var(--py, 0) * -6deg)) rotateY(calc(-16deg + var(--px, 0) * 10deg));
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.stage-card {
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  border: 1px solid var(--panel-brd);
+  background: linear-gradient(150deg, var(--panel-sheen), transparent 62%), var(--panel-bg);
+  box-shadow: var(--depth-md);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
+  overflow: hidden;
+}
+/* 后两层用品牌色渐变而不是白色：靠色彩区分层次，白对白叠在一起看不出来 */
+.stage-card.sc-back {
+  transform: translateZ(-96px) translate(-58px, 34px) rotateZ(-9deg) scale(0.92);
+  background: linear-gradient(150deg, rgba(99, 102, 241, 0.42), rgba(139, 92, 246, 0.16));
+  border-color: rgba(124, 58, 237, 0.28);
+  box-shadow: 0 24px 50px -30px rgba(76, 29, 149, 0.6);
+}
+.stage-card.sc-mid {
+  transform: translateZ(-48px) translate(-28px, 17px) rotateZ(-4.5deg) scale(0.96);
+  background: linear-gradient(150deg, rgba(59, 130, 246, 0.36), rgba(14, 165, 233, 0.14));
+  border-color: rgba(37, 99, 235, 0.26);
+  box-shadow: 0 24px 50px -30px rgba(30, 64, 175, 0.6);
+}
+body.dark .stage-card.sc-back {
+  background: linear-gradient(150deg, rgba(167, 139, 250, 0.66), rgba(109, 40, 217, 0.32));
+  border-color: rgba(167, 139, 250, 0.46);
+  box-shadow: 0 30px 60px -32px rgba(109, 40, 217, 0.9);
+}
+body.dark .stage-card.sc-mid {
+  background: linear-gradient(150deg, rgba(96, 165, 250, 0.58), rgba(29, 78, 216, 0.34));
+  border-color: rgba(96, 165, 250, 0.44);
+  box-shadow: 0 30px 60px -32px rgba(29, 78, 216, 0.85);
+}
+.stage-card.sc-front {
+  transform: translateZ(0);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  box-shadow: var(--depth-lg), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+/* 抽象「文章卡」内容：色块 + 文字条，纯装饰不承载信息 */
+.sc-thumb {
+  height: 86px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--primary), var(--accent-2));
+  position: relative;
+  transform: translateZ(22px);
+  box-shadow: 0 10px 24px -12px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+.sc-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(60% 60% at 24% 18%, rgba(255, 255, 255, 0.5), transparent 60%);
+}
+.sc-line {
+  height: 9px;
+  border-radius: 5px;
+  background: currentColor;
+  opacity: 0.14;
+  transform: translateZ(16px);
+}
+.sc-line.w80 { width: 82%; }
+.sc-line.w60 { width: 62%; }
+.sc-line.w40 { width: 44%; }
+.sc-chiprow {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+  transform: translateZ(18px);
+}
+.sc-chip {
+  height: 20px;
+  width: 44px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-brd);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+/* 地面上的一层投影，让卡堆「浮」起来 */
+.stage-floor {
+  position: absolute;
+  bottom: 12px;
+  width: 240px;
+  height: 46px;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(15, 18, 32, 0.22), transparent 72%);
+  filter: blur(9px);
+  transform: rotateX(66deg);
+}
+body.dark .stage-floor {
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 0, 0, 0.75), transparent 72%);
+}
+
+/* ── 5. 文章列表卡：hover 浮起 + 指针倾斜 + 局部聚光 ──────────────────── */
+/* 列表改成「一叠悬浮条目」：默认就有底、边、影，静态下也有层次，
+   而不是只有 hover 才浮起来（否则整页看着就是一片白） */
+.post-list { padding-top: 4px; display: flex; flex-direction: column; gap: 10px; }
+.post-list > .post-card,
+.post-card {
+  position: relative;
+  border-radius: 15px;
+  padding: 20px 22px 18px;
+  margin: 0;
+  border: 1px solid var(--panel-brd);
+  background: linear-gradient(158deg, var(--panel-sheen), transparent 62%), var(--panel-bg);
+  box-shadow: var(--depth-sm);
+  transition: background 0.2s ease, box-shadow 0.26s ease, border-color 0.2s ease;
+  will-change: transform;
+}
+.post-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--panel-brd));
+  box-shadow: var(--depth-md);
+}
+/* 指针跟随的聚光：只做加色，不影响文字对比度 */
+.post-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    260px circle at var(--mx, 50%) var(--my, 0%),
+    var(--spot),
+    transparent 68%
+  );
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+.post-card:hover::after { opacity: 1; }
+
+/* 3D 倾斜：仅精确指针 + 允许动效 */
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .post-card,
+  .side-card {
+    transform-style: preserve-3d;
+    transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.2s ease,
+      box-shadow 0.26s ease, border-color 0.2s ease;
+  }
+  /* 卡内容分层漂浮，产生真实视差 */
+  .post-card > * { position: relative; }
+  .post-card .post-submeta { transform: translateZ(16px); }
+  .post-card h2 { transform: translateZ(26px); }
+  .post-card .excerpt { transform: translateZ(13px); }
+  .post-card .tags { transform: translateZ(9px); }
+}
+
+/* 精选卡：更强的存在感 */
+.post-card.featured {
+  margin: 8px 0 2px;
+  padding: 26px 24px;
+  border: 1px solid var(--panel-brd);
+  background: linear-gradient(155deg, var(--panel-sheen), transparent 58%), var(--panel-bg);
+  box-shadow: var(--depth-sm);
+  -webkit-backdrop-filter: blur(16px) saturate(1.35);
+  backdrop-filter: blur(16px) saturate(1.35);
+}
+.post-card.featured:hover { box-shadow: var(--depth-lg); }
+/* 顶部一道高光，像玻璃边缘受光 */
+.post-card.featured::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 14%;
+  right: 14%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--panel-sheen), transparent);
+  pointer-events: none;
+}
+
+/* ── 6. 侧栏玻璃卡 ────────────────────────────────────────────────────── */
+.side-card {
+  background: linear-gradient(160deg, var(--panel-sheen), transparent 56%), var(--panel-bg);
+  border: 1px solid var(--panel-brd);
+  border-radius: 17px;
+  box-shadow: var(--depth-sm);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  transition: box-shadow 0.26s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.side-card:hover { box-shadow: var(--depth-md); }
+.side-ava {
+  box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+.side-tags a {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+.side-tags a:hover {
+  transform: translateY(-1.5px);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+/* ── 7. 进场动画：交错上浮，结束后交还给 tilt ─────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise-in 0.56s cubic-bezier(0.22, 0.9, 0.24, 1) backwards;
+  }
+  @keyframes rise-in {
+    from { opacity: 0; transform: translateY(15px) scale(0.992); }
+    to { opacity: 1; transform: none; }
+  }
+  .hero-inner > * { animation: rise-in 0.6s cubic-bezier(0.22, 0.9, 0.24, 1) backwards; }
+  .hero-inner > *:nth-child(1) { animation-delay: 0.02s; }
+  .hero-inner > *:nth-child(2) { animation-delay: 0.07s; }
+  .hero-inner > *:nth-child(3) { animation-delay: 0.13s; }
+  .hero-inner > *:nth-child(4) { animation-delay: 0.19s; }
+  .hero-stage { animation: rise-in 0.72s cubic-bezier(0.22, 0.9, 0.24, 1) 0.1s backwards; }
+  .home-side .side-card { animation: rise-in 0.6s cubic-bezier(0.22, 0.9, 0.24, 1) backwards; }
+  .home-side .side-card:nth-child(1) { animation-delay: 0.08s; }
+  .home-side .side-card:nth-child(2) { animation-delay: 0.14s; }
+  .home-side .side-card:nth-child(3) { animation-delay: 0.2s; }
+  .home-side .side-card:nth-child(4) { animation-delay: 0.26s; }
+}
+
+/* ── 8. 文章详情：纸面阅读区保持克制，只加封面视差与图片浮起 ──────────── */
+.post-detail {
+  background: transparent;
+}
+.post-detail img {
+  border-radius: 14px;
+  box-shadow: var(--depth-sm);
+  transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.32s ease;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .post-detail img:hover {
+    transform: translateY(-3px) scale(1.006);
+    box-shadow: var(--depth-md);
+  }
+}
+.post-detail pre {
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--depth-sm);
+}
+/* 文章头部：给标题区一层很淡的玻璃，和空间背景衔接 */
+.post-head {
+  position: relative;
+}
+
+/* ── 9. 其它页面容器（标签云 / 归档 / 朋友）玻璃化 ────────────────────── */
+.tag-cloud,
+.year,
+.friend-list,
+.page-title {
+  position: relative;
+}
+.tag-cloud a {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.tag-cloud a:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--depth-sm);
+}
+
+/* ── 10. 后台：与前台同一套深度语言 ───────────────────────────────────── */
+.admin-shell,
+.admin-main {
+  position: relative;
+}
+.admin-card,
+.admin-panel,
+.stat-card {
+  box-shadow: var(--depth-sm);
+  border-radius: 14px;
+}
+.admin-card:hover,
+.stat-card:hover {
+  box-shadow: var(--depth-md);
+}
+
+/* ── 11. 降级：触屏 / 小屏 / 减少动效 ─────────────────────────────────── */
+@media (max-width: 1023px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    margin: 10px 0 26px;
+  }
+  .hero-stage { display: none; }
+  .post-card { margin: 0 -10px; padding: 18px 10px 16px; }
+}
+@media (max-width: 640px) {
+  .bg-fx .bg-grid { height: 300px; }
+  .post-card { margin: 0; padding: 16px 2px 15px; border-radius: 12px; }
+  .post-card.featured { padding: 20px 16px; margin: 4px 0 2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bg-fx .bg-glow { filter: none; opacity: 0.75; }
+  .hero-eyebrow::before { animation: none; }
+  .stage-stack { transition: none; }
+  .post-card,
+  .side-card,
+  .post-detail img { transition: none !important; }
+}
+/* 触屏设备：无 hover，去掉倾斜与聚光，只保留静态深度 */
+@media (hover: none) {
+  .post-card:hover { transform: none; }
+  .post-card::after { display: none; }
+}

@@ -1,6 +1,10 @@
 // Service Worker：缓存静态资源，支持离线访问与 SPA 回退
-const CACHE = "ai-agent-blog-v1";
-const ASSETS = ["/", "/index.html", "/css/style.css", "/js/app.js", "/js/admin.js", "/js/markdown.js"];
+const CACHE = "ai-agent-blog-v3";
+const ASSETS = [
+  "/", "/index.html",
+  "/css/style.css", "/css/depth.css",
+  "/js/app.js", "/js/admin.js", "/js/markdown.js",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

@@ -38,7 +38,11 @@ function buildAdminShell() {
           <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico"><i data-lucide="images"></i></span><span>媒体库</span></a>
           <a class="admin-nav-item" href="#/admin/trash" data-nav="trash"><span class="ico"><i data-lucide="trash-2"></i></span><span>回收站</span></a>
           <a class="admin-nav-item" href="#/admin/analytics" data-nav="analytics"><span class="ico"><i data-lucide="bar-chart-2"></i></span><span>数据分析</span></a>
+          <a class="admin-nav-item" href="#/admin/search" data-nav="search"><span class="ico"><i data-lucide="search"></i></span><span>搜索分析</span></a>
+          <a class="admin-nav-item" href="#/admin/tags" data-nav="tags"><span class="ico"><i data-lucide="tags"></i></span><span>标签管理</span></a>
+          <a class="admin-nav-item" href="#/admin/scheduled" data-nav="scheduled"><span class="ico"><i data-lucide="calendar-clock"></i></span><span>定时发布</span></a>
           <a class="admin-nav-item" href="#/admin/audit" data-nav="audit"><span class="ico"><i data-lucide="shield"></i></span><span>审计日志</span></a>
+          <a class="admin-nav-item" href="#/admin/system" data-nav="system"><span class="ico"><i data-lucide="activity"></i></span><span>系统状态</span></a>
           <a class="admin-nav-item" href="#/admin/settings" data-nav="settings"><span class="ico"><i data-lucide="settings"></i></span><span>设置</span></a>
         </nav>
         <div class="admin-side-foot">
@@ -213,6 +217,10 @@ function setAdminActive() {
     [/^#\/admin\/comments/, "comments"],
     [/^#\/admin\/trash/, "trash"],
     [/^#\/admin\/analytics/, "analytics"],
+    [/^#\/admin\/search/, "search"],
+    [/^#\/admin\/tags/, "tags"],
+    [/^#\/admin\/scheduled/, "scheduled"],
+    [/^#\/admin\/system/, "system"],
     [/^#\/admin\/audit/, "audit"],
     [/^#\/admin\/media/, "media"],
     [/^#\/admin\/settings/, "settings"],
@@ -238,6 +246,10 @@ function setAdminActive() {
     else if (/^#\/admin\/comments/.test(hash)) crumb = "评论审核";
     else if (/^#\/admin\/trash/.test(hash)) crumb = "回收站";
     else if (/^#\/admin\/analytics/.test(hash)) crumb = "数据分析";
+    else if (/^#\/admin\/search/.test(hash)) crumb = "搜索分析";
+    else if (/^#\/admin\/tags/.test(hash)) crumb = "标签管理";
+    else if (/^#\/admin\/scheduled/.test(hash)) crumb = "定时发布";
+    else if (/^#\/admin\/system/.test(hash)) crumb = "系统状态";
     else if (/^#\/admin\/audit/.test(hash)) crumb = "审计日志";
     else if (/^#\/admin\/media/.test(hash)) crumb = "媒体库";
     else if (/^#\/admin\/settings/.test(hash)) crumb = "设置";
@@ -295,6 +307,22 @@ function renderAdmin() {
   }
   if (hash.startsWith("#/admin/audit")) {
     renderAudit();
+    return;
+  }
+  if (hash.startsWith("#/admin/search")) {
+    renderSearchStats();
+    return;
+  }
+  if (hash.startsWith("#/admin/tags")) {
+    renderTagManager();
+    return;
+  }
+  if (hash.startsWith("#/admin/scheduled")) {
+    renderScheduled();
+    return;
+  }
+  if (hash.startsWith("#/admin/system")) {
+    renderSystemStatus();
     return;
   }
   if (hash.startsWith("#/admin/drill/")) {
@@ -925,6 +953,7 @@ async function renderEditor(slug) {
     <div style="margin-top:18px; display:flex; gap:10px;">
       <button class="btn btn-primary" id="save">保存</button>
       <button class="btn" id="precheck" type="button"><i data-lucide="shield-check"></i> 发布前 AI 检查</button>
+      ${slug ? `<button class="btn" id="open-revisions" type="button"><i data-lucide="history"></i> 历史版本</button>` : ""}
       <a class="btn" href="#/admin/posts">取消</a>
     </div>
     <div class="seo-check" id="seoCheck" style="margin-top:14px"></div>
@@ -1511,6 +1540,12 @@ async function renderEditor(slug) {
   };
   bindTranslateButton("en");
   bindTranslateButton("zht");
+
+  // 历史版本：打开版本面板（仅已有文章）
+  const revBtn = document.getElementById("open-revisions");
+  if (revBtn && post) {
+    revBtn.onclick = () => openRevisionPanel(post, () => renderEditor(slug));
+  }
 
   document.getElementById("save").onclick = async () => {
     const scheduledRaw = document.getElementById("f-scheduled").value;
@@ -2472,4 +2507,483 @@ async function renderAudit() {
   wrap.appendChild(table);
   app.innerHTML = "";
   app.appendChild(wrap);
+}
+
+/* ============================================================================
+   v3.1 新增后台页面：搜索分析 / 标签管理 / 定时发布 / 系统状态
+   约定：四个页面都不做任何破坏性操作，删除类动作一律二次确认。
+   ========================================================================== */
+
+// 统一的「页头 + 内容」外壳，避免每页重复写骨架
+function plusShell(title, sub, bodyHtml) {
+  const wrap = el(`<div class="dash"></div>`);
+  wrap.innerHTML = `<div class="dash-head"><div><h1 class="dash-title">${escHtml(title)}</h1>
+    <p class="dash-sub">${escHtml(sub)}</p></div><div class="dash-actions" id="plusActions"></div></div>${bodyHtml}`;
+  return wrap;
+}
+
+// 空状态 / 加载状态的统一写法
+function plusEmpty(text) {
+  return `<div class="plus-empty">${escHtml(text)}</div>`;
+}
+
+/* ── 搜索分析 ───────────────────────────────────────────────────────────── */
+async function renderSearchStats() {
+  const app = adminMain();
+  setTitle("搜索分析");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+
+  let d = null;
+  try {
+    const res = await api("/admin/search-stats?days=30");
+    if (res.ok) d = await res.json();
+  } catch {}
+  if (!d) {
+    app.innerHTML = `<div class="empty">加载失败，请刷新重试</div>`;
+    return;
+  }
+
+  const daily = d.daily || [];
+  const maxDaily = Math.max(1, ...daily.map((x) => Number(x.count) || 0));
+  const bars = daily.length
+    ? daily
+        .map((x) => {
+          const h = Math.max(4, Math.round(((Number(x.count) || 0) / maxDaily) * 100));
+          return `<div class="ss-bar" title="${escHtml(x.day)}：${x.count} 次">
+            <span class="ss-bar-val">${Number(x.count) || 0}</span>
+            <i style="height:${h}%"></i>
+            <b>${escHtml(String(x.day || "").slice(5))}</b>
+          </div>`;
+        })
+        .join("")
+    : plusEmpty("最近 7 天没有搜索记录");
+
+  const rows = (arr, kind) =>
+    arr && arr.length
+      ? `<ol class="plus-rank">${arr
+          .map(
+            (x) => `<li>
+              <span class="plus-kw">${escHtml(x.keyword)}</span>
+              <span class="plus-kw-meta">${x.count} 次 · ${fmtDate(x.last_at)}</span>
+              ${kind === "empty" ? `<span class="plus-badge warn">无结果</span>` : ""}
+            </li>`
+          )
+          .join("")}</ol>`
+      : plusEmpty(kind === "empty" ? "没有「搜不到」的词，覆盖情况良好" : "还没有搜索记录");
+
+  const body = `
+    <div class="plus-stats">
+      <div class="plus-stat"><b>${d.total || 0}</b><span>30 天搜索次数</span></div>
+      <div class="plus-stat"><b>${d.unique || 0}</b><span>独立关键词</span></div>
+      <div class="plus-stat ${d.emptyRate >= 30 ? "is-warn" : ""}"><b>${d.emptyRate || 0}%</b><span>零结果占比</span></div>
+    </div>
+    <section class="plus-card">
+      <h2 class="plus-h2">近 7 日搜索量</h2>
+      <div class="ss-chart">${bars}</div>
+    </section>
+    <div class="plus-grid2">
+      <section class="plus-card">
+        <h2 class="plus-h2">热搜关键词</h2>
+        ${rows(d.top, "top")}
+      </section>
+      <section class="plus-card">
+        <h2 class="plus-h2">搜了但没有结果</h2>
+        <p class="plus-note">这些是读者的真实需求缺口，适合作为下一批选题。</p>
+        ${rows(d.empty, "empty")}
+      </section>
+    </div>`;
+
+  const wrap = plusShell("搜索分析", "读者在站内搜了什么、哪些搜不到 —— 内容选题最直接的依据", body);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+}
+
+/* ── 标签管理 ───────────────────────────────────────────────────────────── */
+let TAG_LIST = [];
+let TAG_SELECTED = new Set();
+
+async function renderTagManager() {
+  const app = adminMain();
+  setTitle("标签管理");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+
+  let list = [];
+  try {
+    const res = await api("/admin/tags");
+    if (res.ok) {
+      const j = await res.json();
+      list = (j.tags || []).map((x) => ({ tag: x.tag || x.name, count: Number(x.count) || 0 }));
+    }
+  } catch {}
+  TAG_LIST = list;
+  TAG_SELECTED = new Set();
+
+  const body = `
+    <section class="plus-card">
+      <div class="plus-toolbar">
+        <input type="search" id="tagFilter" class="plus-input" placeholder="筛选标签…" />
+        <input type="text" id="tagTarget" class="plus-input" placeholder="合并/重命名为…" />
+        <button type="button" class="btn btn-sm btn-primary" id="tagMergeBtn" disabled>合并选中项</button>
+        <span class="plus-note" id="tagCount"></span>
+      </div>
+      <div id="tagTable"></div>
+    </section>`;
+
+  const wrap = plusShell("标签管理", "重命名、合并或删除标签：会同步改写所有相关文章，不是只改显示名", body);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+
+  const filterEl = document.getElementById("tagFilter");
+  const targetEl = document.getElementById("tagTarget");
+  const mergeBtn = document.getElementById("tagMergeBtn");
+  const countEl = document.getElementById("tagCount");
+
+  const paint = () => {
+    const kw = (filterEl.value || "").trim().toLowerCase();
+    const shown = TAG_LIST.filter((x) => !kw || String(x.tag).toLowerCase().includes(kw));
+    countEl.textContent = `${TAG_LIST.length} 个标签 · 显示 ${shown.length} 个`;
+    mergeBtn.disabled = TAG_SELECTED.size < 1 || !(targetEl.value || "").trim();
+
+    const box = document.getElementById("tagTable");
+    if (!shown.length) {
+      box.innerHTML = plusEmpty("没有匹配的标签");
+      return;
+    }
+    box.innerHTML = `
+      <table class="admin-table plus-tags">
+        <thead><tr><th style="width:44px"></th><th>标签</th><th style="width:110px">文章数</th><th style="width:220px">操作</th></tr></thead>
+        <tbody>${shown
+          .map(
+            (x) => `<tr>
+              <td><input type="checkbox" class="tag-pick" data-tag="${escHtml(x.tag)}" ${TAG_SELECTED.has(x.tag) ? "checked" : ""} /></td>
+              <td><span class="plus-tag-pill">${escHtml(x.tag)}</span></td>
+              <td>${x.count}</td>
+              <td class="plus-row-actions">
+                <button type="button" class="btn btn-sm tag-rename" data-tag="${escHtml(x.tag)}">重命名</button>
+                <button type="button" class="btn btn-sm tag-del" data-tag="${escHtml(x.tag)}">删除</button>
+              </td>
+            </tr>`
+          )
+          .join("")}</tbody>
+      </table>`;
+
+    box.querySelectorAll(".tag-pick").forEach((cb) => {
+      cb.onchange = () => {
+        const name = cb.getAttribute("data-tag");
+        if (cb.checked) TAG_SELECTED.add(name);
+        else TAG_SELECTED.delete(name);
+        mergeBtn.disabled = TAG_SELECTED.size < 1 || !(targetEl.value || "").trim();
+        mergeBtn.textContent = TAG_SELECTED.size ? `合并 ${TAG_SELECTED.size} 个到目标` : "合并选中项";
+      };
+    });
+
+    box.querySelectorAll(".tag-rename").forEach((b) => {
+      b.onclick = async () => {
+        const from = b.getAttribute("data-tag");
+        const to = (prompt(`把「${from}」重命名为：`, from) || "").trim();
+        if (!to || to === from) return;
+        await runTagAction({ action: "rename", from, to }, `「${from}」→「${to}」`);
+      };
+    });
+
+    box.querySelectorAll(".tag-del").forEach((b) => {
+      b.onclick = async () => {
+        const name = b.getAttribute("data-tag");
+        if (!confirm(`删除标签「${name}」？\n\n它会从所有文章上移除，文章本身不受影响。此操作不可撤销。`)) return;
+        await runTagAction({ action: "delete", name }, `删除「${name}」`);
+      };
+    });
+  };
+
+  const runTagAction = async (payload, label) => {
+    const res = await api("/admin/tags", { method: "POST", body: JSON.stringify(payload) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && j.ok) {
+      toast(j.msg || `${label} 完成`);
+      renderTagManager();
+    } else {
+      toast(j.msg || j.error || "操作失败");
+    }
+  };
+
+  filterEl.oninput = paint;
+  targetEl.oninput = paint;
+  mergeBtn.onclick = async () => {
+    const to = (targetEl.value || "").trim();
+    const from = [...TAG_SELECTED].filter((x) => x !== to);
+    if (!to || !from.length) return;
+    if (!confirm(`把 ${from.length} 个标签合并到「${to}」？\n\n${from.join("、")}\n\n所有相关文章会改用「${to}」。`)) return;
+    await runTagAction({ action: "merge", from, to }, `合并到「${to}」`);
+  };
+
+  paint();
+}
+
+/* ── 定时发布 ───────────────────────────────────────────────────────────── */
+function fmtTimeLeft(ts) {
+  const diff = Number(ts) - Date.now();
+  if (!Number.isFinite(diff)) return "";
+  if (diff <= 0) return "已到时间，前台已可见";
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  if (h >= 24) return `${Math.floor(h / 24)} 天 ${h % 24} 小时后`;
+  if (h >= 1) return `${h} 小时 ${m} 分钟后`;
+  return `${Math.max(1, m)} 分钟后`;
+}
+
+async function renderScheduled() {
+  const app = adminMain();
+  setTitle("定时发布");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+
+  let posts = [];
+  try {
+    const res = await api("/posts?summary=1");
+    if (res.ok) posts = await res.json();
+  } catch {}
+
+  const now = Date.now();
+  const pending = (posts || [])
+    .filter((p) => p.scheduled_at && Number(p.scheduled_at) > now)
+    .sort((a, b) => Number(a.scheduled_at) - Number(b.scheduled_at));
+
+  const body = pending.length
+    ? `<section class="plus-card">
+        <table class="admin-table">
+          <thead><tr><th class="plus-td-left">标题</th><th style="width:150px">预定时间</th><th style="width:150px">倒计时</th><th style="width:290px">操作</th></tr></thead>
+          <tbody>${pending
+            .map(
+              (p) => `<tr>
+                <td class="plus-td-left"><a href="#/admin/edit/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a></td>
+                <td>${escHtml(fmtDate(Number(p.scheduled_at)))}</td>
+                <td class="plus-muted">${escHtml(fmtTimeLeft(p.scheduled_at))}</td>
+                <td class="plus-row-actions">
+                  <button type="button" class="btn btn-sm btn-primary sched-now" data-id="${p.id}">立即发布</button>
+                  <button type="button" class="btn btn-sm sched-edit" data-id="${p.id}" data-at="${p.scheduled_at}">改时间</button>
+                  <button type="button" class="btn btn-sm sched-cancel" data-id="${p.id}">取消定时</button>
+                </td>
+              </tr>`
+            )
+            .join("")}</tbody>
+        </table>
+      </section>`
+    : `<section class="plus-card">${plusEmpty("当前没有排队中的定时文章。在编辑器里设置「定时发布」后，会出现在这里。")}</section>`;
+
+  const wrap = plusShell(
+    "定时发布",
+    "到点后前台自动可见（无需等待任何任务），这里可以提前发布、改时间或取消",
+    body
+  );
+  app.innerHTML = "";
+  app.appendChild(wrap);
+
+  const patch = async (id, payload, okMsg) => {
+    const res = await api("/posts/" + id, { method: "PUT", body: JSON.stringify(payload) });
+    if (res.ok) {
+      toast(okMsg);
+      renderScheduled();
+    } else {
+      const j = await res.json().catch(() => ({}));
+      toast(j.error || "操作失败");
+    }
+  };
+
+  wrap.querySelectorAll(".sched-now").forEach((b) => {
+    b.onclick = () => patch(b.dataset.id, { status: "published", scheduled_at: null }, "已立即发布");
+  });
+  wrap.querySelectorAll(".sched-cancel").forEach((b) => {
+    b.onclick = () => {
+      if (!confirm("取消定时？文章会退回草稿状态，不会删除内容。")) return;
+      patch(b.dataset.id, { status: "draft", scheduled_at: null }, "已取消定时，退回草稿");
+    };
+  });
+  wrap.querySelectorAll(".sched-edit").forEach((b) => {
+    b.onclick = () => {
+      const cur = new Date(Number(b.dataset.at));
+      const local = new Date(cur.getTime() - cur.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      const v = prompt("新的发布时间（本地时间，格式 2026-11-20T09:30）", local);
+      if (!v) return;
+      const ts = new Date(v).getTime();
+      if (!Number.isFinite(ts)) { toast("时间格式不正确"); return; }
+      patch(b.dataset.id, { scheduled_at: ts }, "时间已更新");
+    };
+  });
+}
+
+/* ── 系统状态 ───────────────────────────────────────────────────────────── */
+const TABLE_LABELS = {
+  posts: "文章",
+  comments: "评论",
+  users: "用户",
+  sessions: "登录会话",
+  audit_log: "审计日志",
+  search_log: "搜索记录",
+  post_revisions: "文章版本",
+  tag_aliases: "标签别名",
+  login_attempts: "登录尝试",
+  referer_daily: "来源统计",
+};
+
+function fmtBytes(n) {
+  const v = Number(n) || 0;
+  if (v < 1024) return v + " B";
+  if (v < 1024 * 1024) return (v / 1024).toFixed(1) + " KB";
+  if (v < 1024 * 1024 * 1024) return (v / 1024 / 1024).toFixed(1) + " MB";
+  return (v / 1024 / 1024 / 1024).toFixed(2) + " GB";
+}
+
+async function renderSystemStatus() {
+  const app = adminMain();
+  setTitle("系统状态");
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+
+  let d = null;
+  try {
+    const res = await api("/admin/system");
+    if (res.ok) d = await res.json();
+  } catch {}
+  if (!d) {
+    app.innerHTML = `<div class="empty">加载失败，请刷新重试</div>`;
+    return;
+  }
+
+  const tables = Object.entries(d.tables || {});
+  const rowHtml = tables
+    .map(([k, v]) => {
+      const label = TABLE_LABELS[k] || k;
+      const val = Number(v) < 0 ? `<span class="plus-badge warn">未创建</span>` : `<b>${v}</b>`;
+      return `<tr><td>${escHtml(label)}</td><td class="plus-code">${escHtml(k)}</td><td>${val}</td></tr>`;
+    })
+    .join("");
+
+  const cfg = d.config || {};
+  const cfgRow = (k, v) =>
+    `<div class="plus-kv"><span>${escHtml(k)}</span><b>${escHtml(String(v))}</b></div>`;
+
+  const body = `
+    <div class="plus-stats">
+      <div class="plus-stat"><b>${(d.tables || {}).posts ?? 0}</b><span>文章总数</span></div>
+      <div class="plus-stat"><b>${(d.r2 || {}).objects ?? 0}</b><span>R2 文件</span></div>
+      <div class="plus-stat"><b>${fmtBytes((d.r2 || {}).bytes)}</b><span>R2 已用容量</span></div>
+      <div class="plus-stat"><b>${(d.tables || {}).post_revisions ?? 0}</b><span>版本快照</span></div>
+    </div>
+    <div class="plus-grid2">
+      <section class="plus-card">
+        <h2 class="plus-h2">数据表</h2>
+        <table class="admin-table"><thead><tr><th>用途</th><th>表名</th><th style="width:100px">行数</th></tr></thead><tbody>${rowHtml}</tbody></table>
+        <p class="plus-note">「未创建」表示该功能尚未使用过，首次使用时会自动建表。</p>
+      </section>
+      <section class="plus-card">
+        <h2 class="plus-h2">当前配置</h2>
+        ${cfgRow("缓存 TTL", cfg.cache_ttl || "默认")}
+        ${cfgRow("维护模式", cfg.maintenance_mode ? "开启" : "关闭")}
+        ${cfgRow("评论", cfg.comments_enabled ? "开启" : "关闭")}
+        ${cfgRow("会话有效期", cfg.session_ttl || "默认")}
+        ${cfgRow("主题预设", cfg.theme || "default")}
+        ${cfgRow("RSS 条数", cfg.rss_count || "默认")}
+        <h2 class="plus-h2" style="margin-top:22px">存储用量${d.r2 && d.r2.truncated ? "（仅统计前 1000 个对象）" : ""}</h2>
+        ${cfgRow("对象数", (d.r2 || {}).objects ?? 0)}
+        ${cfgRow("总大小", fmtBytes((d.r2 || {}).bytes))}
+      </section>
+    </div>`;
+
+  const wrap = plusShell("系统状态", "各功能的数据量、存储用量与关键开关 —— 出问题时先看这一页", body);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+
+  const refresh = el(`<button type="button" class="btn btn-sm">刷新</button>`);
+  refresh.onclick = () => renderSystemStatus();
+  const box = wrap.querySelector("#plusActions");
+  if (box) box.appendChild(refresh);
+}
+
+/* ── 历史版本面板 ─────────────────────────────────────────────────────────
+   每次保存正文/标题改动，服务端会把「改动前」的内容存一份快照（最多 30 版）。
+   这里提供：列表 → 单版预览 → 一键回滚（回滚前当前内容也会被存为新版本）。
+   ──────────────────────────────────────────────────────────────────────── */
+async function openRevisionPanel(post, afterRestore) {
+  const overlay = el(`<div class="modal-overlay"></div>`);
+  const modal = el(`<div class="modal rev-modal"></div>`);
+  modal.innerHTML = `
+    <div class="modal-head">
+      <b>历史版本 · ${escHtml(post.title)}</b>
+      <button type="button" class="btn btn-sm" id="revClose">关闭</button>
+    </div>
+    <div class="modal-body" id="revBody"><div class="empty">加载中…</div></div>`;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const body = modal.querySelector("#revBody");
+  const close = () => overlay.remove();
+  modal.querySelector("#revClose").onclick = close;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.addEventListener("keydown", function esc(e) {
+    if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); }
+  });
+
+  let list = [];
+  try {
+    const res = await api(`/posts/${post.id}/revisions`);
+    const j = await res.json().catch(() => ({}));
+    list = j.revisions || [];
+  } catch {}
+
+  const renderList = () => {
+    if (!list.length) {
+      body.innerHTML = `<div class="plus-empty" style="margin:10px 0">还没有历史版本。<br />
+        每次在编辑器里改正文或标题后保存，系统会自动留存改动前的那一版（每篇最多 30 版）。</div>`;
+      return;
+    }
+    body.innerHTML = `
+      <p class="plus-note" style="margin:0 0 12px">共 ${list.length} 个版本，越靠上越新。点任意一条查看全文并回滚。</p>
+      <div class="rev-list">${list
+        .map(
+          (r, i) => `<button type="button" class="rev-item" data-rid="${r.id}">
+            <span class="rev-time">${escHtml(fmtDate(Number(r.created_at)))}</span>
+            <span class="rev-title">${escHtml(r.title || "(无标题)")}</span>
+            <span class="rev-meta">${(Number(r.content_length) || 0).toLocaleString()} 字符 · ${escHtml(r.actor || "未知")}${i === 0 ? " · 最近" : ""}</span>
+          </button>`
+        )
+        .join("")}</div>`;
+    body.querySelectorAll(".rev-item").forEach((b) => {
+      b.onclick = () => showRevision(Number(b.dataset.rid));
+    });
+  };
+
+  const showRevision = async (rid) => {
+    body.innerHTML = `<div class="empty">加载中…</div>`;
+    let rev = null;
+    try {
+      const res = await api(`/posts/${post.id}/revisions/${rid}`);
+      if (res.ok) rev = await res.json();
+    } catch {}
+    if (!rev) {
+      body.innerHTML = `<div class="empty">版本加载失败</div>`;
+      return;
+    }
+    body.innerHTML = `
+      <div class="rev-preview-head">
+        <button type="button" class="btn btn-sm" id="revBack">← 返回列表</button>
+        <span class="plus-note">${escHtml(fmtDate(Number(rev.created_at)))} · ${escHtml(rev.actor || "未知")}</span>
+        <button type="button" class="btn btn-sm btn-primary" id="revRestore">回滚到此版本</button>
+      </div>
+      <h3 class="rev-h3">${escHtml(rev.title || "")}</h3>
+      <pre class="rev-pre">${escHtml(String(rev.content || "").slice(0, 6000))}${
+        String(rev.content || "").length > 6000 ? "\n\n…（仅预览前 6000 字符，回滚会恢复完整内容）" : ""
+      }</pre>`;
+    body.querySelector("#revBack").onclick = renderList;
+    body.querySelector("#revRestore").onclick = async () => {
+      if (!confirm(`回滚到 ${fmtDate(Number(rev.created_at))} 的版本？\n\n当前内容会先被存成一个新版本，所以这次回滚本身也能撤销。\n编辑器里尚未保存的改动会丢失。`)) return;
+      const res = await api(`/posts/${post.id}/revisions/${rid}/restore`, { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.ok) {
+        toast(j.msg || "已回滚");
+        close();
+        if (afterRestore) afterRestore();
+      } else {
+        toast(j.msg || j.error || "回滚失败");
+      }
+    };
+  };
+
+  renderList();
 }

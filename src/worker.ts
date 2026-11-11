@@ -44,6 +44,16 @@ import {
   recordReferer,
   logIndexNow,
   listIndexNowLog,
+  snapshotRevision,
+  listRevisions,
+  getRevision,
+  restoreRevision,
+  logSearch,
+  getSearchStats,
+  listTagStats,
+  renameTag,
+  mergeTags,
+  deleteTag,
 } from "./db";
 
 interface Env extends AuthEnv {
@@ -118,6 +128,12 @@ function json(data: any, status = 200, extra: Record<string, string> = {}): Resp
     status,
     headers: { "content-type": "application/json; charset=utf-8", ...extra },
   });
+}
+
+// 公开接口的浏览器缓存头：仅匿名访问时加，管理员永远是实时数据。
+// 目的是让「再次访问 / 返回上一页」直接命中本地缓存，不再等一次 2s 的冷启动。
+function anonCache(user: unknown, maxAge: number): Record<string, string> {
+  return user ? {} : { "cache-control": `public, max-age=${maxAge}` };
 }
 
 function isAdmin(user: { role: string } | null): boolean {
@@ -443,6 +459,8 @@ function cardOf(p: any): any {
     views: p.views || 0,
     comment_count: p.comment_count || 0,
     created_at: p.created_at,
+    // 定时发布管理页需要判断「排队中」，只回传时间戳本身（几十字节）
+    scheduled_at: p.scheduled_at ?? null,
     // 列表首屏需要「阅读时长」但不含正文：只回传正文字符数（几十字节）
     content_length: String(p.content || "").length,
   };
@@ -612,10 +630,12 @@ function htmlDoc(opts: { title: string; description: string; head: string; body:
 ${ogImage}
 <meta name="twitter:card" content="summary_large_image" />
 <link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/depth.css" />
 ${customCss}
 ${head}
 </head>
 <body>
+<div class="bg-fx" aria-hidden="true"><span class="bg-glow"></span><span class="bg-grid"></span></div>
 <header class="topbar"><div class="wrap"><a class="brand" href="/">${opts.brand || escHtmlS(title)}</a></div></header>
 <main class="container">
 ${body}
@@ -842,12 +862,12 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
 
   // 站点设置（公开读取，供读者端渲染）
   if (method === "GET" && seg.length === 2 && seg[1] === "settings") {
-    return json(await getSettings(env.DB));
+    return json(await getSettings(env.DB), 200, anonCache(user, 60));
   }
 
   // 标签云（公开读取；管理员可见全部文章标签，读者仅公开）
   if (method === "GET" && seg.length === 2 && seg[1] === "tags") {
-    return json(await listTags(env.DB, { admin: isAdmin(user) }));
+    return json(await listTags(env.DB, { admin: isAdmin(user) }), 200, anonCache(user, 60));
   }
 
   // 站点设置（管理员写入，白名单校验）
@@ -915,7 +935,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const rows = await listPosts(env.DB, { admin: isAdmin(user), visibility, trash });
     // summary=1：只返回卡片字段（剔除 content / embedding 等大字段），列表首屏流量下降 90%+
     if (url.searchParams.has("summary")) {
-      return json(rows.map(cardOf));
+      return json(rows.map(cardOf), 200, anonCache(user, 30));
     }
     return json(rows);
   }
@@ -956,7 +976,8 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
   }
 
   // 更新 / 删除（管理员，按 id）
-  if (seg.length === 3 && seg[1] === "posts") {
+  // 注意：必须排除 bulk，否则 POST /api/posts/bulk 会被下面的 Number("bulk") 判为无效 id
+  if (seg.length === 3 && seg[1] === "posts" && seg[2] !== "bulk") {
     const id = Number(seg[2]);
     if (!Number.isInteger(id)) return json({ error: "无效 id" }, 400);
     if (method === "PUT") {
@@ -964,6 +985,12 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       const body = await readJson(req);
       const existing = await getPostById(env.DB, id, { admin: true });
       if (!existing) return json({ error: "文章不存在" }, 404);
+      // 版本历史：改动正文/标题前，把旧状态存一份（内容相同或 90 秒内重复则自动合并）
+      const willEdit = (body.content !== undefined && body.content !== existing.content) ||
+        (body.title !== undefined && body.title !== existing.title);
+      if (willEdit) {
+        try { await snapshotRevision(env.DB, id, user!.username); } catch {}
+      }
       const emb = await embedText(env, (body.title ?? existing.title) + "\n" + (body.content ?? existing.content));
       const row = await updatePost(env.DB, id, {
         title: body.title,
@@ -1048,6 +1075,111 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     }
     await logAudit(env.DB, { actor: user!.username, action: "post_bulk", target: action, detail: `${n} 篇` });
     return json({ ok: true, count: n });
+  }
+
+  /* ── 文章版本历史（管理员）─────────────────────────────────────────────
+     GET  /api/posts/:id/revisions            版本列表（轻量，不含正文）
+     GET  /api/posts/:id/revisions/:rid       单个版本的完整内容
+     POST /api/posts/:id/revisions/:rid/restore  回滚到该版本            */
+  if (seg.length === 4 && seg[1] === "posts" && seg[3] === "revisions" && method === "GET") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const id = Number(seg[2]);
+    if (!Number.isInteger(id)) return json({ error: "无效 id" }, 400);
+    return json({ revisions: await listRevisions(env.DB, id) });
+  }
+
+  if (seg.length === 5 && seg[1] === "posts" && seg[3] === "revisions" && method === "GET") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const id = Number(seg[2]);
+    const rid = Number(seg[4]);
+    if (!Number.isInteger(id) || !Number.isInteger(rid)) return json({ error: "无效 id" }, 400);
+    const rev = await getRevision(env.DB, id, rid);
+    return rev ? json(rev) : json({ error: "版本不存在" }, 404);
+  }
+
+  if (seg.length === 6 && seg[1] === "posts" && seg[3] === "revisions" && seg[5] === "restore" && method === "POST") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const id = Number(seg[2]);
+    const rid = Number(seg[4]);
+    if (!Number.isInteger(id) || !Number.isInteger(rid)) return json({ error: "无效 id" }, 400);
+    const r = await restoreRevision(env.DB, id, rid, user!.username);
+    if (r.ok && r.post) {
+      await submitIndexNow(env, [`https://${SITE_HOST}/post/${r.post.slug}`]);
+      await logAudit(env.DB, { actor: user!.username, action: "post_restore_version", target: `#${id} ${r.post.title}`, detail: r.msg });
+    }
+    return json(r, r.ok ? 200 : 400);
+  }
+
+  /* ── 标签管理（管理员）：重命名 / 合并 / 删除 ─────────────────────────
+     GET  /api/admin/tags            带文章数的标签清单
+     POST /api/admin/tags            { action: rename|merge|delete, ... } */
+  if (method === "GET" && seg.length === 3 && seg[1] === "admin" && seg[2] === "tags") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    return json({ tags: await listTagStats(env.DB) });
+  }
+
+  if (method === "POST" && seg.length === 3 && seg[1] === "admin" && seg[2] === "tags") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const action = String(body.action || "");
+    let r: { ok: boolean; msg: string; changed: number };
+    if (action === "rename") r = await renameTag(env.DB, body.from, body.to);
+    else if (action === "merge") r = await mergeTags(env.DB, Array.isArray(body.from) ? body.from : [], body.to);
+    else if (action === "delete") r = await deleteTag(env.DB, body.name);
+    else return json({ error: "未知操作" }, 400);
+    if (r.ok) {
+      await logAudit(env.DB, { actor: user!.username, action: `tag_${action}`, target: r.msg, detail: `${r.changed} 篇` });
+    }
+    return json(r, r.ok ? 200 : 400);
+  }
+
+  /* ── 站内搜索分析（管理员）────────────────────────────────────────── */
+  if (method === "GET" && seg.length === 3 && seg[1] === "admin" && seg[2] === "search-stats") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const days = Math.min(180, Math.max(1, Number(new URL(req.url).searchParams.get("days")) || 30));
+    try {
+      return json(await getSearchStats(env.DB, days));
+    } catch {
+      // 表还没建（旧库）：返回空统计而不是 500，前端照常显示「暂无数据」
+      return json({ total: 0, unique: 0, emptyRate: 0, top: [], empty: [], daily: [] });
+    }
+  }
+
+  /* ── 系统状态（管理员）：各表行数 / 存储用量 / 关键开关 ─────────────── */
+  if (method === "GET" && seg.length === 3 && seg[1] === "admin" && seg[2] === "system") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const countOf = async (table: string): Promise<number> => {
+      try {
+        const r = (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first()) as any;
+        return Number(r?.n) || 0;
+      } catch { return -1; }
+    };
+    const names = ["posts", "comments", "users", "sessions", "audit_log", "search_log", "post_revisions", "tag_aliases", "login_attempts", "referer_daily"];
+    const tables: Record<string, number> = {};
+    for (const t of names) tables[t] = await countOf(t);
+
+    let r2 = { objects: 0, bytes: 0, truncated: false };
+    try {
+      const list = await env.BUCKET.list({ limit: 1000 });
+      r2.objects = list.objects.length;
+      r2.bytes = list.objects.reduce((sum, o: any) => sum + (Number(o.size) || 0), 0);
+      r2.truncated = !!list.truncated;
+    } catch {}
+
+    const st = await getSettings(env.DB);
+    return json({
+      tables,
+      r2,
+      config: {
+        cache_ttl: st.cache_ttl || "默认",
+        maintenance_mode: st.maintenance_mode === "1",
+        comments_enabled: st.comments_enabled !== "0",
+        session_ttl: st.session_ttl || "默认",
+        theme: st.theme_preset || "default",
+        rss_count: st.rss_count || "默认",
+      },
+      now: Date.now(),
+    });
   }
 
   // 鉴权：登录入口（GET = GitHub 跳转；POST = 密码登录）
@@ -1543,6 +1675,13 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       .sort((a, b) => b.score - a.score)
       .slice(0, 20)
       .map((x) => cardOf(x.p));
+    // 搜索分析：记录关键词与「字面命中数」。
+    // 注意不能记语义结果数——向量检索几乎总能返回近似结果，会把「搜不到」全部掩盖，
+    // 而真正有价值的是「没有任何文章字面提到这个词」的内容缺口。
+    const literalHits = all.filter((p: any) =>
+      ((p.title || "") + " " + (p.content || "") + " " + (p.tags || "")).toLowerCase().includes(ql)
+    ).length;
+    await logSearch(env.DB, query, literalHits);
     return json({ results });
   }
 
@@ -1855,6 +1994,16 @@ export default {
       } catch {}
       try {
         await env.DB.exec("CREATE TABLE IF NOT EXISTS login_attempts (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0, locked_until INTEGER)");
+      } catch {}
+      // v3.1 后台增强表：版本历史 / 搜索日志 / 标签别名（与 0013 迁移等价，幂等）
+      try {
+        await env.DB.exec(
+          "CREATE TABLE IF NOT EXISTS post_revisions (id INTEGER PRIMARY KEY AUTOINCREMENT, post_id INTEGER NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL DEFAULT '', excerpt TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '[]', status TEXT, actor TEXT, note TEXT, created_at INTEGER NOT NULL);" +
+          "CREATE INDEX IF NOT EXISTS idx_rev_post ON post_revisions (post_id, created_at DESC);" +
+          "CREATE TABLE IF NOT EXISTS search_log (id INTEGER PRIMARY KEY AUTOINCREMENT, keyword TEXT NOT NULL, hits INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);" +
+          "CREATE INDEX IF NOT EXISTS idx_search_kw ON search_log (keyword, created_at DESC);" +
+          "CREATE TABLE IF NOT EXISTS tag_aliases (alias TEXT PRIMARY KEY, target TEXT NOT NULL, created_at INTEGER NOT NULL);"
+        );
       } catch {}
       try {
         return await handleApi(req, env, path, req.method);

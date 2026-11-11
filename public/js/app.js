@@ -439,6 +439,103 @@ function bindPostCards(root) {
   });
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+   景深交互（depth.css 的行为层）
+   - 指针倾斜：卡片按指针在卡内的相对位置做 ±MAX_TILT 的 rotateX/rotateY
+   - 局部聚光：把指针坐标写进 --mx/--my，由 CSS 画径向高光
+   - 3D 舞台：hero 卡片栈随指针整体摆动
+   全部在 rAF 里合并写入，且只在精确指针 + 允许动效时绑定；触屏零开销。
+   ──────────────────────────────────────────────────────────────────────────── */
+const DEPTH_MAX_TILT = 5.5;
+const depthMotionOK = () =>
+  window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
+  !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let depthBound = false;
+function bindDepth() {
+  // 顶栏滚动投影：只做一次
+  if (!depthBound) {
+    depthBound = true;
+    const bar = document.querySelector(".topbar");
+    if (bar) {
+      const onScroll = () => bar.classList.toggle("is-stuck", window.scrollY > 6);
+      window.addEventListener("scroll", onScroll, { passive: true });
+      onScroll();
+    }
+  }
+  if (!depthMotionOK()) return;
+
+  // 卡片倾斜 + 聚光
+  document.querySelectorAll(".post-card, .side-card").forEach((card) => {
+    if (card.dataset.depth) return;
+    card.dataset.depth = "1";
+    let raf = 0;
+    let tx = 0, ty = 0, mx = 50, my = 50, hover = false;
+
+    const apply = () => {
+      raf = 0;
+      if (hover) {
+        card.style.setProperty("--rx", (-ty * DEPTH_MAX_TILT).toFixed(2) + "deg");
+        card.style.setProperty("--ry", (tx * DEPTH_MAX_TILT).toFixed(2) + "deg");
+      } else {
+        card.style.setProperty("--rx", "0deg");
+        card.style.setProperty("--ry", "0deg");
+      }
+      card.style.setProperty("--mx", mx.toFixed(1) + "%");
+      card.style.setProperty("--my", my.toFixed(1) + "%");
+    };
+    const queue = () => { if (!raf) raf = requestAnimationFrame(apply); };
+
+    card.addEventListener("pointerenter", () => { hover = true; });
+    card.addEventListener("pointermove", (e) => {
+      // 触屏的合成 pointermove 会带 pointerType=touch，跳过避免误倾斜
+      if (e.pointerType && e.pointerType !== "mouse" && e.pointerType !== "pen") return;
+      const r = card.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      tx = (e.clientX - r.left) / r.width - 0.5;   // -0.5 ~ 0.5
+      ty = (e.clientY - r.top) / r.height - 0.5;
+      mx = ((e.clientX - r.left) / r.width) * 100;
+      my = ((e.clientY - r.top) / r.height) * 100;
+      queue();
+    });
+    card.addEventListener("pointerleave", () => {
+      hover = false;
+      tx = 0; ty = 0;
+      queue();
+    });
+  });
+
+  // hero 3D 舞台：跟随指针摆动
+  const stage = document.querySelector(".hero-stage");
+  const stack = stage && stage.querySelector(".stage-stack");
+  if (stack && !stack.dataset.depth) {
+    stack.dataset.depth = "1";
+    let raf = 0, px = 0, py = 0;
+    const apply = () => {
+      raf = 0;
+      stack.style.setProperty("--px", px.toFixed(3));
+      stack.style.setProperty("--py", py.toFixed(3));
+    };
+    window.addEventListener("pointermove", (e) => {
+      if (e.pointerType === "touch") return;
+      // 以视口中心为原点，归一化到 -1 ~ 1，再做一次阻尼
+      px = Math.max(-1, Math.min(1, (e.clientX / window.innerWidth - 0.5) * 2)) * 0.8;
+      py = Math.max(-1, Math.min(1, (e.clientY / window.innerHeight - 0.5) * 2)) * 0.8;
+      if (!raf) raf = requestAnimationFrame(apply);
+    }, { passive: true });
+  }
+}
+
+// 列表交错进场：给卡片挂 .rise 并设置极小的延迟阶梯
+function bindRise(root) {
+  if (!root) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  root.querySelectorAll(".post-card, .side-card").forEach((el, i) => {
+    el.style.animationDelay = Math.min(i, 9) * 0.045 + "s";
+    el.classList.add("rise");
+  });
+}
+
 // 首页「精选」大卡：整宽、更大标题与摘要，形成主次层级
 function featuredHtml(p) {
   const cat = parseTags(p.tags)[0] || "";
@@ -633,6 +730,21 @@ async function renderHome() {
               <span><b>${days}</b> ${t("stat_days")}</span>
             </div>
           </div>
+          <!-- 3D 舞台：纯装饰的卡片栈，跟随指针轻微转动 -->
+          <div class="hero-stage" aria-hidden="true">
+            <div class="stage-floor"></div>
+            <div class="stage-stack">
+              <div class="stage-card sc-back"></div>
+              <div class="stage-card sc-mid"></div>
+              <div class="stage-card sc-front">
+                <div class="sc-thumb"></div>
+                <div class="sc-line w80"></div>
+                <div class="sc-line w60"></div>
+                <div class="sc-line w40"></div>
+                <div class="sc-chiprow"><span class="sc-chip"></span><span class="sc-chip"></span><span class="sc-chip"></span></div>
+              </div>
+            </div>
+          </div>
         </section>
         <div class="cat-filter" id="catFilter"></div>
         <div id="homeBody"></div>
@@ -643,6 +755,8 @@ async function renderHome() {
   renderCatFilter();
   renderHomeSide();
   renderHomeBody();
+  bindDepth();
+  bindRise(document.getElementById("homeSide"));
 }
 
 // 首页右侧栏：关于本站 / 热门文章 / 标签
@@ -746,6 +860,8 @@ function renderHomeBody() {
   }
   body.innerHTML = html;
   bindPostCards(body);
+  bindDepth();
+  bindRise(body);
 
   if (pageCount > 1) {
     const pager = el(`<div class="pager"></div>`);
@@ -1369,7 +1485,10 @@ function initTheme() {
   fab.querySelectorAll(".theme-opt").forEach((b) => (b.onclick = () => applyTheme(b.dataset.mode)));
   let saved = null;
   try { saved = localStorage.getItem("blog-theme"); } catch {}
-  applyTheme(saved || "system");
+  // 无本地偏好时，回落到站长在「设置 → 主题」里配置的默认模式，
+  // 而不是一律 "system"（否则后台选了深色，首次访客看到的仍是跟随系统的浅色）
+  const siteDefault = SITE_SETTINGS.theme_dark === "1" ? "dark" : "system";
+  applyTheme(saved || siteDefault);
   mq.addEventListener("change", () => {
     let cur = "system";
     try { cur = localStorage.getItem("blog-theme") || "system"; } catch {}
@@ -1378,14 +1497,7 @@ function initTheme() {
 }
 
 async function init() {
-  try {
-    const res = await api("/auth/me");
-    const data = await res.json();
-    CURRENT_USER = data.user || null;
-  } catch {
-    CURRENT_USER = null;
-  }
-  // 读取已存语言偏好（在 initTheme 之前设好，避免首屏闪烁）
+  // 读取已存语言偏好（在首次渲染前设好，避免首屏文案闪一下）
   try {
     const sl = localStorage.getItem("blog-lang");
     if (sl && I18N[sl]) {
@@ -1393,15 +1505,19 @@ async function init() {
       document.documentElement.lang = sl === "en" ? "en" : sl === "zht" ? "zh-TW" : "zh-CN";
     }
   } catch {}
+
+  // /auth/me 与 /settings 互不依赖：并行发出。
+  // 线上冷启动时单个请求约 1~2.5s，串行会让首屏白屏时间翻倍。
+  const meP = api("/auth/me").then((r) => r.json()).catch(() => null);
+  const setP = api("/settings").then((r) => r.json()).catch(() => null);
+  // 站点统计用的数据与首页相同，提前并行发起，避免又串一个请求在后面等
+  renderSiteStats();
+
+  const [meData, sd] = await Promise.all([meP, setP]);
+  CURRENT_USER = (meData && meData.user) || null;
   renderNav();
   bindNavToggle();
-  renderSiteStats();
-  // 拉取站点设置并应用到页面
-  try {
-    const sr = await api("/settings");
-    const sd = await sr.json();
-    if (sd && typeof sd === "object") applySettings(sd);
-  } catch {}
+  if (sd && typeof sd === "object") applySettings(sd);
   initTheme();
   window.addEventListener("hashchange", () => {
     try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch {}
