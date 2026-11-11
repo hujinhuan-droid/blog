@@ -395,6 +395,12 @@ export const SETTING_KEYS = [
   "login_lock_enabled",
   "login_max_attempts",
   "login_lock_minutes",
+  // —— SEO 与站长工具（B 组） ——
+  "og_image",
+  "sitemap_enabled",
+  "extra_head",
+  "stats_code",
+  "motion_level",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];

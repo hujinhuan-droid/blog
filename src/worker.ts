@@ -547,6 +547,14 @@ function isCrawler(ua: string): boolean {
   return /(bot|spider|crawl|slurp|baiduspider|googlebot|bingbot|yandex|sogou|360spider|bytespider|duckduckbot|teoma|facebookexternalhit|twitterbot|discordbot|whatsapp|telegrambot|pinterest|linkedinbot|embedly|quora link|showyoubot|outbrain|pocket|slackbot|vkshare|w3c_validator|redditbot|applebot|semrush|ahrefs|mj12|dotbot|dataprovider|netcraft|rogerbot|developers\.google\.com)/.test(s);
 }
 
+// 把站内相对路径补成绝对 URL（OG / Twitter / JSON-LD 必须绝对地址）
+function absUrl(u: string | undefined, base: string): string {
+  const v = String(u || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v)) return v;
+  return base + (v.startsWith("/") ? v : "/" + v);
+}
+
 // 根据 settings.cache_ttl 生成 Cache-Control：0 或空 → no-store；>0 → public, max-age=秒
 function cacheControlHeader(settings: Record<string, string>): string {
   const ttl = parseInt(settings.cache_ttl || "", 10);
@@ -606,7 +614,7 @@ function fmtDateS(ts: number): string {
 }
 
 // 通用 HTML 文档骨架（含站点级 OG / Twitter / 样式，供预渲染页复用）
-function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string; customCss?: string; brand?: string; footerExtra?: string }): string {
+function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string; customCss?: string; brand?: string; footerExtra?: string; extraHead?: string; stats?: string }): string {
   const { title, description, head, body } = opts;
   const ogImage = opts.image
     ? `<meta property="og:image" content="${escHtmlS(opts.image)}" />
@@ -615,6 +623,9 @@ function htmlDoc(opts: { title: string; description: string; head: string; body:
   const customCss = opts.customCss
     ? `<style data-custom-css>\n${opts.customCss}\n</style>`
     : "";
+  // 自定义 head（站长可加 meta / 预连接 / 第三方验证标签）与统计数据（仅在管理员保存后注入）
+  const extraHead = opts.extraHead ? `\n${opts.extraHead}\n` : "";
+  const stats = opts.stats ? `${opts.stats}\n` : "";
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -632,7 +643,7 @@ ${ogImage}
 <link rel="stylesheet" href="/css/style.css" />
 <link rel="stylesheet" href="/css/depth.css" />
 ${customCss}
-${head}
+${head}${extraHead}
 </head>
 <body>
 <div class="bg-fx" aria-hidden="true"><span class="bg-glow"></span><span class="bg-grid"></span></div>
@@ -641,7 +652,7 @@ ${head}
 ${body}
 </main>
 <footer class="footer"><div class="wrap"><div class="copyright">© ${escHtmlS(title)} · Powered by Cloudflare</div>${opts.footerExtra || ""}</div></footer>
-</body>
+${stats}</body>
 </html>`;
 }
 
@@ -733,7 +744,8 @@ async function prerenderHome(env: Env, req: Request): Promise<Response> {
 </div></section>
 <div class="post-list">${cards}</div>`;
   const branding = brandingHtml(settings, settings.site_title || "AI Agent 博客");
-  return new Response(htmlDoc({ title, description, head, body, base, image: base + "/og-default.png", customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer }), {
+  const ogImage = absUrl(settings.og_image, base) || base + "/og-default.png";
+  return new Response(htmlDoc({ title, description, head, body, base, image: ogImage, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
     headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }
@@ -753,7 +765,7 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
   const title = `${row.title} - ${siteTitle}`;
   const description = (row.excerpt || "").slice(0, 200) || siteTitle;
   const content = renderMarkdownSsr(row.content || "");
-  const cover = row.cover || (base + "/og-default.png");
+  const cover = absUrl(row.cover, base) || absUrl(settings.og_image, base) || base + "/og-default.png";
   const head = `<meta property="og:type" content="article" />
 <meta property="og:title" content="${escHtmlS(row.title)}" />
 <meta property="og:description" content="${escHtmlS(description)}" />
@@ -771,23 +783,36 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
     publisher: { "@type": "Organization", name: siteTitle },
     mainEntityOfPage: base + "/post/" + encodeURIComponent(row.slug),
   })}</script>`;
+  // 预渲染页（爬虫 / 社交抓取）同样展示封面，保证无 JS 时也有完整视觉
+  const coverFig = row.cover
+    ? `<figure class="article-cover"><img src="${escHtmlS(absUrl(row.cover, base))}" alt="${escHtmlS(row.title)}" loading="lazy" /></figure>`
+    : "";
   const body = `<div class="post-detail">
-  <div class="article-head">
-    <div class="post-submeta"><span class="post-date">${fmtDateS(row.created_at)}</span></div>
-    <h1>${escHtmlS(row.title)}</h1>
+  <div class="article-stage">
+    <div class="article-head">
+      <div class="post-submeta"><span class="post-date">${fmtDateS(row.created_at)}</span></div>
+      <h1>${escHtmlS(row.title)}</h1>
+    </div>
+    ${coverFig}
+    <div class="content">${content}</div>
   </div>
-  <div class="content">${content}</div>
 </div>`;
   const branding = brandingHtml(settings, siteTitle);
-  return new Response(htmlDoc({ title, description, head, body, base, image: cover, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer }), {
+  return new Response(htmlDoc({ title, description, head, body, base, image: cover, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
     headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }
 
-function robotsTxt(req: Request): Response {
+async function robotsTxt(env: Env, req: Request): Promise<Response> {
+  let settings: Record<string, string> = {};
+  try { settings = await getSettings(env.DB); } catch {}
   const base = (req.url ? new URL(req.url).origin : "").replace(/\/$/, "");
-  const txt = `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\nSitemap: ${base}/sitemap.xml\n`;
-  return new Response(txt, { headers: { "content-type": "text/plain; charset=utf-8" } });
+  // Sitemap 关闭时不再向爬虫宣告地址，避免 404 影响抓取评估
+  const sitemapLine = settings.sitemap_enabled === "0" ? "" : `Sitemap: ${base}/sitemap.xml\n`;
+  const txt = `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin\n${sitemapLine}`;
+  return new Response(txt, {
+    headers: { "content-type": "text/plain; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
+  });
 }
 
 // ---------------- 路由 ----------------
@@ -838,6 +863,11 @@ ${items}
 
 // 站点地图（公开）
 async function handleSitemap(env: Env, req: Request): Promise<Response> {
+  let settings: Record<string, string> = {};
+  try { settings = await getSettings(env.DB); } catch {}
+  if (settings.sitemap_enabled === "0") {
+    return new Response("sitemap disabled", { status: 404, headers: { "content-type": "text/plain; charset=utf-8" } });
+  }
   const posts = await listPosts(env.DB, { admin: false });
   const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
   const urls = posts
@@ -917,6 +947,11 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       "login_lock_enabled",
       "login_max_attempts",
       "login_lock_minutes",
+      "og_image",
+      "sitemap_enabled",
+      "extra_head",
+      "stats_code",
+      "motion_level",
     ]) {
       if (body[k] !== undefined && body[k] !== null) clean[k] = String(body[k]);
     }
@@ -1983,7 +2018,7 @@ export default {
     const path = url.pathname.split("/").filter(Boolean); // ['api', ...] 或 []
 
     // 站点地图与 RSS（公开）
-    if (path[0] === "robots.txt") return robotsTxt(req);
+    if (path[0] === "robots.txt") return await robotsTxt(env, req);
     if (path[0] === "sitemap.xml") return await handleSitemap(env, req);
     if (path[0] === "feed.xml") return await handleFeed(env, req);
 

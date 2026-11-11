@@ -1913,6 +1913,15 @@ async function renderSettings() {
       <textarea id="s-seo_description" style="min-height:80px" placeholder="一句话介绍你的博客…">${escHtml(s.seo_description || "")}</textarea>
       <label>SEO 关键词（逗号分隔）</label>
       <input type="text" id="s-seo_keywords" value="${escHtml(s.seo_keywords || "")}" placeholder="AI, 博客, Cloudflare, 工程实践" />
+      <label style="margin-top:14px">默认分享图（og:image，建议 1200×630；留空用内置图）</label>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="s-og_image" value="${escHtml(s.og_image || "")}" placeholder="/api/files/images/xxx.png 或 https://..." style="flex:1;min-width:240px" />
+        <label class="btn btn-sm" style="cursor:pointer">上传<input type="file" id="og-upload" accept="image/*" style="display:none" /></label>
+      </div>
+      <div id="og-preview" style="margin-top:8px">${s.og_image ? `<img src="${escHtml(s.og_image)}" style="max-height:70px;border-radius:8px;border:1px solid var(--border)" />` : `<span class="muted">未设置，使用 /og-default.png</span>`}</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer">
+        <input type="checkbox" id="s-sitemap_enabled" ${s.sitemap_enabled !== "0" ? "checked" : ""} /> 生成 sitemap.xml（关闭后 robots.txt 也不再声明站点地图）
+      </label>
     </fieldset>
 
     <fieldset class="set-group">
@@ -1967,6 +1976,20 @@ async function renderSettings() {
 
       <label style="margin-top:16px">登录会话有效期（天，默认 30；过期后需重新登录）</label>
       <input type="number" id="s-session_ttl" min="1" max="365" value="${escHtml(s.session_ttl || "30")}" />
+
+      <label style="margin-top:16px">动效强度（3D 倾斜 / 视差 / 进场动画）</label>
+      <select id="s-motion_level">
+        <option value="auto" ${(s.motion_level || "auto") === "auto" ? "selected" : ""}>跟随系统（推荐）</option>
+        <option value="full" ${s.motion_level === "full" ? "selected" : ""}>强制开启（系统关闭动画时也启用 3D）</option>
+        <option value="off" ${s.motion_level === "off" ? "selected" : ""}>全部关闭（省电 / 低端设备）</option>
+      </select>
+      <p class="muted" style="margin-top:6px">若你的系统开启了「减少动画」，选择「强制开启」才能看到卡片倾斜与封面视差。</p>
+
+      <label style="margin-top:16px">自定义 &lt;head&gt; 内容（meta 验证标签 / 预连接 / 额外脚本，直接插入页面 head）</label>
+      <textarea id="s-extra_head" style="min-height:90px;font-family:monospace" placeholder='<meta name="google-site-verification" content="..." />'>${escHtml(s.extra_head || "")}</textarea>
+
+      <label style="margin-top:16px">站长统计代码（百度统计 / GA / Umami 等，插入页面底部并执行）</label>
+      <textarea id="s-stats_code" style="min-height:110px;font-family:monospace" placeholder="<script>var _hmt = _hmt || []; ...</script>">${escHtml(s.stats_code || "")}</textarea>
     </fieldset>
 
     <fieldset class="set-group">
@@ -2147,6 +2170,25 @@ async function renderSettings() {
     }
   };
 
+  // 默认分享图上传（同上，复用 /api/upload），填入 URL 后仍需点「保存设置」
+  const ogInput = document.getElementById("og-upload");
+  if (ogInput) ogInput.onchange = async () => {
+    const f = ogInput.files[0];
+    if (!f) return;
+    try {
+      const data = await fileToBase64(f);
+      const r = await api("/upload", { method: "POST", body: JSON.stringify({ name: f.name, type: f.type, data }) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.url) {
+        document.getElementById("s-og_image").value = d.url;
+        document.getElementById("og-preview").innerHTML = `<img src="${escHtml(d.url)}" style="max-height:70px;border-radius:8px;border:1px solid var(--border)" />`;
+        toast("分享图已上传，记得点保存设置");
+      } else toast(d.error || "上传失败");
+    } catch {
+      toast("上传失败");
+    }
+  };
+
   document.getElementById("save-settings").onclick = async () => {
     const payload = {
       site_title: document.getElementById("s-site_title").value.trim(),
@@ -2190,6 +2232,11 @@ async function renderSettings() {
       login_lock_enabled: document.getElementById("s-login_lock_enabled").checked ? "1" : "0",
       login_max_attempts: document.getElementById("s-login_max_attempts").value.trim() || "5",
       login_lock_minutes: document.getElementById("s-login_lock_minutes").value.trim() || "15",
+      og_image: document.getElementById("s-og_image").value.trim(),
+      sitemap_enabled: document.getElementById("s-sitemap_enabled").checked ? "1" : "0",
+      extra_head: document.getElementById("s-extra_head").value,
+      stats_code: document.getElementById("s-stats_code").value,
+      motion_level: document.getElementById("s-motion_level").value || "auto",
     };
     const res = await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
     const r = await res.json().catch(() => ({}));

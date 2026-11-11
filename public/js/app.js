@@ -161,6 +161,18 @@ function applyThemePreset(preset) {
   else root.removeAttribute("data-theme");
 }
 
+// 动效强度：auto 跟随系统「减少动画」偏好，full 强制开启（系统关闭动画时也能看到 3D），off 全关
+// 结果写到 <html data-motion>，CSS 与 JS 共用同一个判断，避免两处漂移
+const MOTION = { level: "auto", ok: true };
+function applyMotion(level) {
+  const lv = level === "full" || level === "off" ? level : "auto";
+  MOTION.level = lv;
+  const sysReduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  MOTION.ok = lv === "full" ? true : lv === "off" ? false : !sysReduce;
+  document.documentElement.dataset.motion = MOTION.ok ? "full" : "off";
+}
+applyMotion("auto");
+
 function applySettings(s) {
   if (!s || typeof s !== "object") return;
   SITE_SETTINGS = s;
@@ -202,6 +214,9 @@ function applySettings(s) {
   }
   COMMENTS_ENABLED = s.comments_enabled !== "0";
   SITE_ABOUT = s.about_content || "";
+  applyMotion(s.motion_level);
+  injectExtraHead(s.extra_head);
+  injectStatsCode(s.stats_code);
   // SEO
   applySeo(s);
   // 品牌与合规（Logo / 社交链接 / 备案号 / 隐私政策 / 友链）
@@ -448,8 +463,7 @@ function bindPostCards(root) {
    ──────────────────────────────────────────────────────────────────────────── */
 const DEPTH_MAX_TILT = 5.5;
 const depthMotionOK = () =>
-  window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
-  !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  MOTION.ok && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
 let depthBound = false;
 function bindDepth() {
@@ -528,8 +542,7 @@ function bindDepth() {
 
 // 列表交错进场：给卡片挂 .rise 并设置极小的延迟阶梯
 function bindRise(root) {
-  if (!root) return;
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!root || !MOTION.ok) return;
   root.querySelectorAll(".post-card, .side-card").forEach((el, i) => {
     el.style.animationDelay = Math.min(i, 9) * 0.045 + "s";
     el.classList.add("rise");
@@ -570,6 +583,53 @@ function setMeta(name, content) {
 }
 
 // 应用 SEO 设置：标题（seo_title 优先于 site_title）、描述、关键词、OG 标签
+// 站内资源补成绝对 URL（OG 图必须是绝对地址，微信/QQ 抓取才认）
+function absAsset(u) {
+  const v = String(u || "").trim();
+  if (!v) return "";
+  return /^https?:\/\//i.test(v) ? v : location.origin + (v.startsWith("/") ? v : "/" + v);
+}
+
+// 自定义 head：站长粘贴的 meta / 验证标签 / 预连接；先清旧节点再注入，避免后台保存后重复
+function injectExtraHead(html) {
+  document.querySelectorAll("[data-extra-head]").forEach((n) => n.remove());
+  if (!html || !String(html).trim()) return;
+  const tpl = document.createElement("template");
+  tpl.innerHTML = String(html);
+  const frag = document.createDocumentFragment();
+  const runScripts = [];
+  [...tpl.content.children].forEach((el) => {
+    el.setAttribute("data-extra-head", "1");
+    if (el.tagName === "SCRIPT") runScripts.push(el);
+    frag.appendChild(el);
+  });
+  document.head.appendChild(frag);
+  // 用 innerHTML 插入的 <script> 不会执行，这里重建一次
+  runScripts.forEach((old) => {
+    const s = document.createElement("script");
+    [...old.attributes].forEach((a) => s.setAttribute(a.name, a.value));
+    s.text = old.textContent || "";
+    old.replaceWith(s);
+  });
+}
+
+// 统计代码（百度统计 / GA / Umami 等）：注入到 body 末尾并确保脚本真正执行
+function injectStatsCode(html) {
+  document.querySelectorAll("[data-stats-node]").forEach((n) => n.remove());
+  if (!html || !String(html).trim()) return;
+  const wrap = document.createElement("div");
+  wrap.setAttribute("data-stats-node", "1");
+  wrap.hidden = true;
+  wrap.innerHTML = String(html);
+  wrap.querySelectorAll("script").forEach((old) => {
+    const s = document.createElement("script");
+    [...old.attributes].forEach((a) => s.setAttribute(a.name, a.value));
+    s.text = old.textContent || "";
+    old.replaceWith(s);
+  });
+  document.body.appendChild(wrap);
+}
+
 function applySeo(s) {
   const title = s.seo_title || s.site_title || document.title;
   if (title) {
@@ -585,6 +645,7 @@ function applySeo(s) {
   setMeta("og:type", "website");
   setMeta("og:url", location.origin + "/");
   setMeta("twitter:card", "summary_large_image");
+  setMeta("og:image", absAsset(s.og_image) || location.origin + "/og-default.png");
 }
 
 // 文章页级 OG：覆盖站点级信息，确保分享单篇文章时卡片正确
@@ -595,7 +656,8 @@ function applyPostSeo(p) {
   setMeta("og:title", p.title);
   setMeta("og:description", (p.excerpt || "").slice(0, 200));
   setMeta("og:url", location.origin + "/post/" + encodeURIComponent(p.slug));
-  if (p.cover) setMeta("og:image", p.cover);
+  // 优先文章封面，其次站点默认分享图
+  setMeta("og:image", absAsset(p.cover) || absAsset(SITE_SETTINGS.og_image) || location.origin + "/og-default.png");
   setMeta("twitter:card", "summary_large_image");
 }
 
@@ -890,27 +952,39 @@ async function renderPost(slug) {
   const cat = parseTags(p.tags)[0] || "";
   const read = calcReadTime(p);
   const detail = el(`<div class="post-detail"></div>`);
+  // 封面：有 cover 时渲染可视差的 3D 画框（无 cover 则整篇纯排版，不加装饰）
+  const coverHtml = p.cover
+    ? `<figure class="article-cover" data-cover>
+        <img src="${escHtml(p.cover)}" alt="${escHtml(p.title)}" loading="eager" decoding="async" />
+        <span class="cover-sheen" aria-hidden="true"></span>
+      </figure>`
+    : "";
   detail.innerHTML = `
     <a class="post-back" href="#/">${t("post_back")}</a>
-    <header class="article-head">
-      <div class="post-submeta">
-        ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
-        <span class="post-date">${fmtDate(p.created_at)}</span>
-        ${read ? `<span class="post-sep">·</span><span class="post-read">${read}</span>` : ""}
-        ${p.visibility === "private" ? `<span class="badge">${t("private")}</span>` : ""}
-      </div>
-      <h1>${escHtml(p.title)}</h1>
-      <div class="post-actions">
-        <button type="button" class="tts-btn" id="ttsBtn">${t("tts_read")}</button>
-        <button type="button" class="react-btn" id="likeBtn"><i data-lucide="thumbs-up"></i> <span id="likeCount">0</span></button>
-        <button type="button" class="react-btn" id="favBtn"><i data-lucide="star"></i> <span id="favCount">0</span></button>
-        <button type="button" class="react-btn" id="shareBtn"><i data-lucide="share-2"></i> <span>复制链接</span></button>
-        <span class="post-views" id="postViews"></span>
-      </div>
-    </header>
-    <div class="content" id="postContent">${renderMarkdown(p.content)}</div>
-    ${aiNotesHtml(p.ai_notes)}
-    ${tagsHtml(p)}`;
+    <div class="article-stage">
+      <header class="article-head">
+        <div class="post-submeta">
+          ${cat ? `<span class="post-cat">${escHtml(cat)}</span>` : ""}
+          <span class="post-date">${fmtDate(p.created_at)}</span>
+          ${read ? `<span class="post-sep">·</span><span class="post-read">${read}</span>` : ""}
+          ${p.visibility === "private" ? `<span class="badge">${t("private")}</span>` : ""}
+        </div>
+        <h1>${escHtml(p.title)}</h1>
+        <div class="post-actions">
+          <button type="button" class="tts-btn" id="ttsBtn">${t("tts_read")}</button>
+          <button type="button" class="react-btn" id="likeBtn"><i data-lucide="thumbs-up"></i> <span id="likeCount">0</span></button>
+          <button type="button" class="react-btn" id="favBtn"><i data-lucide="star"></i> <span id="favCount">0</span></button>
+          <button type="button" class="react-btn" id="shareBtn"><i data-lucide="share-2"></i> <span>复制链接</span></button>
+          <span class="post-views" id="postViews"></span>
+        </div>
+      </header>
+      <details class="toc-inline" id="tocInline" hidden></details>
+      ${coverHtml}
+      <div class="content" id="postContent">${renderMarkdown(p.content, { toc: false })}</div>
+      ${aiNotesHtml(p.ai_notes)}
+      ${tagsHtml(p)}
+    </div>
+    <aside class="article-toc" id="articleToc" aria-label="文章目录"></aside>`;
   app.innerHTML = "";
   app.appendChild(detail);
   // 正文常以「# 标题」开头，会与文章页 H1 重复：内容首行 H1 与标题一致时去掉，避免标题出现两次
@@ -918,6 +992,8 @@ async function renderPost(slug) {
   const firstH1 = bodyEl && bodyEl.querySelector("h1");
   if (firstH1 && firstH1.textContent.trim() === String(p.title || "").trim()) firstH1.remove();
   window.highlightCode(detail);
+  buildArticleNav(detail);
+  bindCoverDepth(detail);
   reportView(p.slug);
   loadReactions(p.slug);
   bindTranslate(detail, p);
@@ -954,6 +1030,155 @@ async function renderPost(slug) {
       setTimeout(() => { if (sp) sp.textContent = "复制链接"; }, 2000);
     } catch { toast(url); }
   };
+}
+
+// ---------- 文章页：目录（大屏吸顶侧栏 / 小屏折叠）+ 封面 3D 视差 ----------
+// 所有监听都登记到 ARTICLE_NAV.off，路由切换时统一解绑，避免长文反复进出后监听堆积。
+let ARTICLE_NAV = null;
+function navState() {
+  if (!ARTICLE_NAV) ARTICLE_NAV = { off: [] };
+  return ARTICLE_NAV;
+}
+function navOn(target, type, fn, opts) {
+  if (!target) return;
+  target.addEventListener(type, fn, opts);
+  navState().off.push(() => target.removeEventListener(type, fn, opts));
+}
+function stopArticleNav() {
+  if (!ARTICLE_NAV) return;
+  ARTICLE_NAV.off.forEach((fn) => fn());
+  ARTICLE_NAV = null;
+}
+
+function buildArticleNav(detail) {
+  const content = detail.querySelector("#postContent");
+  const aside = detail.querySelector("#articleToc");
+  const inline = detail.querySelector("#tocInline");
+  if (!content || !aside) return;
+
+  const heads = Array.from(content.querySelectorAll("h2, h3")).filter((h) => h.textContent.trim().length > 1);
+  // 少于 2 个章节的短文不需要目录，直接移除占位，保持版面干净
+  if (heads.length < 2) {
+    aside.remove();
+    if (inline) inline.remove();
+    return;
+  }
+
+  const items = heads.map((h, i) => {
+    // markdown 渲染器已给标题生成 id（中文 slug），复用它，避免破坏外部锚点
+    const id = h.id || "sec-" + i;
+    h.id = id;
+    return { id, text: h.textContent.trim().slice(0, 64), lvl: h.tagName === "H3" ? 3 : 2, el: h };
+  });
+  const listHtml = `<ol class="toc-list">${items
+    .map((it) => `<li class="toc-i lv${it.lvl}"><a href="#${it.id}" data-toc="${it.id}">${escHtml(it.text)}</a></li>`)
+    .join("")}</ol>`;
+
+  aside.innerHTML = `
+    <div class="toc-head">
+      <span class="toc-label">目录</span>
+      <span class="toc-ring" id="tocRing" style="--p:0" aria-hidden="true"><b>0</b></span>
+    </div>
+    ${listHtml}
+    <div class="toc-foot"><span id="tocNow">共 ${items.length} 节</span></div>`;
+
+  // 小屏：正文上方折叠目录（与侧栏共用同一份锚点）
+  if (inline) {
+    inline.hidden = false;
+    inline.innerHTML = `<summary><i data-lucide="list"></i> 目录 · 共 ${items.length} 节</summary>${listHtml}`;
+  }
+
+  const links = Array.from(detail.querySelectorAll("[data-toc]"));
+  const ring = aside.querySelector("#tocRing");
+  const ringTxt = ring && ring.querySelector("b");
+  const now = aside.querySelector("#tocNow");
+  const reduced = !MOTION.ok;
+
+  // 平滑跳转：不能用原生 #hash，否则会触发 SPA 路由跳页
+  links.forEach((a) =>
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const target = document.getElementById(a.dataset.toc);
+      if (!target) return;
+      target.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "start" });
+      const box = a.closest("details");
+      if (box) box.open = false; // 小屏点完自动收起
+    })
+  );
+
+  let raf = 0;
+  const update = () => {
+    raf = 0;
+    const vh = window.innerHeight;
+    // 1) 当前章节：最后一个已越过顶栏的标题
+    let active = 0;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].el.getBoundingClientRect().top <= 150) active = i;
+    }
+    const activeId = items[active] ? items[active].id : "";
+    links.forEach((a) => a.classList.toggle("on", a.dataset.toc === activeId));
+    if (now && active > 0 && items[active]) now.textContent = items[active].text;
+    // 2) 阅读进度环（与顶部进度条同一套算法，视觉上互补）
+    const rect = content.getBoundingClientRect();
+    const total = rect.height - vh * 0.5;
+    const passed = -rect.top + vh * 0.25;
+    const pct = total > 0 ? Math.min(100, Math.max(0, (passed / total) * 100)) : 0;
+    if (ring) {
+      ring.style.setProperty("--p", pct.toFixed(1));
+      if (ringTxt) ringTxt.textContent = Math.round(pct) + "%";
+    }
+  };
+  const queue = () => { if (!raf) raf = requestAnimationFrame(update); };
+  navOn(window, "scroll", queue, { passive: true });
+  navOn(window, "resize", queue);
+  update();
+}
+
+// 封面视差：滚动时图片在框内反向轻微位移，指针悬停时整框小幅倾斜（叠在视差之上）
+function bindCoverDepth(detail) {
+  const fig = detail.querySelector("[data-cover]");
+  if (!fig) return;
+  const img = fig.querySelector("img");
+  if (!img) return;
+  if (!MOTION.ok) return;
+  const motionOK = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+  let raf = 0, cy = 0, cx = 0, rx = 0, ry = 0;
+  const apply = () => {
+    raf = 0;
+    img.style.setProperty("--cy", cy.toFixed(2) + "px");
+    img.style.setProperty("--cx", cx.toFixed(2) + "px");
+    fig.style.setProperty("--rx", rx.toFixed(2) + "deg");
+    fig.style.setProperty("--ry", ry.toFixed(2) + "deg");
+  };
+  const queue = () => { if (!raf) raf = requestAnimationFrame(apply); };
+
+  const onScroll = () => {
+    const r = fig.getBoundingClientRect();
+    const vh = window.innerHeight;
+    if (r.bottom < -80 || r.top > vh + 80) return; // 不在视口内不计算
+    const t = Math.max(-1, Math.min(1, (r.top + r.height / 2 - vh / 2) / vh));
+    cy = -t * 18;
+    queue();
+  };
+  navOn(window, "scroll", onScroll, { passive: true });
+  navOn(window, "resize", onScroll);
+
+  if (motionOK) {
+    navOn(fig, "pointermove", (e) => {
+      if (e.pointerType === "touch") return;
+      const r = fig.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const nx = (e.clientX - r.left) / r.width - 0.5;
+      const ny = (e.clientY - r.top) / r.height - 0.5;
+      cx = -nx * 20;
+      rx = -ny * 5;
+      ry = nx * 5;
+      queue();
+    });
+    navOn(fig, "pointerleave", () => { cx = 0; rx = 0; ry = 0; queue(); });
+  }
+  onScroll();
 }
 
 // ---------- 文章页顶部阅读进度条 ----------
@@ -1072,14 +1297,14 @@ function bindTranslate(detail, p) {
       const r = await api("/ai/translate", { method: "POST", body: JSON.stringify({ text: original, target }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) { msg.textContent = d.error || "翻译失败"; return; }
-      show(renderMarkdown(d.text || original));
+      show(renderMarkdown(d.text || original, { toc: false }));
       bar.querySelector("#tr-back").style.display = "";
       msg.textContent = t("trans");
     } catch { msg.textContent = "翻译失败"; }
   };
   bar.querySelector("#tr-en").onclick = () => tr("en");
   bar.querySelector("#tr-zht").onclick = () => tr("zht");
-  bar.querySelector("#tr-back").onclick = () => { show(renderMarkdown(original)); bar.querySelector("#tr-back").style.display = "none"; bar.querySelector("#tr-msg").textContent = ""; };
+  bar.querySelector("#tr-back").onclick = () => { show(renderMarkdown(original, { toc: false })); bar.querySelector("#tr-back").style.display = "none"; bar.querySelector("#tr-msg").textContent = ""; };
 }
 
 // 文章底部「相关文章」：调用 /api/related（向量相似度 top3，无向量时按标签兜底）
@@ -1383,6 +1608,7 @@ function bindNavToggle() {
 
 function route() {
   stopReadProgress();
+  stopArticleNav();
   // 路径式入口（/login、/admin）重定向到哈希路由，避免用户直接输入地址时只看到首页
   const path = location.pathname;
   if (path === "/login" || path === "/admin") {

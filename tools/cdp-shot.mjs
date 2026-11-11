@@ -99,6 +99,13 @@ try {
 
   await send("Page.enable");
   await send("Runtime.enable");
+  // 可选：强制动效偏好（默认跟随系统；本机系统关闭动画时可用 --motion no-preference 验证 3D 效果）
+  const motion = arg("motion", "");
+  if (motion) {
+    await send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-motion", value: motion }],
+    });
+  }
   await send("Emulation.setDeviceMetricsOverride", {
     width: W, height: H, deviceScaleFactor: 1, mobile: false,
   });

@@ -43,8 +43,9 @@ function renderToc(headings) {
   return out;
 }
 
-function renderMarkdown(src) {
+function renderMarkdown(src, opts) {
   if (!src) return "";
+  const autoToc = !(opts && opts.toc === false);
   const lines = src.replace(/\r\n/g, "\n").split("\n");
   let html = "";
   let i = 0;
@@ -200,8 +201,9 @@ function renderMarkdown(src) {
   }
   flushPara();
   // 自动目录：未手写 [TOC] 且存在 >=2 个二级及以上标题时，自动在正文顶部插入
+  // 文章详情页会传入 { toc: false }，改由右侧悬浮目录 / 小屏折叠目录承担
   const subHeadings = headings.filter((h) => h.level >= 2);
-  if (!html.includes('class="toc"') && subHeadings.length >= 2) {
+  if (autoToc && !html.includes('class="toc"') && subHeadings.length >= 2) {
     const toc = renderToc(subHeadings);
     // 若正文以 H1 开头（文章内标题），把目录插到该 H1 之后，避免「目录浮在标题之上」
     const m = html.match(/^<h1[^>]*>[\s\S]*?<\/h1>/);
