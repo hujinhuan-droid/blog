@@ -305,21 +305,21 @@ body.dark .stage-floor {
 }
 .post-card:hover::after { opacity: 1; }
 
-/* 3D 倾斜：精确指针设备 + 动效开启（<html data-motion="full"> 由 JS 按站点设置写入） */
+/* 3D 倾斜：精确指针设备 + 未关闭 3D（data-motion=off 才禁用；soft 档仍保留轻微倾斜） */
 @media (hover: hover) and (pointer: fine) {
-  html[data-motion="full"] .post-card,
-  html[data-motion="full"] .side-card {
+  html:not([data-motion="off"]) .post-card,
+  html:not([data-motion="off"]) .side-card {
     transform-style: preserve-3d;
     transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
     transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), background 0.2s ease,
       box-shadow 0.26s ease, border-color 0.2s ease;
   }
   /* 卡内容分层漂浮，产生真实视差 */
-  html[data-motion="full"] .post-card > * { position: relative; }
-  html[data-motion="full"] .post-card .post-submeta { transform: translateZ(16px); }
-  html[data-motion="full"] .post-card h2 { transform: translateZ(26px); }
-  html[data-motion="full"] .post-card .excerpt { transform: translateZ(13px); }
-  html[data-motion="full"] .post-card .tags { transform: translateZ(9px); }
+  html:not([data-motion="off"]) .post-card > * { position: relative; }
+  html:not([data-motion="off"]) .post-card .post-submeta { transform: translateZ(16px); }
+  html:not([data-motion="off"]) .post-card h2 { transform: translateZ(26px); }
+  html:not([data-motion="off"]) .post-card .excerpt { transform: translateZ(13px); }
+  html:not([data-motion="off"]) .post-card .tags { transform: translateZ(9px); }
 }
 
 /* 精选卡：更强的存在感 */
@@ -405,7 +405,7 @@ html[data-motion="full"] .home-side .side-card:nth-child(4) { animation-delay: 0
   transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.32s ease;
 }
 @media (hover: hover) {
-  html[data-motion="full"] .post-detail .content img:hover {
+  html:not([data-motion="off"]) .post-detail .content img:hover {
     transform: translateY(-3px) scale(1.006);
     box-shadow: var(--depth-md);
   }
@@ -454,7 +454,7 @@ html[data-motion="full"] .home-side .side-card:nth-child(4) { animation-delay: 0
     radial-gradient(120% 90% at 50% 110%, rgba(8, 10, 18, 0.34), transparent 62%);
 }
 @media (hover: hover) {
-  html[data-motion="full"] .article-cover:hover { box-shadow: var(--depth-lg); }
+  html:not([data-motion="off"]) .article-cover:hover { box-shadow: var(--depth-lg); }
 }
 @media (max-width: 640px) {
   .article-cover { aspect-ratio: 16 / 10; margin-bottom: 24px; border-radius: 14px; }
@@ -670,6 +670,10 @@ html[data-motion="full"] .article-stage > .content > *:nth-child(8) { animation-
 .post-detail .content tbody tr:last-child td { border-bottom: none; }
 .post-detail .content tbody tr { transition: background 0.16s ease; }
 .post-detail .content tbody tr:hover { background: color-mix(in srgb, var(--primary) 5%, transparent); }
+/* 深色下把行线与表头底色提亮一点，避免行与行糊在一起 */
+body.dark .post-detail .content .table-wrap { background: color-mix(in srgb, var(--surface) 92%, transparent); }
+body.dark .post-detail .content thead th { background: color-mix(in srgb, var(--primary) 10%, var(--surface-2)); }
+body.dark .post-detail .content tbody td { border-bottom-color: rgba(255, 255, 255, 0.12); }
 @media (max-width: 640px) {
   .post-detail .content table { min-width: 420px; font-size: 13.5px; }
   .post-detail .content thead th,

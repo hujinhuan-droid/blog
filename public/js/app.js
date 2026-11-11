@@ -161,15 +161,17 @@ function applyThemePreset(preset) {
   else root.removeAttribute("data-theme");
 }
 
-// 动效强度：auto 跟随系统「减少动画」偏好，full 强制开启（系统关闭动画时也能看到 3D），off 全关
-// 结果写到 <html data-motion>，CSS 与 JS 共用同一个判断，避免两处漂移
-const MOTION = { level: "auto", ok: true };
+// 动效强度：auto 跟随系统「减少动画」偏好，full 强制开启，off 全关
+// 分两档落地：tilt（3D 倾斜/视差，轻微，只有 off 才关）与 animate（进场/平滑滚动，跟随系统）
+// 结果写到 <html data-motion="full|soft|off">，CSS 与 JS 共用同一份判断
+const MOTION = { level: "auto", tilt: true, animate: true };
 function applyMotion(level) {
   const lv = level === "full" || level === "off" ? level : "auto";
   MOTION.level = lv;
   const sysReduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  MOTION.ok = lv === "full" ? true : lv === "off" ? false : !sysReduce;
-  document.documentElement.dataset.motion = MOTION.ok ? "full" : "off";
+  MOTION.tilt = lv !== "off";                              // 轻微 3D 不引起眩晕，默认保留
+  MOTION.animate = lv === "full" || (lv === "auto" && !sysReduce);
+  document.documentElement.dataset.motion = lv === "off" ? "off" : MOTION.animate ? "full" : "soft";
 }
 applyMotion("auto");
 
@@ -463,7 +465,7 @@ function bindPostCards(root) {
    ──────────────────────────────────────────────────────────────────────────── */
 const DEPTH_MAX_TILT = 5.5;
 const depthMotionOK = () =>
-  MOTION.ok && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  MOTION.tilt && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
 let depthBound = false;
 function bindDepth() {
@@ -542,7 +544,7 @@ function bindDepth() {
 
 // 列表交错进场：给卡片挂 .rise 并设置极小的延迟阶梯
 function bindRise(root) {
-  if (!root || !MOTION.ok) return;
+  if (!root || !MOTION.animate) return;
   root.querySelectorAll(".post-card, .side-card").forEach((el, i) => {
     el.style.animationDelay = Math.min(i, 9) * 0.045 + "s";
     el.classList.add("rise");
@@ -1092,7 +1094,7 @@ function buildArticleNav(detail) {
   const ring = aside.querySelector("#tocRing");
   const ringTxt = ring && ring.querySelector("b");
   const now = aside.querySelector("#tocNow");
-  const reduced = !MOTION.ok;
+  const reduced = !MOTION.animate;
 
   // 平滑跳转：不能用原生 #hash，否则会触发 SPA 路由跳页
   links.forEach((a) =>
@@ -1140,7 +1142,7 @@ function bindCoverDepth(detail) {
   if (!fig) return;
   const img = fig.querySelector("img");
   if (!img) return;
-  if (!MOTION.ok) return;
+  if (!MOTION.tilt) return;
   const motionOK = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 
   let raf = 0, cy = 0, cx = 0, rx = 0, ry = 0;
