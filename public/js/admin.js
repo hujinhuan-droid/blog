@@ -37,8 +37,7 @@ function buildAdminShell() {
           <a class="admin-nav-item" href="#/admin/comments" data-nav="comments"><span class="ico"><i data-lucide="message-square"></i></span><span>评论审核</span></a>
           <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico"><i data-lucide="images"></i></span><span>媒体库</span></a>
           <a class="admin-nav-item" href="#/admin/trash" data-nav="trash"><span class="ico"><i data-lucide="trash-2"></i></span><span>回收站</span></a>
-          <a class="admin-nav-item" href="#/admin/analytics" data-nav="analytics"><span class="ico"><i data-lucide="bar-chart-2"></i></span><span>数据分析</span></a>
-          <a class="admin-nav-item" href="#/admin/search" data-nav="search"><span class="ico"><i data-lucide="search"></i></span><span>搜索分析</span></a>
+          <a class="admin-nav-item" href="#/admin/traffic" data-nav="traffic"><span class="ico"><i data-lucide="bar-chart-2"></i></span><span>流量中心</span></a>
           <a class="admin-nav-item" href="#/admin/tags" data-nav="tags"><span class="ico"><i data-lucide="tags"></i></span><span>标签管理</span></a>
           <a class="admin-nav-item" href="#/admin/scheduled" data-nav="scheduled"><span class="ico"><i data-lucide="calendar-clock"></i></span><span>定时发布</span></a>
           <a class="admin-nav-item" href="#/admin/audit" data-nav="audit"><span class="ico"><i data-lucide="shield"></i></span><span>审计日志</span></a>
@@ -216,8 +215,7 @@ function setAdminActive() {
     [/^#\/admin\/drill/, "posts"],
     [/^#\/admin\/comments/, "comments"],
     [/^#\/admin\/trash/, "trash"],
-    [/^#\/admin\/analytics/, "analytics"],
-    [/^#\/admin\/search/, "search"],
+    [/^#\/admin\/(traffic|analytics|search)/, "traffic"],
     [/^#\/admin\/tags/, "tags"],
     [/^#\/admin\/scheduled/, "scheduled"],
     [/^#\/admin\/system/, "system"],
@@ -245,8 +243,7 @@ function setAdminActive() {
     else if (/^#\/admin\/drill/.test(hash)) crumb = "文章列表";
     else if (/^#\/admin\/comments/.test(hash)) crumb = "评论审核";
     else if (/^#\/admin\/trash/.test(hash)) crumb = "回收站";
-    else if (/^#\/admin\/analytics/.test(hash)) crumb = "数据分析";
-    else if (/^#\/admin\/search/.test(hash)) crumb = "搜索分析";
+    else if (/^#\/admin\/(traffic|analytics|search)/.test(hash)) crumb = "流量中心";
     else if (/^#\/admin\/tags/.test(hash)) crumb = "标签管理";
     else if (/^#\/admin\/scheduled/.test(hash)) crumb = "定时发布";
     else if (/^#\/admin\/system/.test(hash)) crumb = "系统状态";
@@ -301,8 +298,15 @@ function renderAdmin() {
     renderTrash();
     return;
   }
+  if (hash.startsWith("#/admin/traffic")) {
+    const tab = hash.slice("#/admin/traffic".length).replace(/^\//, "").split(/[?#]/)[0];
+    renderTrafficCenter(tab || "trend");
+    return;
+  }
+  // 旧书签 / 外链兼容：静默改写地址后直接渲染，避免二次跳转留下一瞬空白
   if (hash.startsWith("#/admin/analytics")) {
-    renderAnalytics();
+    try { history.replaceState(null, "", "#/admin/traffic"); } catch {}
+    renderTrafficCenter("trend");
     return;
   }
   if (hash.startsWith("#/admin/audit")) {
@@ -310,7 +314,8 @@ function renderAdmin() {
     return;
   }
   if (hash.startsWith("#/admin/search")) {
-    renderSearchStats();
+    try { history.replaceState(null, "", "#/admin/traffic/search"); } catch {}
+    renderTrafficCenter("search");
     return;
   }
   if (hash.startsWith("#/admin/tags")) {
@@ -2557,7 +2562,7 @@ function drawTrafficPanel(box) {
   box.innerHTML = `
     <section class="plus-card tf-card">
       <div class="tf-head">
-        <div><h2 class="plus-h2">📈 访问趋势</h2><p class="muted">按设备 / 来源 / 落地页筛选，PV 为文章页阅读上报，UV 按访客哈希去重</p></div>
+        <div><h2 class="plus-h2">访问趋势</h2><p class="muted">按设备 / 来源 / 落地页筛选，PV 为文章页阅读上报，UV 按访客哈希去重</p></div>
         <div class="tf-toolbar">
           <select id="tf-days" class="plus-input" aria-label="时间范围">
             ${[7, 30, 90, 365].map((n) => `<option value="${n}"${s.days === n ? " selected" : ""}>近 ${n} 天</option>`).join("")}
@@ -2644,54 +2649,159 @@ function drawTrafficBody(body) {
     row.style.cursor = "pointer";
     row.onclick = () => {
       TRAFFIC_STATE.slug = row.dataset.pick;
-      const box = body.closest(".tf-card");
+      const card = body.closest(".tf-card");
+      const box = card && card.parentElement;
       if (box) refreshTraffic(box, true);
     };
   });
 }
 
-async function renderAnalytics() {
-  const app = adminMain();
-  setTitle("数据分析");
-  app.innerHTML = `<div class="empty">加载中…</div>`;
-  const aRes = await api("/analytics");
-  const data = aRes.ok ? await aRes.json() : {};
-  const wrap = el(`<div class="dash"></div>`);
-  wrap.innerHTML = `<div class="dash-head"><div><h1 class="dash-title">数据分析</h1>
-    <p class="dash-sub">访问趋势 · 热门文章 · 流量来源 · 收录推送</p></div></div>`;
-  const trafficBox = el(`<div id="trafficBox"><section class="plus-card"><div class="empty">正在加载访问趋势…</div></section></div>`);
-  wrap.appendChild(trafficBox);
+/* ── 流量中心：访问趋势 / 搜索洞察 / 内容与收录 ─────────────────────── */
+const TRAFFIC_TABS = [
+  { key: "trend", label: "访问趋势", hash: "#/admin/traffic" },
+  { key: "search", label: "搜索洞察", hash: "#/admin/traffic/search" },
+  { key: "content", label: "内容与收录", hash: "#/admin/traffic/content" },
+];
+const SEARCH_STATE = { days: 30 };
 
+function trafficQuery() {
+  const q = new URLSearchParams({ days: String(TRAFFIC_STATE.days) });
+  if (TRAFFIC_STATE.device) q.set("device", TRAFFIC_STATE.device);
+  if (TRAFFIC_STATE.source) q.set("source", TRAFFIC_STATE.source);
+  if (TRAFFIC_STATE.slug) q.set("slug", TRAFFIC_STATE.slug);
+  return q.toString();
+}
+
+function drawSearchBody(d, days) {
+  if (!d) return `<div class="empty">搜索数据加载失败，请刷新重试</div>`;
+  const daily = d.daily || [];
+  const maxDaily = Math.max(1, ...daily.map((x) => Number(x.count) || 0));
+  const bars = daily.length
+    ? daily.map((x) => {
+        const c = Number(x.count) || 0;
+        const h = c > 0 ? Math.max(4, Math.round((c / maxDaily) * 100)) : 0;
+        return `<div class="ss-bar${c ? "" : " is-zero"}" title="${escHtml(x.day)}：${c} 次">
+          <span class="ss-bar-val">${c || ""}</span><i style="height:${h}%"></i>
+          <b>${escHtml(String(x.day || "").slice(5))}</b>
+        </div>`;
+      }).join("")
+    : plusEmpty("最近 7 天没有搜索记录");
+  const rows = (arr, kind) => (arr && arr.length
+    ? `<ol class="plus-rank">${arr.map((x) => `<li>
+        <span class="plus-kw">${escHtml(x.keyword)}</span>
+        <span class="plus-kw-meta">${x.count} 次 · ${fmtDate(x.last_at)}</span>
+        ${kind === "empty" ? `<span class="plus-badge warn">无结果</span>` : ""}
+      </li>`).join("")}</ol>`
+    : plusEmpty(kind === "empty" ? "没有「搜不到」的词，覆盖情况良好" : "还没有搜索记录"));
+  return `
+    <div class="tfc-search-toolbar">
+      <span class="muted">统计范围</span>
+      <select id="tfc-search-days" class="plus-input" aria-label="搜索统计时间范围">
+        ${[7, 30, 90].map((n) => `<option value="${n}"${days === n ? " selected" : ""}>近 ${n} 天</option>`).join("")}
+      </select>
+      <span class="muted">按日曲线固定展示最近 7 天</span>
+    </div>
+    <div class="plus-stats">
+      <div class="plus-stat"><b>${d.total || 0}</b><span>${days} 天搜索次数</span></div>
+      <div class="plus-stat"><b>${d.unique || 0}</b><span>独立关键词</span></div>
+      <div class="plus-stat ${d.emptyRate >= 30 ? "is-warn" : ""}"><b>${d.emptyRate || 0}%</b><span>零结果占比</span></div>
+    </div>
+    <section class="plus-card"><h2 class="plus-h2">近 7 日搜索量</h2><div class="ss-chart">${bars}</div></section>
+    <div class="plus-grid2">
+      <section class="plus-card"><h2 class="plus-h2">热搜关键词</h2>${rows(d.top, "top")}</section>
+      <section class="plus-card"><h2 class="plus-h2">搜了但没有结果</h2>
+        <p class="plus-note">这些是读者的真实需求缺口，适合作为下一批选题。</p>${rows(d.empty, "empty")}</section>
+    </div>`;
+}
+
+/** 切换搜索统计范围时只重绘搜索面板，不影响其它两个分段 */
+async function refreshSearchPanel(box, days) {
+  SEARCH_STATE.days = days;
+  let d = null;
+  try {
+    const r = await api("/admin/search-stats?days=" + days);
+    if (r.ok) d = await r.json();
+  } catch {}
+  if (!box.isConnected) return;
+  box.innerHTML = drawSearchBody(d, days);
+  const sel = box.querySelector("#tfc-search-days");
+  if (sel) sel.onchange = () => refreshSearchPanel(box, Number(sel.value) || 30);
+}
+
+function drawContentBody(data) {
   const popular = data.popular || [];
   const referers = data.referers || [];
   const indexnow = data.indexnow || [];
+  return `
+    <div class="analytic-card"><h2>热门文章 TOP ${popular.length || 10}</h2>${popular.length
+      ? `<ol class="rank-list">${popular.map((p) => `<li><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a><span class="rank-views">${p.views} 阅读</span></li>`).join("")}</ol>`
+      : `<div class="empty">暂无数据</div>`}</div>
+    <div class="analytic-card"><h2>流量来源（近 30 天，共 ${data.refererTotal || 0} 次外链访问）</h2>${referers.length
+      ? `<ol class="rank-list">${referers.slice(0, 20).map((r) => `<li><span>${escHtml(r.domain)}</span><span class="rank-views">${r.cnt}</span></li>`).join("")}</ol>`
+      : `<div class="empty">暂无外部来源（多为直接访问或未统计）</div>`}</div>
+    <div class="analytic-card"><h2>收录推送（IndexNow，共 ${data.indexnowTotal || 0} 次）</h2>
+      <p class="muted">文章发布/更新时自动通知 Bing/Naver/Yandex；下方为最近推送记录。</p>
+      ${indexnow.length
+        ? `<table class="admin-table"><thead><tr><th>时间</th><th>状态</th><th>URL</th><th>响应</th></tr></thead><tbody>${indexnow.slice(0, 30).map((r) => `<tr><td>${fmtDate(r.created_at)}</td><td><span class="badge ${r.status === 200 ? "badge-public" : "badge-lock"}">${r.status || "网络错误"}</span></td><td>${escHtml(r.url)}</td><td class="muted">${escHtml((r.resp || "").slice(0, 60))}</td></tr>`).join("")}</tbody></table>`
+        : `<div class="empty">暂无推送记录</div>`}
+    </div>`;
+}
 
-  const sec1 = el(`<div class="analytic-card"></div>`);
-  sec1.innerHTML = `<h2>🔥 热门文章 TOP ${popular.length || 10}</h2>` + (popular.length
-    ? `<ol class="rank-list">${popular.map((p) => `<li><a href="#/post/${encodeURIComponent(p.slug)}">${escHtml(p.title)}</a><span class="rank-views">${p.views} 阅读</span></li>`).join("")}</ol>`
-    : `<div class="empty">暂无数据</div>`);
-  wrap.appendChild(sec1);
+/** 三个接口并行拉取；切换分段只改显示，不重复请求 */
+async function renderTrafficCenter(tab) {
+  const app = adminMain();
+  setTitle("流量中心");
+  const active = TRAFFIC_TABS.some((x) => x.key === tab) ? tab : "trend";
+  app.innerHTML = `<div class="empty">加载中…</div>`;
+  const [tRes, sRes, aRes] = await Promise.all([
+    api("/admin/traffic?" + trafficQuery()),
+    api("/admin/search-stats?days=" + SEARCH_STATE.days),
+    api("/analytics"),
+  ]);
+  TRAFFIC_DATA = tRes.ok ? await tRes.json() : null;
+  const searchData = sRes.ok ? await sRes.json() : null;
+  const analyticsData = aRes.ok ? await aRes.json() : {};
 
-  const sec2 = el(`<div class="analytic-card"></div>`);
-  sec2.innerHTML = `<h2>🌐 流量来源（近 30 天，共 ${data.refererTotal || 0} 次外链访问）</h2>` + (referers.length
-    ? `<ol class="rank-list">${referers.slice(0, 20).map((r) => `<li><span>${escHtml(r.domain)}</span><span class="rank-views">${r.cnt}</span></li>`).join("")}</ol>`
-    : `<div class="empty">暂无外部来源（多为直接访问或未统计）</div>`);
-  wrap.appendChild(sec2);
-
-  const sec3 = el(`<div class="analytic-card"></div>`);
-  sec3.innerHTML = `<h2>🔎 收录推送（IndexNow，共 ${data.indexnowTotal || 0} 次）</h2>
-    <p class="muted">文章发布/更新时自动通知 Bing/Naver/Yandex；下方为最近推送记录。</p>` +
-    (indexnow.length
-      ? `<table class="admin-table"><thead><tr><th>时间</th><th>状态</th><th>URL</th><th>响应</th></tr></thead><tbody>${indexnow
-          .slice(0, 30)
-          .map((r) => `<tr><td>${fmtDate(r.created_at)}</td><td><span class="badge ${r.status === 200 ? "badge-public" : "badge-lock"}">${r.status || "网络错误"}</span></td><td>${escHtml(r.url)}</td><td class="muted">${escHtml((r.resp || "").slice(0, 60))}</td></tr>`)
-          .join("")}</tbody></table>`
-      : `<div class="empty">暂无推送记录</div>`);
-  wrap.appendChild(sec3);
-
+  const wrap = el(`<div class="dash tf-center"></div>`);
+  wrap.innerHTML = `
+    <div class="dash-head"><div><h1 class="dash-title">流量中心</h1>
+      <p class="dash-sub">访问趋势 · 搜索洞察 · 热门内容 · 收录推送，一个页面看全</p></div></div>
+    <div class="tfc-tabs" role="tablist">
+      ${TRAFFIC_TABS.map((x) => `<button type="button" class="tfc-tab" data-tab="${x.key}" role="tab" aria-selected="false">${x.label}</button>`).join("")}
+    </div>
+    <div class="tfc-panel" id="tfc-trend"></div>
+    <div class="tfc-panel" id="tfc-search" hidden></div>
+    <div class="tfc-panel" id="tfc-content" hidden></div>`;
   app.innerHTML = "";
   app.appendChild(wrap);
-  await refreshTraffic(trafficBox, true);
+
+  const panels = {
+    trend: wrap.querySelector("#tfc-trend"),
+    search: wrap.querySelector("#tfc-search"),
+    content: wrap.querySelector("#tfc-content"),
+  };
+  const activate = (key) => {
+    wrap.querySelectorAll(".tfc-tab").forEach((b) => {
+      const on = b.dataset.tab === key;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    Object.entries(panels).forEach(([k, node]) => { if (node) node.hidden = k !== key; });
+    const t = TRAFFIC_TABS.find((x) => x.key === key);
+    // replaceState 只改地址、不触发 hashchange，避免切 tab 时整页重载
+    if (t && location.hash !== t.hash) {
+      try { history.replaceState(null, "", t.hash); } catch { location.hash = t.hash; }
+    }
+    setTitle("流量中心");
+  };
+  wrap.querySelectorAll(".tfc-tab").forEach((b) => { b.onclick = () => activate(b.dataset.tab); });
+
+  drawTrafficPanel(panels.trend);
+  panels.search.innerHTML = drawSearchBody(searchData, SEARCH_STATE.days);
+  const sel = panels.search.querySelector("#tfc-search-days");
+  if (sel) sel.onchange = () => refreshSearchPanel(panels.search, Number(sel.value) || 30);
+  panels.content.innerHTML = drawContentBody(analyticsData);
+  activate(active);
 }
 
 // ───────────────────────── 审计日志 ─────────────────────────
@@ -2746,77 +2856,6 @@ function plusShell(title, sub, bodyHtml) {
 // 空状态 / 加载状态的统一写法
 function plusEmpty(text) {
   return `<div class="plus-empty">${escHtml(text)}</div>`;
-}
-
-/* ── 搜索分析 ───────────────────────────────────────────────────────────── */
-async function renderSearchStats() {
-  const app = adminMain();
-  setTitle("搜索分析");
-  app.innerHTML = `<div class="empty">加载中…</div>`;
-
-  let d = null;
-  try {
-    const res = await api("/admin/search-stats?days=30");
-    if (res.ok) d = await res.json();
-  } catch {}
-  if (!d) {
-    app.innerHTML = `<div class="empty">加载失败，请刷新重试</div>`;
-    return;
-  }
-
-  const daily = d.daily || [];
-  const maxDaily = Math.max(1, ...daily.map((x) => Number(x.count) || 0));
-  const bars = daily.length
-    ? daily
-        .map((x) => {
-          const h = Math.max(4, Math.round(((Number(x.count) || 0) / maxDaily) * 100));
-          return `<div class="ss-bar" title="${escHtml(x.day)}：${x.count} 次">
-            <span class="ss-bar-val">${Number(x.count) || 0}</span>
-            <i style="height:${h}%"></i>
-            <b>${escHtml(String(x.day || "").slice(5))}</b>
-          </div>`;
-        })
-        .join("")
-    : plusEmpty("最近 7 天没有搜索记录");
-
-  const rows = (arr, kind) =>
-    arr && arr.length
-      ? `<ol class="plus-rank">${arr
-          .map(
-            (x) => `<li>
-              <span class="plus-kw">${escHtml(x.keyword)}</span>
-              <span class="plus-kw-meta">${x.count} 次 · ${fmtDate(x.last_at)}</span>
-              ${kind === "empty" ? `<span class="plus-badge warn">无结果</span>` : ""}
-            </li>`
-          )
-          .join("")}</ol>`
-      : plusEmpty(kind === "empty" ? "没有「搜不到」的词，覆盖情况良好" : "还没有搜索记录");
-
-  const body = `
-    <div class="plus-stats">
-      <div class="plus-stat"><b>${d.total || 0}</b><span>30 天搜索次数</span></div>
-      <div class="plus-stat"><b>${d.unique || 0}</b><span>独立关键词</span></div>
-      <div class="plus-stat ${d.emptyRate >= 30 ? "is-warn" : ""}"><b>${d.emptyRate || 0}%</b><span>零结果占比</span></div>
-    </div>
-    <section class="plus-card">
-      <h2 class="plus-h2">近 7 日搜索量</h2>
-      <div class="ss-chart">${bars}</div>
-    </section>
-    <div class="plus-grid2">
-      <section class="plus-card">
-        <h2 class="plus-h2">热搜关键词</h2>
-        ${rows(d.top, "top")}
-      </section>
-      <section class="plus-card">
-        <h2 class="plus-h2">搜了但没有结果</h2>
-        <p class="plus-note">这些是读者的真实需求缺口，适合作为下一批选题。</p>
-        ${rows(d.empty, "empty")}
-      </section>
-    </div>`;
-
-  const wrap = plusShell("搜索分析", "读者在站内搜了什么、哪些搜不到 —— 内容选题最直接的依据", body);
-  app.innerHTML = "";
-  app.appendChild(wrap);
 }
 
 /* ── 标签管理 ───────────────────────────────────────────────────────────── */

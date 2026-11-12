@@ -1077,3 +1077,38 @@ function fillDays(days: number): string[] {
   for (let i = days - 1; i >= 0; i--) out.push(new Date(now - i * 86400000).toISOString().slice(0, 10));
   return out;
 }
+
+/**
+ * 相邻文章：按发布时间轴取前后各一篇（只对匿名可见的已发布文章生效）。
+ * prev = 更早发布的一篇，next = 更晚发布的一篇；created_at 相同用 id 兜底排序，避免同秒文章互相跳过。
+ */
+export async function getNeighbors(db: DB, slug: string): Promise<{
+  prev: { slug: string; title: string; cover: string | null; tags: string | null; created_at: number } | null;
+  next: { slug: string; title: string; cover: string | null; tags: string | null; created_at: number } | null;
+}> {
+  const cur = await getPostBySlug(db, slug, { admin: false });
+  const none = { prev: null, next: null };
+  if (!cur) return none;
+  const cols = "id, slug, title, cover, tags, created_at";
+  const visible = `deleted_at IS NULL AND visibility = 'public' AND status = 'published'
+    AND (scheduled_at IS NULL OR scheduled_at <= ?)`;
+  try {
+    const older = await db.prepare(
+      `SELECT ${cols} FROM posts WHERE ${visible}
+        AND (created_at < ? OR (created_at = ? AND id < ?))
+       ORDER BY created_at DESC, id DESC LIMIT 1`
+    ).bind(now(), cur.created_at, cur.created_at, cur.id).first();
+    const newer = await db.prepare(
+      `SELECT ${cols} FROM posts WHERE ${visible}
+        AND (created_at > ? OR (created_at = ? AND id > ?))
+       ORDER BY created_at ASC, id ASC LIMIT 1`
+    ).bind(now(), cur.created_at, cur.created_at, cur.id).first();
+    const slim = (r: any) => r ? ({
+      slug: String(r.slug), title: String(r.title), cover: r.cover || null,
+      tags: r.tags || null, created_at: Number(r.created_at) || 0,
+    }) : null;
+    return { prev: slim(older), next: slim(newer) };
+  } catch {
+    return none;
+  }
+}

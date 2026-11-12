@@ -55,6 +55,7 @@ import {
   mergeTags,
   deleteTag,
   getTrafficStats,
+  getNeighbors,
 } from "./db";
 
 interface Env extends AuthEnv {
@@ -1787,6 +1788,14 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     ).length;
     await logSearch(env.DB, query, literalHits);
     return json({ results });
+  }
+
+  // 相邻文章（公开）：按发布时间轴取前/后各一篇，供文末导航使用
+  // 用 /api/neighbors?slug= 而非 /api/posts/:slug/neighbors，避免与回收站的四段路由冲突
+  if (method === "GET" && seg.length === 2 && seg[1] === "neighbors") {
+    const slug = new URL(req.url).searchParams.get("slug") || "";
+    if (!slug) return json({ prev: null, next: null });
+    return json(await getNeighbors(env.DB, decodeURIComponent(slug)), 200, anonCache(user, 60));
   }
 
   // 相关文章（公开）：基于当前文章向量，返回 top3

@@ -1468,7 +1468,8 @@ td.plus-td-left, th.plus-td-left { text-align: left; }
 .tf-toolbar .btn { flex: none; }
 .tf-chart { overflow-x: auto; margin: 0 0 18px; scrollbar-width: thin; }
 .tf-chart .ss-chart { min-width: 0; }
-.tf-chart .ss-bar.is-zero i {
+/* 访问趋势与搜索洞察共用：0 值日期只留一条极淡的细线，不画蓝柱 */
+.ss-bar.is-zero i {
   height: 2px !important; background: color-mix(in srgb, var(--text) 12%, transparent);
   border-radius: 2px;
 }
@@ -1496,3 +1497,21 @@ td.plus-td-left, th.plus-td-left { text-align: left; }
 }
 .tf-row b { flex: none; min-width: 30px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
 body.dark .tf-dist { background: rgba(255, 255, 255, .035); }
+
+/* ── 流量中心：三个分段共用一页 ───────────────────────────────────────── */
+.tf-center .dash-head { margin-bottom: 14px; }
+.tfc-tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+.tfc-tab {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  padding: 9px 17px; font-size: 13.5px; font-weight: 600; color: var(--muted);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  font-family: inherit; transition: color .16s ease, border-color .16s ease;
+}
+.tfc-tab:hover { color: var(--text); }
+.tfc-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tfc-panel[hidden] { display: none !important; }
+.tfc-search-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.tfc-search-toolbar .plus-input { width: auto; min-width: 120px; }
+.tfc-search-toolbar .muted { font-size: 12.5px; }
+body.dark .tfc-tabs { border-bottom-color: #1f2a3d; }
+body.dark .tfc-tab.active { color: #8ab4ff; border-bottom-color: #8ab4ff; }

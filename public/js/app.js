@@ -986,6 +986,7 @@ async function renderPost(slug) {
       ${aiNotesHtml(p.ai_notes)}
       ${tagsHtml(p)}
       ${articleEndCardHtml(p)}
+      <nav class="post-neighbors" id="postNeighbors" aria-label="上一篇与下一篇"></nav>
     </div>
     <aside class="article-toc" id="articleToc" aria-label="文章目录与文章信息"></aside>`;
   app.innerHTML = "";
@@ -1004,6 +1005,9 @@ async function renderPost(slug) {
   loadRelated(p.slug);
   attachComments(p.slug);
   startReadProgress();
+  loadNeighbors(p.slug);
+  showResumeBar(detail, p);
+  startReadPosition(p.slug);
   // 文章朗读（浏览器内置语音合成，零配额、纯前端）
   const ttsBtn = document.getElementById("ttsBtn");
   if (ttsBtn && "speechSynthesis" in window) {
@@ -1282,6 +1286,145 @@ function startReadProgress() {
   window.addEventListener("resize", onScroll);
   READ_PROGRESS = { el: bar, onScroll };
   onScroll();
+}
+
+// ── 文末「上一篇 / 下一篇」导航 ─────────────────────────────────────────
+async function loadNeighbors(slug) {
+  const box = document.getElementById("postNeighbors");
+  if (!box) return;
+  let d = null;
+  try {
+    const r = await api("/neighbors?slug=" + encodeURIComponent(slug));
+    if (r.ok) d = await r.json();
+  } catch {}
+  if (!box.isConnected) return;
+  const prev = d && d.prev;
+  const next = d && d.next;
+  if (!prev && !next) { box.remove(); return; }
+  const card = (p, kind) => {
+    if (!p) return `<div class="pn-empty"></div>`;
+    const cover = safeAvatar(p.cover);
+    const cat = parseTags(p.tags)[0] || "";
+    const label = kind === "prev" ? "上一篇 · 更早发布" : "下一篇 · 更新发布";
+    const arrow = kind === "prev" ? "←" : "→";
+    return `<a class="pn-card pn-${kind}" href="#/post/${encodeURIComponent(p.slug)}">
+      ${cover ? `<span class="pn-thumb"><img src="${escHtml(cover)}" alt="" loading="lazy" /></span>` : ""}
+      <span class="pn-body">
+        <span class="pn-label">${kind === "prev" ? `<b>${arrow}</b> ` : ""}${label}${kind === "next" ? ` <b>${arrow}</b>` : ""}</span>
+        <strong>${escHtml(p.title)}</strong>
+        <span class="pn-meta">${cat ? escHtml(cat) + " · " : ""}${escHtml(fmtDate(p.created_at))}</span>
+      </span>
+    </a>`;
+  };
+  box.innerHTML = card(prev, "prev") + card(next, "next");
+}
+
+// ── 阅读进度保存 / 续读 ─────────────────────────────────────────────────
+// 只在本机 localStorage 保存百分比与滚动位置，不上传、不含正文；7 天自动过期，读完即清除。
+const READ_POS_PREFIX = "blog-readpos:";
+const READ_POS_MAX_AGE = 7 * 86400000;
+let READ_POSITION = null;
+
+function readPosKey(slug) { return READ_POS_PREFIX + slug; }
+function getReadPos(slug) {
+  try {
+    const d = JSON.parse(localStorage.getItem(readPosKey(slug)) || "null");
+    if (!d || typeof d.pct !== "number" || !d.ts || Date.now() - d.ts > READ_POS_MAX_AGE) return null;
+    return d;
+  } catch { return null; }
+}
+function setReadPos(slug, pct, y) {
+  try {
+    if (pct >= 98) { localStorage.removeItem(readPosKey(slug)); return; }
+    localStorage.setItem(readPosKey(slug), JSON.stringify({ pct: Math.round(pct), y: Math.round(y), ts: Date.now() }));
+  } catch {}
+}
+function pruneReadPos() {
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(READ_POS_PREFIX)) keys.push(k);
+    }
+    for (const k of keys) {
+      try {
+        const d = JSON.parse(localStorage.getItem(k) || "null");
+        if (!d || !d.ts || Date.now() - d.ts > READ_POS_MAX_AGE) localStorage.removeItem(k);
+      } catch { localStorage.removeItem(k); }
+    }
+  } catch {}
+}
+function stopReadPosition() {
+  if (!READ_POSITION) return;
+  window.removeEventListener("scroll", READ_POSITION.onScroll);
+  window.removeEventListener("pagehide", READ_POSITION.onScroll);
+  if (READ_POSITION.timer) clearTimeout(READ_POSITION.timer);
+  if (READ_POSITION.pct > 0) setReadPos(READ_POSITION.slug, READ_POSITION.pct, window.scrollY);
+  READ_POSITION = null;
+}
+function startReadPosition(slug) {
+  stopReadPosition();
+  pruneReadPos();
+  const content = document.getElementById("postContent");
+  if (!content) return;
+  const state = { slug, pct: 0, timer: null, onScroll: null };
+  const measure = () => {
+    const rect = content.getBoundingClientRect();
+    const vh = window.innerHeight;
+    // 以「正文顶部进入视口」为 0%、「正文底部接近视口底」为 100%。
+    // 旧公式用 rect.height - vh*0.5 作分母，短正文时会为负导致进度恒为 0，
+    // 长正文又会在滚到评论区前就冲到 100% 而误判「已读完」。
+    const start = window.scrollY + rect.top - vh * 0.25;
+    const end = window.scrollY + rect.bottom - vh * 0.7;
+    const span = Math.max(1, end - start);
+    state.pct = Math.min(100, Math.max(0, ((window.scrollY - start) / span) * 100));
+  };
+  const onScroll = () => {
+    measure();
+    if (state.timer) return;
+    state.timer = setTimeout(() => {
+      state.timer = null;
+      setReadPos(slug, state.pct, window.scrollY);
+    }, 450);
+  };
+  state.onScroll = onScroll;
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("pagehide", onScroll);
+  READ_POSITION = state;
+  // 只测量、不落盘：重访时若已有续读记录，不能被初始 0% 覆盖掉
+  measure();
+}
+function showResumeBar(detail, p) {
+  const saved = getReadPos(p.slug);
+  if (!saved || saved.pct < 8 || saved.pct > 95) return;
+  try { if (sessionStorage.getItem("blog-read-dismiss:" + p.slug)) return; } catch {}
+  const pct = Math.max(0, Math.min(100, Math.round(Number(saved.pct) || 0)));
+  const bar = el(`<div class="resume-bar" role="note">
+    <span class="resume-ico" aria-hidden="true">↻</span>
+    <span class="resume-txt">上次读到 <b>${pct}%</b>，要接着看吗？</span>
+    <button type="button" class="btn btn-sm btn-primary" id="resumeGo">继续阅读</button>
+    <button type="button" class="btn btn-sm" id="resumeRestart">从头阅读</button>
+    <button type="button" class="resume-x" id="resumeX" aria-label="忽略">×</button>
+  </div>`);
+  const back = detail.querySelector(".post-back");
+  if (back) back.after(bar); else detail.insertBefore(bar, detail.firstChild);
+  const dismiss = () => {
+    try { sessionStorage.setItem("blog-read-dismiss:" + p.slug, "1"); } catch {}
+    bar.remove();
+  };
+  const go = document.getElementById("resumeGo");
+  if (go) go.onclick = () => {
+    dismiss();
+    window.scrollTo({ top: Math.max(0, Number(saved.y) || 0), behavior: MOTION.animate ? "smooth" : "auto" });
+  };
+  const restart = document.getElementById("resumeRestart");
+  if (restart) restart.onclick = () => {
+    try { localStorage.removeItem(readPosKey(p.slug)); } catch {}
+    dismiss();
+    window.scrollTo(0, 0);
+  };
+  const x = document.getElementById("resumeX");
+  if (x) x.onclick = dismiss;
 }
 
 // 阅读量上报（每会话只报一次，避免刷新虚高）
@@ -1679,9 +1822,17 @@ function bindNavToggle() {
   toggle.onclick = () => document.querySelector(".topbar")?.classList.toggle("open");
 }
 
+let LAST_ROUTE_KEY = null;
 function route() {
+  const routeKey = location.pathname + location.hash;
+  const routeChanged = LAST_ROUTE_KEY !== null && LAST_ROUTE_KEY !== routeKey;
+  LAST_ROUTE_KEY = routeKey;
+  // 先落盘上一篇的阅读进度，再解绑 / 回顶，避免把 0 写成最终位置
+  stopReadPosition();
   stopReadProgress();
   stopArticleNav();
+  // SPA 切换页面时回到顶部（原先从首页中部点进文章会停在半空）
+  if (routeChanged) window.scrollTo(0, 0);
   // 路径式入口（/login、/admin）重定向到哈希路由，避免用户直接输入地址时只看到首页
   const path = location.pathname;
   if (path === "/login" || path === "/admin") {

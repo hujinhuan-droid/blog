@@ -126,7 +126,16 @@ const server = http.createServer((req, res) => {
   if (pm) {
     const p = posts.find((x) => x.slug === decodeURIComponent(pm[1]));
     if (!p) return send(404, JSON.stringify({ error: "not found" }), MIME[".json"]);
-    return send(200, JSON.stringify({ ...p, likes: 12, favorites: 4, ai_notes: "" }), MIME[".json"]);
+    // 预览时给非首篇也填上示例正文，方便查看目录、上下篇、续读等完整文章页效果
+    return send(200, JSON.stringify({ ...p, content: p.content || LONG_MD, likes: 12, favorites: 4, ai_notes: "" }), MIME[".json"]);
+  }
+  if (url.pathname === "/api/neighbors") {
+    const i = posts.findIndex((x) => x.slug === (url.searchParams.get("slug") || ""));
+    const one = (j) => (j >= 0 && j < posts.length
+      ? { slug: posts[j].slug, title: posts[j].title, cover: posts[j].cover, tags: posts[j].tags, created_at: posts[j].created_at }
+      : null);
+    // 数组按时间倒序：prev = 更早发布（下标更大），next = 更新发布（下标更小）
+    return send(200, JSON.stringify({ prev: i >= 0 ? one(i + 1) : null, next: i >= 0 ? one(i - 1) : null }), MIME[".json"]);
   }
   if (url.pathname === "/api/stats") return send(200, JSON.stringify({ views: 12873, posts: posts.length }), MIME[".json"]);
   if (url.pathname === "/api/comments") return send(200, JSON.stringify([]), MIME[".json"]);
