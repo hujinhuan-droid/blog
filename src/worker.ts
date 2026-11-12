@@ -650,8 +650,11 @@ function fmtDateS(ts: number): string {
 }
 
 // 通用 HTML 文档骨架（含站点级 OG / Twitter / 样式，供预渲染页复用）
-function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string; customCss?: string; brand?: string; footerExtra?: string; extraHead?: string; stats?: string }): string {
+function htmlDoc(opts: { title: string; description: string; head: string; body: string; base: string; image?: string; customCss?: string; brand?: string; footerExtra?: string; extraHead?: string; stats?: string; canonical?: string; ogType?: string; rssTitle?: string }): string {
   const { title, description, head, body } = opts;
+  const canonical = opts.canonical || opts.base + "/";
+  const ogType = opts.ogType || "website";
+  const rssTitle = opts.rssTitle || title;
   const ogImage = opts.image
     ? `<meta property="og:image" content="${escHtmlS(opts.image)}" />
 <meta name="twitter:image" content="${escHtmlS(opts.image)}" />`
@@ -669,10 +672,13 @@ function htmlDoc(opts: { title: string; description: string; head: string; body:
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escHtmlS(title)}</title>
 <meta name="description" content="${escHtmlS(description)}" />
-<meta property="og:type" content="website" />
+<link rel="canonical" href="${escHtmlS(canonical)}" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="alternate" type="application/rss+xml" title="${escHtmlS(rssTitle)} RSS" href="/feed.xml" />
+<meta property="og:type" content="${escHtmlS(ogType)}" />
 <meta property="og:title" content="${escHtmlS(title)}" />
 <meta property="og:description" content="${escHtmlS(description)}" />
-<meta property="og:url" content="${escHtmlS(opts.base + "/")}" />
+<meta property="og:url" content="${escHtmlS(canonical)}" />
 <meta property="og:site_name" content="${escHtmlS(title)}" />
 ${ogImage}
 <meta name="twitter:card" content="summary_large_image" />
@@ -781,7 +787,7 @@ async function prerenderHome(env: Env, req: Request): Promise<Response> {
 <div class="post-list">${cards}</div>`;
   const branding = brandingHtml(settings, settings.site_title || "AI Agent 博客");
   const ogImage = absUrl(settings.og_image, base) || base + "/og-default.png";
-  return new Response(htmlDoc({ title, description, head, body, base, image: ogImage, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
+  return new Response(htmlDoc({ title, description, head, body, base, image: ogImage, canonical: base + "/", ogType: "website", rssTitle: settings.site_title || "AI Agent 博客", customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
     headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }
@@ -802,10 +808,12 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
   const description = (row.excerpt || "").slice(0, 200) || siteTitle;
   const content = renderMarkdownSsr(row.content || "");
   const cover = absUrl(row.cover, base) || absUrl(settings.og_image, base) || base + "/og-default.png";
-  const head = `<meta property="og:type" content="article" />
-<meta property="og:title" content="${escHtmlS(row.title)}" />
+  const head = `<meta property="og:title" content="${escHtmlS(row.title)}" />
 <meta property="og:description" content="${escHtmlS(description)}" />
-<meta property="og:url" content="${escHtmlS(base + "/post/" + encodeURIComponent(row.slug))}" />
+<meta property="article:published_time" content="${new Date(row.created_at).toISOString()}" />
+<meta property="article:modified_time" content="${new Date(row.updated_at).toISOString()}" />
+<meta property="article:author" content="${escHtmlS(settings.author_name || "hujinhuan-droid")}" />
+<meta property="article:section" content="${escHtmlS((parseTags(row.tags)[0]) || "博客")}" />
 <meta name="twitter:card" content="summary_large_image" />
 <script type="application/ld+json">${JSON.stringify({
     "@context": "https://schema.org",
@@ -815,7 +823,7 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
     datePublished: new Date(row.created_at).toISOString(),
     dateModified: new Date(row.updated_at).toISOString(),
     image: cover,
-    author: { "@type": "Person", name: "hujinhuan-droid" },
+    author: { "@type": "Person", name: settings.author_name || "hujinhuan-droid" },
     publisher: { "@type": "Organization", name: siteTitle },
     mainEntityOfPage: base + "/post/" + encodeURIComponent(row.slug),
   })}</script>`;
@@ -834,7 +842,7 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
   </div>
 </div>`;
   const branding = brandingHtml(settings, siteTitle);
-  return new Response(htmlDoc({ title, description, head, body, base, image: cover, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
+  return new Response(htmlDoc({ title, description, head, body, base, image: cover, canonical: base + "/post/" + encodeURIComponent(row.slug), ogType: "article", rssTitle: siteTitle, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
     headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }

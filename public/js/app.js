@@ -584,6 +584,18 @@ function setMeta(name, content) {
   m.setAttribute("content", content);
 }
 
+// canonical 链接：SPA 路由切换时更新，避免哈希页与预渲染页（/post/slug）权重分散
+function setCanonical(url) {
+  if (!url) return;
+  let l = document.head.querySelector(`link[rel="canonical"]`);
+  if (!l) {
+    l = document.createElement("link");
+    l.setAttribute("rel", "canonical");
+    document.head.appendChild(l);
+  }
+  l.setAttribute("href", url);
+}
+
 // 应用 SEO 设置：标题（seo_title 优先于 site_title）、描述、关键词、OG 标签
 // 站内资源补成绝对 URL（OG 图必须是绝对地址，微信/QQ 抓取才认）
 function absAsset(u) {
@@ -646,6 +658,7 @@ function applySeo(s) {
   // 站点级 OG / Twitter 基础信息（文章页会再被 applyPostSeo 覆盖）
   setMeta("og:type", "website");
   setMeta("og:url", location.origin + "/");
+  setCanonical(location.origin + "/");
   setMeta("twitter:card", "summary_large_image");
   setMeta("og:image", absAsset(s.og_image) || location.origin + "/og-default.png");
 }
@@ -657,7 +670,9 @@ function applyPostSeo(p) {
   setMeta("og:type", "article");
   setMeta("og:title", p.title);
   setMeta("og:description", (p.excerpt || "").slice(0, 200));
-  setMeta("og:url", location.origin + "/post/" + encodeURIComponent(p.slug));
+  const postUrl = location.origin + "/post/" + encodeURIComponent(p.slug);
+  setMeta("og:url", postUrl);
+  setCanonical(postUrl);
   // 优先文章封面，其次站点默认分享图
   setMeta("og:image", absAsset(p.cover) || absAsset(SITE_SETTINGS.og_image) || location.origin + "/og-default.png");
   setMeta("twitter:card", "summary_large_image");
