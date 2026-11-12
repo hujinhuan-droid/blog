@@ -1067,8 +1067,9 @@ function shareUrlOf(p) {
 }
 function authorCardHtml() {
   const s = SITE_SETTINGS || {};
-  const name = stripText(s.author_name) || stripText(s.site_title) || "博主";
-  const raw = stripText(s.author_bio) || stripText(s.about_content);
+  // 站点未填设置时，回退到与首页 / SEO 一致的默认品牌文案，避免出现空名片
+  const name = stripText(s.author_name) || stripText(s.site_title) || "AI Agent 博客";
+  const raw = stripText(s.author_bio) || stripText(s.about_content) || stripText(s.seo_description) || "记录 AI Agent 的探索、实践与思考";
   const bio = raw.length > 64 ? raw.slice(0, 64) + "…" : raw;
   const avatar = safeAvatar(s.author_avatar || s.site_logo);
   return `<div class="rail-sec rail-author">
