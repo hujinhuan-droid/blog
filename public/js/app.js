@@ -644,6 +644,17 @@ function injectStatsCode(html) {
   document.body.appendChild(wrap);
 }
 
+function setJsonLd(id, obj) {
+  let s = document.getElementById(id);
+  if (!s) {
+    s = document.createElement("script");
+    s.type = "application/ld+json";
+    s.id = id;
+    document.head.appendChild(s);
+  }
+  s.textContent = JSON.stringify(obj);
+}
+
 function applySeo(s) {
   const title = s.seo_title || s.site_title || document.title;
   if (title) {
@@ -661,6 +672,9 @@ function applySeo(s) {
   setCanonical(location.origin + "/");
   setMeta("twitter:card", "summary_large_image");
   setMeta("og:image", absAsset(s.og_image) || location.origin + "/og-default.png");
+  // 离开文章页时移除面包屑结构化数据，避免首页残留旧的 BreadcrumbList
+  const oldBc = document.getElementById("ld-breadcrumb");
+  if (oldBc) oldBc.remove();
 }
 
 // 文章页级 OG：覆盖站点级信息，确保分享单篇文章时卡片正确
@@ -676,6 +690,16 @@ function applyPostSeo(p) {
   // 优先文章封面，其次站点默认分享图
   setMeta("og:image", absAsset(p.cover) || absAsset(SITE_SETTINGS.og_image) || location.origin + "/og-default.png");
   setMeta("twitter:card", "summary_large_image");
+  // 面包屑结构化数据（BreadcrumbList）：首页 › 首个标签 › 文章，配合服务端预渲染一致
+  const bc = [{ name: "首页", url: location.origin + "/" }];
+  const ft = (parseTags(p.tags)[0]) || "";
+  if (ft) bc.push({ name: ft, url: location.origin + "/tag/" + encodeURIComponent(ft) });
+  bc.push({ name: p.title, url: postUrl });
+  setJsonLd("ld-breadcrumb", {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: bc.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c.name, item: c.url })),
+  });
 }
 
 function renderNav() {

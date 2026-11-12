@@ -808,6 +808,15 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
   const description = (row.excerpt || "").slice(0, 200) || siteTitle;
   const content = renderMarkdownSsr(row.content || "");
   const cover = absUrl(row.cover, base) || absUrl(settings.og_image, base) || base + "/og-default.png";
+  const firstTag = (parseTags(row.tags)[0]) || "";
+  const bcCrumbs = [{ name: "首页", url: base + "/" }];
+  if (firstTag) bcCrumbs.push({ name: firstTag, url: base + "/tag/" + encodeURIComponent(firstTag) });
+  bcCrumbs.push({ name: row.title, url: base + "/post/" + encodeURIComponent(row.slug) });
+  const breadcrumbLd = `<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: bcCrumbs.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c.name, item: c.url })),
+  })}</script>`;
   const head = `<meta property="og:title" content="${escHtmlS(row.title)}" />
 <meta property="og:description" content="${escHtmlS(description)}" />
 <meta property="article:published_time" content="${new Date(row.created_at).toISOString()}" />
@@ -826,7 +835,7 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
     author: { "@type": "Person", name: settings.author_name || "hujinhuan-droid" },
     publisher: { "@type": "Organization", name: siteTitle },
     mainEntityOfPage: base + "/post/" + encodeURIComponent(row.slug),
-  })}</script>`;
+  })}</script>` + breadcrumbLd;
   // 预渲染页（爬虫 / 社交抓取）同样展示封面，保证无 JS 时也有完整视觉
   const coverFig = row.cover
     ? `<figure class="article-cover"><img src="${escHtmlS(absUrl(row.cover, base))}" alt="${escHtmlS(row.title)}" loading="lazy" /></figure>`
@@ -843,6 +852,45 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
 </div>`;
   const branding = brandingHtml(settings, siteTitle);
   return new Response(htmlDoc({ title, description, head, body, base, image: cover, canonical: base + "/post/" + encodeURIComponent(row.slug), ogType: "article", rssTitle: siteTitle, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
+    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
+  });
+}
+
+// 标签归档页（公开，仅爬虫命中）：列出该标签下的全部文章，提供可爬取的标签落地页
+async function prerenderTag(env: Env, tag: string, req: Request): Promise<Response> {
+  let settings: Record<string, string> = {};
+  try { settings = await getSettings(env.DB); } catch {}
+  const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+  const siteTitle = settings.site_title || "AI Agent 博客";
+  const all = await listPosts(env.DB, { admin: false });
+  const posts = all.filter((p: any) => (parseTags(p.tags) || []).includes(tag));
+  const title = `${tag} - ${siteTitle}`;
+  const description = `浏览「${tag}」分类下的全部文章，共 ${posts.length} 篇`;
+  const tagUrl = base + "/tag/" + encodeURIComponent(tag);
+  const head = `<meta property="og:title" content="${escHtmlS(title)}" />
+<meta property="og:description" content="${escHtmlS(description)}" />
+<meta name="twitter:card" content="summary_large_image" />
+<script type="application/ld+json">${JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  name: title,
+  description,
+  url: tagUrl,
+  isPartOf: { "@type": "WebSite", name: siteTitle, url: base + "/" },
+})}</script>`;
+  const items = posts
+    .map((p: any) => `<li><a href="/post/${encodeURIComponent(p.slug)}">${escHtmlS(p.title)}</a><span class="post-date">${fmtDateS(p.created_at)}</span></li>`)
+    .join("\n");
+  const body = `<main class="container tag-archive">
+  <nav class="crumbs"><a href="/">首页</a> › <span>${escHtmlS(tag)}</span></nav>
+  <h1>${escHtmlS(tag)}</h1>
+  <p class="lead">${escHtmlS(description)}</p>
+  <ul class="post-items">
+${items || '    <li class="empty">该分类下暂无文章</li>'}
+  </ul>
+</main>`;
+  const branding = brandingHtml(settings, siteTitle);
+  return new Response(htmlDoc({ title, description, head, body, base, image: absUrl(settings.og_image, base) || base + "/og-default.png", canonical: tagUrl, ogType: "website", rssTitle: siteTitle, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
     headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
   });
 }
@@ -917,9 +965,15 @@ async function handleSitemap(env: Env, req: Request): Promise<Response> {
   const urls = posts
     .map((p: any) => `  <url><loc>${base}/post/${encodeURIComponent(p.slug)}</loc><lastmod>${new Date(p.updated_at).toISOString()}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`)
     .join("\n");
+  const tagSet = new Set<string>();
+  for (const p of posts as any[]) (parseTags(p.tags) || []).forEach((t: string) => t && tagSet.add(t));
+  const tagUrls = [...tagSet]
+    .map((t) => `  <url><loc>${base}/tag/${encodeURIComponent(t)}</loc><changefreq>weekly</changefreq><priority>0.5</priority></url>`)
+    .join("\n");
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls}
+${tagUrls}
   <url><loc>${base}/</loc></url>
 </urlset>`;
   return new Response(xml, { headers: { "content-type": "application/xml; charset=utf-8" } });
@@ -2157,6 +2211,7 @@ export default {
     if (isCrawler(req.headers.get("user-agent") || "")) {
       if (path.length === 0) return await prerenderHome(env, req);
       if (path[0] === "post" && path.length === 2) return await prerenderPost(env, decodeURIComponent(path[1]), req);
+      if (path[0] === "tag" && path.length === 2) return await prerenderTag(env, decodeURIComponent(path[1]), req);
     }
 
     // 非 API 请求：交给静态资源（SPA 回退由 wrangler.toml 的 not_found_handling 处理）
