@@ -598,6 +598,28 @@ function cacheControlHeader(settings: Record<string, string>): string {
   return "no-store";
 }
 
+// 通用安全响应头：作用于 Worker 直出的 HTML / 图片 / 静态资源
+function securityHeaders(): Record<string, string> {
+  return {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Frame-Options": "SAMEORIGIN",
+  };
+}
+
+// 按扩展名给静态资源（Workers Assets 直出）定缓存策略
+// 脚本/样式：随部署更新，1 天 + 后台刷新；图片/字体：基本不可变，7 天 + 更长后台刷新
+function assetCacheControl(pathname: string): string {
+  const ext = (pathname.split(".").pop() || "").toLowerCase();
+  if (ext === "js" || ext === "mjs" || ext === "css") {
+    return "public, max-age=86400, stale-while-revalidate=604800";
+  }
+  if (["png", "jpg", "jpeg", "webp", "gif", "svg", "ico", "avif", "woff2", "woff", "ttf", "otf", "json"].includes(ext)) {
+    return "public, max-age=604800, stale-while-revalidate=2592000";
+  }
+  return "public, max-age=3600";
+}
+
 // 解析「每行 标签|URL」格式，过滤非法协议
 function parseLinkLines(raw: string | undefined): { label: string; url: string }[] {
   return String(raw || "")
@@ -788,7 +810,7 @@ async function prerenderHome(env: Env, req: Request): Promise<Response> {
   const branding = brandingHtml(settings, settings.site_title || "AI Agent 博客");
   const ogImage = absUrl(settings.og_image, base) || base + "/og-default.png";
   return new Response(htmlDoc({ title, description, head, body, base, image: ogImage, canonical: base + "/", ogType: "website", rssTitle: settings.site_title || "AI Agent 博客", customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
-    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
+    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings), ...securityHeaders() },
   });
 }
 
@@ -852,7 +874,7 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
 </div>`;
   const branding = brandingHtml(settings, siteTitle);
   return new Response(htmlDoc({ title, description, head, body, base, image: cover, canonical: base + "/post/" + encodeURIComponent(row.slug), ogType: "article", rssTitle: siteTitle, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
-    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
+    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings), ...securityHeaders() },
   });
 }
 
@@ -891,7 +913,7 @@ ${items || '    <li class="empty">该分类下暂无文章</li>'}
 </main>`;
   const branding = brandingHtml(settings, siteTitle);
   return new Response(htmlDoc({ title, description, head, body, base, image: absUrl(settings.og_image, base) || base + "/og-default.png", canonical: tagUrl, ogType: "website", rssTitle: siteTitle, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {
-    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings) },
+    headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": cacheControlHeader(settings), ...securityHeaders() },
   });
 }
 
@@ -1936,7 +1958,11 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const obj = await env.BUCKET.get(key);
     if (!obj) return json({ error: "文件不存在" }, 404);
     return new Response(obj.body, {
-      headers: { "content-type": obj.httpMetadata?.contentType || "application/octet-stream" },
+      headers: {
+        "content-type": obj.httpMetadata?.contentType || "application/octet-stream",
+        "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+        ...securityHeaders(),
+      },
     });
   }
 
@@ -2203,7 +2229,7 @@ export default {
     if (docSettings.maintenance_mode === "1" && !user) {
       const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
       return new Response(maintenancePage(docSettings, base), {
-        headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders() },
       });
     }
 
@@ -2235,6 +2261,7 @@ export default {
       } catch {}
       const h = new Headers(assetResp.headers);
       h.set("Cache-Control", "no-store");
+      for (const [k, v] of Object.entries(securityHeaders())) h.set(k, v);
       // 注入自定义 CSS（设置页 ⑪ 高级自定义）：在 </head> 前插入，作用于前端 SPA 整站
       const customCss = docSettings.custom_css || "";
       if (customCss) {
@@ -2244,6 +2271,10 @@ export default {
       }
       return new Response(assetResp.body, { status: assetResp.status, headers: h });
     }
-    return assetResp;
+    // 静态资源（带扩展名：/css、/js、/vendor、图片等）：按类型注入缓存与安全头
+    const assetHeaders = new Headers(assetResp.headers);
+    assetHeaders.set("Cache-Control", assetCacheControl(new URL(req.url).pathname));
+    for (const [k, v] of Object.entries(securityHeaders())) assetHeaders.set(k, v);
+    return new Response(assetResp.body, { status: assetResp.status, headers: assetHeaders });
   },
 } satisfies ExportedHandler<Env>;

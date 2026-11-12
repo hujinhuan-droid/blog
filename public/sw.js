@@ -1,5 +1,5 @@
 // Service Worker：缓存静态资源，支持离线访问与 SPA 回退
-const CACHE = "ai-agent-blog-v8";
+const CACHE = "ai-agent-blog-v9";
 const ASSETS = [
   "/", "/index.html",
   "/css/style.css", "/css/depth.css",
