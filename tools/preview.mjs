@@ -22,6 +22,9 @@ const settings = {
   social_links: JSON.stringify({ github: "https://github.com/hujinhuan-droid" }),
   friend_links: JSON.stringify([]),
   beian_icp: "",
+  author_name: "hujinhuan-droid",
+  author_bio: "交付与项目管理 / AI Agent 与自动化实践，写点能落地的东西。",
+  author_avatar: "",
 };
 
 const TITLES = [

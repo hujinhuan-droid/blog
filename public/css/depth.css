@@ -739,3 +739,133 @@ body.dark .post-detail .content tbody td { border-bottom-color: rgba(255, 255, 2
   .post-card:hover { transform: none; }
   .post-card::after { display: none; }
 }
+
+/* ── 12. 文章侧栏扩展：作者名片 / 本文标签 / 分享组 ─────────────────── */
+/* 目录自身限高，保证长文时作者卡与分享按钮仍在可视范围内 */
+.toc-list { max-height: 40vh; overflow-y: auto; scrollbar-width: thin; }
+.rail-extra {
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-brd);
+}
+.article-toc.no-toc .rail-extra { margin-top: 0; padding-top: 0; border-top: 0; }
+/* 目录底部只保留 rail-extra 一条分隔线，避免与 toc-foot 形成双线窄条 */
+.article-toc:not(.no-toc) .toc-foot { border-top: 0; padding-top: 2px; }
+.rail-sec + .rail-sec {
+  margin-top: 13px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--panel-brd);
+}
+.rail-author { display: flex; align-items: center; gap: 10px; }
+.rail-avatar {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 45%, #7c3aed));
+  box-shadow: var(--depth-sm);
+}
+.rail-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.rail-author-txt { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rail-author-txt b {
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-author-txt span {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.rail-about {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 9px;
+  font-size: 11.5px;
+  color: var(--primary);
+  text-decoration: none;
+}
+.rail-about:hover { text-decoration: underline; }
+.rail-sec h4 {
+  margin: 0 0 9px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rail-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.rail-chips a {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-2);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border: 1px solid var(--panel-brd);
+  transition: color 0.16s ease, border-color 0.16s ease;
+}
+.rail-chips a:hover { color: var(--primary); border-color: var(--primary); }
+.rail-share-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.rail-share-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  padding: 6px 4px;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 11.5px;
+  line-height: 1.25;
+  text-decoration: none;
+  color: var(--text-2);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 1px solid var(--panel-brd);
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+.rail-share-btn:hover { color: var(--primary); border-color: var(--primary); transform: translateY(-1px); }
+
+/* 小屏（无右侧栏）：正文末尾补一张作者 + 分享卡 */
+.article-endcard {
+  margin: 30px 0 8px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-brd);
+  box-shadow: var(--depth-sm);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.article-endcard .rail-avatar { width: 44px; height: 44px; font-size: 17px; }
+.article-endcard .rail-author-txt b { font-size: 14px; }
+.article-endcard .rail-author-txt span { font-size: 12px; -webkit-line-clamp: 3; }
+.article-endcard .rail-share-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 440px; }
+@media (min-width: 1300px) { .article-endcard { display: none; } }
+@media (max-width: 480px) {
+  .article-endcard .rail-share-grid { grid-template-columns: 1fr 1fr; }
+}
+/* 深色下侧栏为半透明暗玻璃，次要文字需单独提亮，避免糊成一片 */
+body.dark .rail-author-txt span,
+body.dark .rail-sec h4,
+body.dark .rail-chips a,
+body.dark .rail-share-btn { color: #b9c2d6; }
+body.dark .rail-chips a,
+body.dark .rail-share-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+body.dark .rail-about { color: #8ab4ff; }

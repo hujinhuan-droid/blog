@@ -54,6 +54,7 @@ import {
   renameTag,
   mergeTags,
   deleteTag,
+  getTrafficStats,
 } from "./db";
 
 interface Env extends AuthEnv {
@@ -555,6 +556,40 @@ function absUrl(u: string | undefined, base: string): string {
   return base + (v.startsWith("/") ? v : "/" + v);
 }
 
+// 访问明细：设备 / 来源归类。只存归类与来源域名，不存完整 UA 与 IP。
+function classifyDevice(ua: string): string {
+  const u = (ua || "").toLowerCase();
+  if (/bot|spider|crawler|slurp|facebookexternalhit|headless|curl|wget/.test(u)) return "bot";
+  if (/ipad|tablet|kindle|silk|playbook/.test(u)) return "tablet";
+  if (/mobile|iphone|ipod|android|windows phone|opera mini/.test(u)) return "mobile";
+  return "desktop";
+}
+function classifySource(ref: string, selfHost: string): { source: string; referer: string } {
+  if (!ref) return { source: "direct", referer: "" };
+  try {
+    const h = new URL(ref).hostname.toLowerCase();
+    if (!h || h === selfHost || h.endsWith("." + selfHost) || selfHost.endsWith("." + h)) {
+      return { source: "direct", referer: "" };
+    }
+    const SEARCH = ["google.", "bing.", "baidu.", "sogou.", "duckduckgo", "yandex.", "so.com", "360.cn", "sm.cn", "ecosia", "naver.", "toutiao."];
+    const SOCIAL = ["weibo.", "zhihu.", "twitter.", "x.com", "t.co", "facebook.", "linkedin.", "weixin.", "wechat.", "qq.com", "douyin.", "xiaohongshu.", "bilibili.", "reddit.", "telegram.", "juejin.", "csdn."];
+    let source = "external";
+    if (SEARCH.some((k) => h.includes(k))) source = "search";
+    else if (SOCIAL.some((k) => h === k || h.endsWith("." + k) || h.includes(k))) source = "social";
+    return { source, referer: h };
+  } catch {
+    return { source: "direct", referer: "" };
+  }
+}
+async function visitorHash(seed: string): Promise<string> {
+  try {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(seed));
+    return Array.from(new Uint8Array(buf).slice(0, 8)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return "";
+  }
+}
+
 // 根据 settings.cache_ttl 生成 Cache-Control：0 或空 → no-store；>0 → public, max-age=秒
 function cacheControlHeader(settings: Record<string, string>): string {
   const ttl = parseInt(settings.cache_ttl || "", 10);
@@ -952,6 +987,10 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       "extra_head",
       "stats_code",
       "motion_level",
+      // —— 文章页作者名片（C 组） ——
+      "author_name",
+      "author_bio",
+      "author_avatar",
     ]) {
       if (body[k] !== undefined && body[k] !== null) clean[k] = String(body[k]);
     }
@@ -1180,6 +1219,19 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     }
   }
 
+  /* ── 访问趋势（管理员）：按天/设备/来源/落地页筛选，空数据回退 views_daily ── */
+  if (method === "GET" && seg.length === 3 && seg[1] === "admin" && seg[2] === "traffic") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const q = new URL(req.url).searchParams;
+    const data = await getTrafficStats(env.DB, {
+      days: Number(q.get("days")) || 30,
+      device: q.get("device") || "",
+      source: q.get("source") || "",
+      slug: q.get("slug") || "",
+    });
+    return json(data);
+  }
+
   /* ── 系统状态（管理员）：各表行数 / 存储用量 / 关键开关 ─────────────── */
   if (method === "GET" && seg.length === 3 && seg[1] === "admin" && seg[2] === "system") {
     if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
@@ -1189,7 +1241,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
         return Number(r?.n) || 0;
       } catch { return -1; }
     };
-    const names = ["posts", "comments", "users", "sessions", "audit_log", "search_log", "post_revisions", "tag_aliases", "login_attempts", "referer_daily"];
+    const names = ["posts", "comments", "users", "sessions", "audit_log", "search_log", "post_revisions", "tag_aliases", "login_attempts", "referer_daily", "views_daily", "visit_log"];
     const tables: Record<string, number> = {};
     for (const t of names) tables[t] = await countOf(t);
 
@@ -1519,10 +1571,27 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const slug = (body.slug || "").toString().trim();
     if (!slug) return json({ error: "缺少 slug" }, 400);
     await env.DB.prepare("UPDATE posts SET views = views + 1 WHERE slug = ? AND visibility = 'public'").bind(slug).run();
+    const now = Date.now();
+    const day = new Date(now).toISOString().slice(0, 10);
     // 同步累加每日访问量（兜底：表不存在时忽略）
     try {
-      const day = new Date().toISOString().slice(0, 10);
       await env.DB.prepare("INSERT INTO views_daily (day, views) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET views = views + 1").bind(day).run();
+    } catch {}
+    // 访问明细：供后台按来源 / 设备 / 落地页筛选趋势
+    try {
+      const ua = req.headers.get("user-agent") || "";
+      const selfHost = new URL(req.url).hostname.toLowerCase();
+      const { source, referer } = classifySource(req.headers.get("referer") || "", selfHost);
+      const visitor = await visitorHash((req.headers.get("cf-connecting-ip") || "") + "|" + ua);
+      await env.DB
+        .prepare("INSERT INTO visit_log (day, ts, slug, path, device, source, referer, visitor) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(day, now, slug, String(body.path || "").slice(0, 200), classifyDevice(ua), source, referer, visitor)
+        .run();
+      // 低频清理：只保留最近 180 天明细，避免 D1 无限增长
+      if (Math.random() < 0.01) {
+        await env.DB.prepare("DELETE FROM visit_log WHERE day < ?")
+          .bind(new Date(now - 180 * 86400000).toISOString().slice(0, 10)).run();
+      }
     } catch {}
     const r = (await env.DB.prepare("SELECT views FROM posts WHERE slug = ?").bind(slug).first()) as any;
     return json({ views: r ? Number(r.views) || 0 : 0 });
@@ -2038,6 +2107,15 @@ export default {
           "CREATE TABLE IF NOT EXISTS search_log (id INTEGER PRIMARY KEY AUTOINCREMENT, keyword TEXT NOT NULL, hits INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);" +
           "CREATE INDEX IF NOT EXISTS idx_search_kw ON search_log (keyword, created_at DESC);" +
           "CREATE TABLE IF NOT EXISTS tag_aliases (alias TEXT PRIMARY KEY, target TEXT NOT NULL, created_at INTEGER NOT NULL);"
+        );
+      } catch {}
+      // v3.3 访问明细（与 0014 迁移等价，幂等）：支撑后台按设备/来源/落地页筛选趋势
+      try {
+        await env.DB.exec(
+          "CREATE TABLE IF NOT EXISTS visit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT NOT NULL, ts INTEGER NOT NULL, slug TEXT NOT NULL DEFAULT '', path TEXT NOT NULL DEFAULT '', device TEXT NOT NULL DEFAULT 'desktop', source TEXT NOT NULL DEFAULT 'direct', referer TEXT NOT NULL DEFAULT '', visitor TEXT NOT NULL DEFAULT '');" +
+          "CREATE INDEX IF NOT EXISTS idx_visit_day ON visit_log (day);" +
+          "CREATE INDEX IF NOT EXISTS idx_visit_ts ON visit_log (ts DESC);" +
+          "CREATE INDEX IF NOT EXISTS idx_visit_slug ON visit_log (slug, day);"
         );
       } catch {}
       try {

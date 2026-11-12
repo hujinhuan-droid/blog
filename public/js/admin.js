@@ -2031,6 +2031,21 @@ async function renderSettings() {
       <p class="set-hint">关闭时不生效；开启后登录成功会立即清零计数。</p>
     </fieldset>
 
+    <fieldset class="set-group">
+      <legend>⑭ 作者名片</legend>
+      <p class="muted">显示在文章页右侧栏（小屏显示在正文末尾）。留空时自动回退到站点名称、站点 Logo 与关于页内容。</p>
+      <label style="margin-top:12px">显示名称</label>
+      <input type="text" id="s-author_name" value="${escHtml(s.author_name || "")}" placeholder="留空则使用站点名称" />
+      <label style="margin-top:12px">一句话简介</label>
+      <input type="text" id="s-author_bio" value="${escHtml(s.author_bio || "")}" placeholder="记录 AI Agent 的探索、实践与思考" />
+      <label style="margin-top:12px">头像地址</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="s-author_avatar" value="${escHtml(s.author_avatar || "")}" placeholder="/api/files/images/avatar.png 或 https://..." style="flex:1;min-width:200px" />
+        <label class="btn btn-sm" style="cursor:pointer">上传<input type="file" id="author-avatar-upload" accept="image/*" style="display:none" /></label>
+      </div>
+      <p class="set-hint">建议使用正方形图片；未设置时使用站点 Logo，都没有则自动生成文字头像。</p>
+    </fieldset>
+
     <div style="margin-top:18px;display:flex;gap:10px;align-items:center">
       <button class="btn btn-primary" id="save-settings">保存设置</button>
       <span id="settings-msg" class="muted"></span>
@@ -2189,6 +2204,24 @@ async function renderSettings() {
     }
   };
 
+  // 作者头像上传（同上），填入 URL 后仍需点「保存设置」
+  const avatarInput = document.getElementById("author-avatar-upload");
+  if (avatarInput) avatarInput.onchange = async () => {
+    const f = avatarInput.files[0];
+    if (!f) return;
+    try {
+      const data = await fileToBase64(f);
+      const r = await api("/upload", { method: "POST", body: JSON.stringify({ name: f.name, type: f.type, data }) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.url) {
+        document.getElementById("s-author_avatar").value = d.url;
+        toast("头像已上传，记得点保存设置");
+      } else toast(d.error || "上传失败");
+    } catch {
+      toast("上传失败");
+    }
+  };
+
   document.getElementById("save-settings").onclick = async () => {
     const payload = {
       site_title: document.getElementById("s-site_title").value.trim(),
@@ -2237,6 +2270,9 @@ async function renderSettings() {
       extra_head: document.getElementById("s-extra_head").value,
       stats_code: document.getElementById("s-stats_code").value,
       motion_level: document.getElementById("s-motion_level").value || "auto",
+      author_name: document.getElementById("s-author_name").value.trim(),
+      author_bio: document.getElementById("s-author_bio").value.trim(),
+      author_avatar: document.getElementById("s-author_avatar").value.trim(),
     };
     const res = await api("/settings", { method: "PUT", body: JSON.stringify(payload) });
     const r = await res.json().catch(() => ({}));
@@ -2480,14 +2516,151 @@ async function renderTrash() {
 }
 
 // ───────────────────────── 数据分析 ─────────────────────────
+const DEVICE_LABEL = { desktop: "桌面端", mobile: "手机", tablet: "平板", bot: "爬虫 / 机器人", unknown: "未知" };
+const SOURCE_LABEL = { direct: "直接访问", search: "搜索引擎", social: "社交媒体", external: "外部链接", unknown: "未知" };
+const TRAFFIC_STATE = { days: 30, device: "", source: "", slug: "" };
+let TRAFFIC_DATA = null;
+
+/** 拉取流量数据；full=true 时连筛选工具条一起重绘（选项依赖时间范围） */
+async function refreshTraffic(box, full) {
+  const q = new URLSearchParams({ days: String(TRAFFIC_STATE.days) });
+  if (TRAFFIC_STATE.device) q.set("device", TRAFFIC_STATE.device);
+  if (TRAFFIC_STATE.source) q.set("source", TRAFFIC_STATE.source);
+  if (TRAFFIC_STATE.slug) q.set("slug", TRAFFIC_STATE.slug);
+  let d = null;
+  try {
+    const r = await api("/admin/traffic?" + q.toString());
+    if (r.ok) d = await r.json();
+  } catch {}
+  TRAFFIC_DATA = d;
+  if (full || !box.querySelector("#tf-body")) drawTrafficPanel(box);
+  else drawTrafficBody(box.querySelector("#tf-body"));
+}
+
+function tfOptions(arr, cur, allLabel, labelFn) {
+  return `<option value="">${allLabel}</option>` + (arr || [])
+    .map((v) => {
+      const value = typeof v === "string" ? v : v.slug;
+      const text = labelFn ? labelFn(v) : value;
+      return `<option value="${escHtml(value)}"${String(value) === String(cur) ? " selected" : ""}>${escHtml(text)}</option>`;
+    }).join("");
+}
+
+function drawTrafficPanel(box) {
+  const d = TRAFFIC_DATA;
+  if (!d) {
+    box.innerHTML = `<section class="plus-card"><h2 class="plus-h2">访问趋势</h2><div class="empty">加载失败，请刷新重试</div></section>`;
+    return;
+  }
+  const s = TRAFFIC_STATE;
+  const opts = d.options || { devices: [], sources: [], slugs: [] };
+  box.innerHTML = `
+    <section class="plus-card tf-card">
+      <div class="tf-head">
+        <div><h2 class="plus-h2">📈 访问趋势</h2><p class="muted">按设备 / 来源 / 落地页筛选，PV 为文章页阅读上报，UV 按访客哈希去重</p></div>
+        <div class="tf-toolbar">
+          <select id="tf-days" class="plus-input" aria-label="时间范围">
+            ${[7, 30, 90, 365].map((n) => `<option value="${n}"${s.days === n ? " selected" : ""}>近 ${n} 天</option>`).join("")}
+          </select>
+          <select id="tf-device" class="plus-input" aria-label="设备">${tfOptions(opts.devices, s.device, "全部设备", (v) => DEVICE_LABEL[v] || v)}</select>
+          <select id="tf-source" class="plus-input" aria-label="来源">${tfOptions(opts.sources, s.source, "全部来源", (v) => SOURCE_LABEL[v] || v)}</select>
+          <select id="tf-slug" class="plus-input" aria-label="落地页">${tfOptions(opts.slugs, s.slug, "全部文章", (v) => (v.title || v.slug || "").slice(0, 28))}</select>
+          <button type="button" class="btn btn-sm" id="tf-reset">重置</button>
+        </div>
+      </div>
+      <div id="tf-body"></div>
+    </section>`;
+
+  ["tf-days", "tf-device", "tf-source", "tf-slug"].forEach((id) => {
+    const sel = box.querySelector("#" + id);
+    if (!sel) return;
+    sel.onchange = () => {
+      const v = sel.value;
+      if (id === "tf-days") TRAFFIC_STATE.days = Number(v) || 30;
+      else if (id === "tf-device") TRAFFIC_STATE.device = v;
+      else if (id === "tf-source") TRAFFIC_STATE.source = v;
+      else TRAFFIC_STATE.slug = v;
+      refreshTraffic(box, id === "tf-days");
+    };
+  });
+  const reset = box.querySelector("#tf-reset");
+  if (reset) reset.onclick = () => {
+    Object.assign(TRAFFIC_STATE, { days: 30, device: "", source: "", slug: "" });
+    refreshTraffic(box, true);
+  };
+  drawTrafficBody(box.querySelector("#tf-body"));
+}
+
+function tfDist(title, rows, labelFn, onPick) {
+  const max = Math.max(1, ...(rows || []).map((x) => Number(x.cnt) || 0));
+  const body = rows && rows.length
+    ? (rows).map((x) => {
+        const pct = Math.round(((Number(x.cnt) || 0) / max) * 100);
+        const key = onPick ? ` data-pick="${escHtml(x.slug)}"` : "";
+        const label = labelFn(x);
+        return `<div class="tf-row"${key} title="${escHtml(label)}：${x.cnt} 次">
+          <span class="tf-label">${escHtml(label)}</span>
+          <span class="tf-track"><i style="width:${pct}%"></i></span>
+          <b>${x.cnt}</b>
+        </div>`;
+      }).join("")
+    : plusEmpty("暂无数据");
+  return `<div class="tf-dist"><h3>${title}</h3>${body}</div>`;
+}
+
+function drawTrafficBody(body) {
+  const d = TRAFFIC_DATA;
+  if (!d || !body) return;
+  const series = d.series || [];
+  const maxPv = Math.max(1, ...series.map((x) => Number(x.pv) || 0));
+  const step = d.days <= 14 ? 2 : d.days <= 60 ? 5 : 15;
+  const bars = series.map((x, i) => {
+    const pv = Number(x.pv) || 0;
+    const h = pv > 0 ? Math.max(4, Math.round((pv / maxPv) * 100)) : 0;
+    return `<div class="ss-bar${pv ? "" : " is-zero"}" title="${escHtml(x.day)}：${pv} 次浏览 · ${x.uv} 位访客">
+      <span class="ss-bar-val">${d.days <= 30 && pv > 0 ? pv : ""}</span>
+      <i style="height:${h}%"></i>
+      <b>${i % step === 0 || i === series.length - 1 ? escHtml(x.day.slice(5)) : ""}</b>
+    </div>`;
+  }).join("");
+
+  body.innerHTML = `
+    ${d.legacy ? `<p class="plus-note">当前展示的是上线前的按天汇总数据，暂无设备 / 来源 / 落地页维度；新的访问明细会在读者打开文章后逐步积累。</p>` : ""}
+    <div class="plus-stats">
+      <div class="plus-stat"><b>${d.total || 0}</b><span>浏览量 PV</span></div>
+      <div class="plus-stat"><b>${d.unique || 0}</b><span>独立访客 UV</span></div>
+      <div class="plus-stat"><b>${d.activeDays || 0}</b><span>有访问天数</span></div>
+      <div class="plus-stat"><b>${d.peak || 0}</b><span>单日峰值</span></div>
+    </div>
+    <h3 class="tf-h3">每日浏览趋势${d.days > 30 ? "（可横向滚动）" : ""}</h3>
+    <div class="tf-chart"><div class="ss-chart" style="${d.days > 30 ? `min-width:${d.days * 15}px` : ""}">${bars}</div></div>
+    <div class="tf-grid">
+      ${tfDist("设备分布", d.devices, (x) => DEVICE_LABEL[x.name] || x.name)}
+      ${tfDist("来源分布", d.sources, (x) => SOURCE_LABEL[x.name] || x.name)}
+      ${tfDist("落地页 TOP 12", d.landing, (x) => (x.title || x.slug || "").slice(0, 24), true)}
+    </div>`;
+
+  body.querySelectorAll("[data-pick]").forEach((row) => {
+    row.style.cursor = "pointer";
+    row.onclick = () => {
+      TRAFFIC_STATE.slug = row.dataset.pick;
+      const box = body.closest(".tf-card");
+      if (box) refreshTraffic(box, true);
+    };
+  });
+}
+
 async function renderAnalytics() {
   const app = adminMain();
   setTitle("数据分析");
   app.innerHTML = `<div class="empty">加载中…</div>`;
-  const data = await (await api("/analytics")).json();
+  const aRes = await api("/analytics");
+  const data = aRes.ok ? await aRes.json() : {};
   const wrap = el(`<div class="dash"></div>`);
   wrap.innerHTML = `<div class="dash-head"><div><h1 class="dash-title">数据分析</h1>
-    <p class="dash-sub">热门文章 · 流量来源 · 收录推送</p></div></div>`;
+    <p class="dash-sub">访问趋势 · 热门文章 · 流量来源 · 收录推送</p></div></div>`;
+  const trafficBox = el(`<div id="trafficBox"><section class="plus-card"><div class="empty">正在加载访问趋势…</div></section></div>`);
+  wrap.appendChild(trafficBox);
 
   const popular = data.popular || [];
   const referers = data.referers || [];
@@ -2518,6 +2691,7 @@ async function renderAnalytics() {
 
   app.innerHTML = "";
   app.appendChild(wrap);
+  await refreshTraffic(trafficBox, true);
 }
 
 // ───────────────────────── 审计日志 ─────────────────────────

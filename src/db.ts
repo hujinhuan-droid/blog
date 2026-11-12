@@ -401,6 +401,10 @@ export const SETTING_KEYS = [
   "extra_head",
   "stats_code",
   "motion_level",
+  // —— 文章页作者名片（C 组） ——
+  "author_name",
+  "author_bio",
+  "author_avatar",
 ] as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -922,4 +926,154 @@ export async function getTagAliases(db: DB): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
   for (const r of (results || []) as any[]) map[r.alias] = r.target;
   return map;
+}
+
+// ───────────────────────── 访问趋势分析 ─────────────────────────
+export interface TrafficOptions {
+  days?: number;
+  device?: string;
+  source?: string;
+  slug?: string;
+}
+
+export interface TrafficResult {
+  days: number;
+  from: string;
+  legacy: boolean; // 明细表尚无数据时，趋势回退到 views_daily 汇总
+  total: number;   // 筛选后的 PV
+  unique: number;  // 筛选后的 UV
+  peak: number;    // 单日最高 PV
+  avg: number;     // 日均 PV（按所选时间范围）
+  activeDays: number; // 有访问的天数
+  series: Array<{ day: string; pv: number; uv: number }>;
+  devices: Array<{ name: string; cnt: number }>;
+  sources: Array<{ name: string; cnt: number }>;
+  landing: Array<{ slug: string; title: string; cnt: number }>;
+  options: {
+    devices: string[];
+    sources: string[];
+    slugs: Array<{ slug: string; title: string }>;
+  };
+}
+
+/**
+ * 按天 + 设备 + 来源 + 落地页聚合访问明细。
+ * 所有筛选值走参数绑定，避免 SQL 注入；分布统计忽略「自身维度」的筛选，
+ * 这样选中某设备后仍能看到完整的设备占比，方便直接切换。
+ */
+export async function getTrafficStats(db: DB, opts: TrafficOptions = {}): Promise<TrafficResult> {
+  const allowed = [7, 30, 90, 365];
+  const days = allowed.includes(Number(opts.days)) ? Number(opts.days) : 30;
+  const from = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const device = String(opts.device || "").trim();
+  const source = String(opts.source || "").trim();
+  const slug = String(opts.slug || "").trim();
+
+  const base: any[] = [from];
+  const build = (skip: "" | "device" | "source" | "slug" = "", alias = "") => {
+    const p = alias ? alias + "." : "";
+    const w = [`${p}day >= ?`];
+    const a: any[] = [...base];
+    if (device && skip !== "device") { w.push(`${p}device = ?`); a.push(device); }
+    if (source && skip !== "source") { w.push(`${p}source = ?`); a.push(source); }
+    if (slug && skip !== "slug") { w.push(`${p}slug = ?`); a.push(slug); }
+    return { sql: w.join(" AND "), args: a };
+  };
+
+  const empty = (): TrafficResult => ({
+    days, from, legacy: false, total: 0, unique: 0, peak: 0, avg: 0, activeDays: 0,
+    series: [], devices: [], sources: [], landing: [],
+    options: { devices: [], sources: [], slugs: [] },
+  });
+
+  let out: TrafficResult;
+  try {
+    const anyRow = (await db.prepare("SELECT COUNT(*) AS n FROM visit_log WHERE day >= ?").bind(from).first()) as any;
+    if (!Number(anyRow?.n)) {
+      // 新埋点上线前的历史汇总数据（只有按天总量，没有维度）
+      out = empty();
+      out.legacy = true;
+      const { results: legacyRows } = await db
+        .prepare("SELECT day, views FROM views_daily WHERE day >= ? ORDER BY day")
+        .bind(from).all();
+      const legacyMap = new Map<string, number>();
+      for (const r of (legacyRows || []) as any[]) legacyMap.set(String(r.day), Number(r.views) || 0);
+      out.series = fillDays(days).map((d) => ({ day: d, pv: legacyMap.get(d) || 0, uv: 0 }));
+      out.total = out.series.reduce((s, x) => s + x.pv, 0);
+      out.peak = Math.max(0, ...out.series.map((x) => x.pv));
+      out.avg = Math.round(out.total / days);
+      out.activeDays = out.series.filter((x) => x.pv > 0).length;
+      return out;
+    }
+
+    const main = build();
+    const sum = (await db
+      .prepare(`SELECT COUNT(*) AS pv, COUNT(DISTINCT NULLIF(visitor,'')) AS uv FROM visit_log WHERE ${main.sql}`)
+      .bind(...main.args).first()) as any;
+
+    const { results: dayRows } = await db
+      .prepare(`SELECT day, COUNT(*) AS pv, COUNT(DISTINCT NULLIF(visitor,'')) AS uv FROM visit_log WHERE ${main.sql} GROUP BY day ORDER BY day`)
+      .bind(...main.args).all();
+    const dayMap = new Map<string, { pv: number; uv: number }>();
+    for (const r of (dayRows || []) as any[]) {
+      dayMap.set(String(r.day), { pv: Number(r.pv) || 0, uv: Number(r.uv) || 0 });
+    }
+    const series = fillDays(days).map((d) => ({ day: d, ...(dayMap.get(d) || { pv: 0, uv: 0 }) }));
+
+    const dist = async (col: "device" | "source", skip: "device" | "source") => {
+      const q = build(skip);
+      const { results } = await db
+        .prepare(`SELECT ${col} AS name, COUNT(*) AS cnt FROM visit_log WHERE ${q.sql} GROUP BY ${col} ORDER BY cnt DESC LIMIT 12`)
+        .bind(...q.args).all();
+      return ((results || []) as any[]).map((r) => ({ name: String(r.name || "unknown"), cnt: Number(r.cnt) || 0 }));
+    };
+
+    const qLanding = build("slug", "v");
+    const { results: landRows } = await db
+      .prepare(`SELECT v.slug AS slug, COALESCE(p.title, v.slug) AS title, COUNT(*) AS cnt
+                FROM visit_log v LEFT JOIN posts p ON p.slug = v.slug
+                WHERE ${qLanding.sql} AND v.slug <> '' GROUP BY v.slug ORDER BY cnt DESC LIMIT 12`)
+      .bind(...qLanding.args).all();
+
+    // 筛选项：只受时间范围影响，不受当前其它筛选影响
+    const { results: optDev } = await db.prepare("SELECT DISTINCT device FROM visit_log WHERE day >= ?").bind(from).all();
+    const { results: optSrc } = await db.prepare("SELECT DISTINCT source FROM visit_log WHERE day >= ?").bind(from).all();
+    const { results: optSlug } = await db
+      .prepare(`SELECT v.slug AS slug, COALESCE(p.title, v.slug) AS title, COUNT(*) AS cnt
+                FROM visit_log v LEFT JOIN posts p ON p.slug = v.slug
+                WHERE v.day >= ? AND v.slug <> '' GROUP BY v.slug ORDER BY cnt DESC LIMIT 100`)
+      .bind(from).all();
+
+    const total = Number(sum?.pv) || 0;
+    out = {
+      days, from, legacy: false,
+      total,
+      unique: Number(sum?.uv) || 0,
+      peak: Math.max(0, ...series.map((x) => x.pv)),
+      avg: Math.round(total / days),
+      activeDays: series.filter((x) => x.pv > 0).length,
+      series,
+      devices: await dist("device", "device"),
+      sources: await dist("source", "source"),
+      landing: ((landRows || []) as any[]).map((r) => ({
+        slug: String(r.slug || ""), title: String(r.title || r.slug || ""), cnt: Number(r.cnt) || 0,
+      })),
+      options: {
+        devices: ((optDev || []) as any[]).map((r) => String(r.device || "")).filter(Boolean),
+        sources: ((optSrc || []) as any[]).map((r) => String(r.source || "")).filter(Boolean),
+        slugs: ((optSlug || []) as any[]).map((r) => ({ slug: String(r.slug || ""), title: String(r.title || "") })),
+      },
+    };
+    return out;
+  } catch {
+    // 表缺失等异常时降级为空数据，不影响后台其它页面
+    return empty();
+  }
+}
+
+function fillDays(days: number): string[] {
+  const out: string[] = [];
+  const now = Date.now();
+  for (let i = days - 1; i >= 0; i--) out.push(new Date(now - i * 86400000).toISOString().slice(0, 10));
+  return out;
 }

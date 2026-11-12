@@ -985,8 +985,9 @@ async function renderPost(slug) {
       <div class="content" id="postContent">${renderMarkdown(p.content, { toc: false })}</div>
       ${aiNotesHtml(p.ai_notes)}
       ${tagsHtml(p)}
+      ${articleEndCardHtml(p)}
     </div>
-    <aside class="article-toc" id="articleToc" aria-label="文章目录"></aside>`;
+    <aside class="article-toc" id="articleToc" aria-label="文章目录与文章信息"></aside>`;
   app.innerHTML = "";
   app.appendChild(detail);
   // 正文常以「# 标题」开头，会与文章页 H1 重复：内容首行 H1 与标题一致时去掉，避免标题出现两次
@@ -994,7 +995,8 @@ async function renderPost(slug) {
   const firstH1 = bodyEl && bodyEl.querySelector("h1");
   if (firstH1 && firstH1.textContent.trim() === String(p.title || "").trim()) firstH1.remove();
   window.highlightCode(detail);
-  buildArticleNav(detail);
+  buildArticleNav(detail, p);
+  bindRailShare(detail, p);
   bindCoverDepth(detail);
   reportView(p.slug);
   loadReactions(p.slug);
@@ -1052,17 +1054,84 @@ function stopArticleNav() {
   ARTICLE_NAV = null;
 }
 
-function buildArticleNav(detail) {
+// ── 文章侧栏附加卡：作者名片 / 本文标签 / 分享按钮组 ─────────────────
+function stripText(s) {
+  return String(s || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+}
+function safeAvatar(u) {
+  const v = String(u || "").trim();
+  return /^(https?:\/\/|\/)/i.test(v) ? v : "";
+}
+function shareUrlOf(p) {
+  return location.origin + "/post/" + encodeURIComponent(p.slug);
+}
+function authorCardHtml() {
+  const s = SITE_SETTINGS || {};
+  const name = stripText(s.author_name) || stripText(s.site_title) || "博主";
+  const raw = stripText(s.author_bio) || stripText(s.about_content);
+  const bio = raw.length > 64 ? raw.slice(0, 64) + "…" : raw;
+  const avatar = safeAvatar(s.author_avatar || s.site_logo);
+  return `<div class="rail-sec rail-author">
+      <div class="rail-avatar">${avatar
+        ? `<img src="${escHtml(avatar)}" alt="" loading="lazy" />`
+        : `<span>${escHtml(name.slice(0, 1).toUpperCase())}</span>`}</div>
+      <div class="rail-author-txt"><b>${escHtml(name)}</b>${bio ? `<span>${escHtml(bio)}</span>` : ""}</div>
+    </div>
+    <a class="rail-about" href="#/about">关于我 <span aria-hidden="true">↗</span></a>`;
+}
+function railTagsHtml(p) {
+  const tags = parseTags(p && p.tags).slice(0, 8);
+  if (!tags.length) return "";
+  return `<div class="rail-sec rail-tags"><h4>本文标签</h4><div class="rail-chips">${tags
+    .map((x) => `<a href="#/tags/${encodeURIComponent(x)}">${escHtml(x)}</a>`)
+    .join("")}</div></div>`;
+}
+function railShareHtml(p) {
+  const u = encodeURIComponent(shareUrlOf(p));
+  const text = encodeURIComponent(String(p.title || "").slice(0, 80));
+  return `<div class="rail-sec rail-share"><h4>分享本文</h4><div class="rail-share-grid">
+      <button type="button" class="rail-share-btn" data-share="copy"><span data-copy-label>复制链接</span></button>
+      <a class="rail-share-btn" target="_blank" rel="noopener noreferrer" href="https://service.weibo.com/share/share.php?title=${text}&url=${u}">微博</a>
+      <a class="rail-share-btn" target="_blank" rel="noopener noreferrer" href="https://twitter.com/intent/tweet?text=${text}&url=${u}">X</a>
+      <a class="rail-share-btn" target="_blank" rel="noopener noreferrer" href="https://t.me/share/url?url=${u}&text=${text}">Telegram</a>
+    </div></div>`;
+}
+function railExtraHtml(p) {
+  return `<div class="rail-extra">${authorCardHtml()}${railTagsHtml(p)}${railShareHtml(p)}</div>`;
+}
+// 小屏没有右侧栏，改为正文末尾的一张卡，保证作者与分享入口不丢失
+function articleEndCardHtml(p) {
+  return `<div class="article-endcard">${authorCardHtml()}${railShareHtml(p)}</div>`;
+}
+function bindRailShare(root, p) {
+  const url = shareUrlOf(p);
+  root.querySelectorAll("[data-share='copy']").forEach((btn) => {
+    btn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(url);
+        const label = btn.querySelector("[data-copy-label]");
+        if (label) {
+          label.textContent = "已复制";
+          setTimeout(() => { label.textContent = "复制链接"; }, 1800);
+        }
+        toast("链接已复制，可分享到微信 / QQ");
+      } catch { toast(url); }
+    };
+  });
+}
+
+function buildArticleNav(detail, p) {
   const content = detail.querySelector("#postContent");
   const aside = detail.querySelector("#articleToc");
   const inline = detail.querySelector("#tocInline");
   if (!content || !aside) return;
 
   const heads = Array.from(content.querySelectorAll("h2, h3")).filter((h) => h.textContent.trim().length > 1);
-  // 少于 2 个章节的短文不需要目录，直接移除占位，保持版面干净
+  // 少于 2 个章节的短文不显示目录，但保留作者名片 / 标签 / 分享
   if (heads.length < 2) {
-    aside.remove();
     if (inline) inline.remove();
+    aside.classList.add("no-toc");
+    aside.innerHTML = railExtraHtml(p);
     return;
   }
 
@@ -1082,7 +1151,8 @@ function buildArticleNav(detail) {
       <span class="toc-ring" id="tocRing" style="--p:0" aria-hidden="true"><b>0</b></span>
     </div>
     ${listHtml}
-    <div class="toc-foot"><span id="tocNow">共 ${items.length} 节</span></div>`;
+    <div class="toc-foot"><span id="tocNow">共 ${items.length} 节</span></div>
+    ${railExtraHtml(p)}`;
 
   // 小屏：正文上方折叠目录（与侧栏共用同一份锚点）
   if (inline) {
@@ -1220,7 +1290,7 @@ function reportView(slug) {
     if (sessionStorage.getItem(k)) return;
     sessionStorage.setItem(k, "1");
   } catch {}
-  api("/view", { method: "POST", body: JSON.stringify({ slug }) })
+  api("/view", { method: "POST", body: JSON.stringify({ slug, path: location.pathname + location.hash }) })
     .then((r) => r.json())
     .then((d) => {
       const elv = document.getElementById("postViews");
