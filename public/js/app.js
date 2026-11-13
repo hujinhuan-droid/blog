@@ -996,7 +996,7 @@ async function renderPost(slug) {
   // 封面：有 cover 时渲染可视差的 3D 画框（无 cover 则整篇纯排版，不加装饰）
   const coverHtml = p.cover
     ? `<figure class="article-cover" data-cover>
-        <img src="${escHtml(p.cover)}" alt="${escHtml(p.title)}" loading="eager" decoding="async" />
+        <img src="${escHtml(p.cover)}" alt="${escHtml(p.title)}" loading="eager" fetchpriority="high" decoding="async" />
         <span class="cover-sheen" aria-hidden="true"></span>
       </figure>`
     : "";

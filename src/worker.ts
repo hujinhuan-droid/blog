@@ -476,7 +476,7 @@ function escHtmlS(s: string): string {
 function inlineMdS(text: string): string {
   let s = escHtmlS(text);
   s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
-  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img alt="${alt}" src="${url}" />`);
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img alt="${alt}" src="${url}" loading="lazy" decoding="async" />`);
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, url) => `<a href="${url}" target="_blank" rel="noopener">${t}</a>`);
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
@@ -860,7 +860,7 @@ async function prerenderPost(env: Env, slug: string, req: Request): Promise<Resp
   })}</script>` + breadcrumbLd;
   // 预渲染页（爬虫 / 社交抓取）同样展示封面，保证无 JS 时也有完整视觉
   const coverFig = row.cover
-    ? `<figure class="article-cover"><img src="${escHtmlS(absUrl(row.cover, base))}" alt="${escHtmlS(row.title)}" loading="lazy" /></figure>`
+    ? `<figure class="article-cover"><img src="${escHtmlS(absUrl(row.cover, base))}" alt="${escHtmlS(row.title)}" loading="eager" fetchpriority="high" decoding="async" /></figure>`
     : "";
   const body = `<div class="post-detail">
   <div class="article-stage">

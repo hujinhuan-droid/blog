@@ -317,7 +317,7 @@ body.dark .post-card.featured {
 .post-detail .content hr { border: none; border-top: 1px solid var(--border); margin: 2.2em 0; }
 .post-detail .content strong { color: var(--text); font-weight: 700; }
 
-.post-detail img { max-width: 100%; border-radius: 10px; margin: 1.2em 0; }
+.post-detail img { max-width: 100%; height: auto; border-radius: 10px; margin: 1.2em 0; }
 .post-detail pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 10px; overflow: auto; }
 .post-detail code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; font-size: 13.5px; }
 .post-detail :not(pre) > code {

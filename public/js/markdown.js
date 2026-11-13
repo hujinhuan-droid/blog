@@ -9,8 +9,8 @@ function inlineMd(text) {
   let s = escapeHtml(text);
   // 行内代码
   s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
-  // 图片 ![alt](url)
-  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img alt="${alt}" src="${url}" />`);
+  // 图片 ![alt](url)：首屏外的图懒加载 + 异步解码，减少首屏请求、保护 LCP
+  s = s.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => `<img alt="${alt}" src="${url}" loading="lazy" decoding="async" />`);
   // 链接 [text](url)
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, t, url) => `<a href="${url}" target="_blank" rel="noopener">${t}</a>`);
   // 粗体
