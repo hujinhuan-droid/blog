@@ -941,38 +941,58 @@ async function handleFeed(env: Env, req: Request): Promise<Response> {
   try { settings = await getSettings(env.DB); } catch {}
   const posts = await listPosts(env.DB, { admin: false });
   const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+  const feedUrl = `${base}/feed.xml`;
   // RSS 配置（设置页 ⑪）：标题默认站点名；条目数默认 50；rss_full=1 时输出全文而非摘要
   const feedTitle = settings.rss_title || settings.site_title || "AI Agent Blog";
   const feedDesc = settings.seo_description || settings.about_content || "AI Agent 博客";
   const count = Math.max(1, Math.min(200, parseInt(settings.rss_count || "", 10) || 50));
   const full = settings.rss_full === "1";
+  const channelImage = absUrl(settings.og_image, base) || `${base}/og-default.png`;
   const items = posts
     .slice(0, count)
     .map((p: any) => {
       const link = `${base}/post/${encodeURIComponent(p.slug)}`;
-      const excerpt = (p.excerpt || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const body = (p.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-      const desc = full ? body : excerpt;
+      const cover = absUrl(p.cover, base) || `${base}/og-default.png`;
+      const rawDesc = full ? (p.content || "") : (p.excerpt || "");
+      const desc = escXml(rawDesc);
+      const cats = (parseTags(p.tags) as string[])
+        .map((t) => `      <category>${escXml(t)}</category>`)
+        .join("\n");
       return `    <item>
       <title>${escXml(p.title)}</title>
       <link>${link}</link>
-      <guid>${link}</guid>
+      <guid isPermaLink="true">${link}</guid>
       <pubDate>${new Date(p.created_at).toUTCString()}</pubDate>
       <description>${desc}</description>
+      <image>${escXml(cover)}</image>
+      <media:thumbnail url="${escXml(cover)}" />
+${cats}
     </item>`;
     })
     .join("\n");
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0">
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>${escXml(feedTitle)}</title>
     <link>${base}/</link>
+    <atom:link href="${feedUrl}" rel="self" type="application/rss+xml" />
     <description>${escXml(feedDesc)}</description>
     <language>zh-CN</language>
+    <image>
+      <url>${channelImage}</url>
+      <title>${escXml(feedTitle)}</title>
+      <link>${base}/</link>
+    </image>
 ${items}
   </channel>
 </rss>`;
-  return new Response(xml, { headers: { "content-type": "application/rss+xml; charset=utf-8" } });
+  return new Response(xml, {
+    headers: {
+      "content-type": "application/rss+xml; charset=utf-8",
+      "Cache-Control": "public, max-age=600, stale-while-revalidate=3600",
+      ...securityHeaders(),
+    },
+  });
 }
 
 // 站点地图（公开）
