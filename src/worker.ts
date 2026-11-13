@@ -704,8 +704,8 @@ function htmlDoc(opts: { title: string; description: string; head: string; body:
 <meta property="og:site_name" content="${escHtmlS(title)}" />
 ${ogImage}
 <meta name="twitter:card" content="summary_large_image" />
-<link rel="stylesheet" href="/css/style.css" />
-<link rel="stylesheet" href="/css/depth.css" />
+<link rel="stylesheet" href="/css/style.min.css" />
+<link rel="stylesheet" href="/css/depth.min.css" />
 ${customCss}
 ${head}${extraHead}
 </head>

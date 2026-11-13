@@ -10,6 +10,7 @@
 //   node tools/perf-audit.mjs --noproxy 1 --base http://127.0.0.1:8788 \
 //     --cases "new=_perf-new.html#/,old=_perf-old.html#/" --runs 3 --out perf.json
 //   node tools/perf-audit.mjs --cleanup
+// 可选 --throttle fast3g|slow3g：模拟弱网，量出传输字节数对 FCP/LCP 的真实影响
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,7 +18,11 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CHROME = process.env.CHROME || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-const VARIANTS = ["public/_perf-new.html", "public/_perf-old.html"];
+// 三组对照：
+//   _perf-new.html   当前版（引用 .min.* 产物）
+//   _perf-old.html   「优化前」结构（全量同步 JS、无 preload、未压缩）
+//   _perf-unmin.html 当前结构但引用源码版资源 → 与 new 对比可单独量出 minify 收益
+const VARIANTS = ["public/_perf-new.html", "public/_perf-old.html", "public/_perf-unmin.html"];
 
 function arg(name, def) {
   const i = process.argv.indexOf("--" + name);
@@ -34,9 +39,15 @@ if (has("prepare") || has("cleanup")) {
   }
   if (has("prepare")) {
     const src = fs.readFileSync(path.join(ROOT, "public/index.html"), "utf8");
+    // ① 当前版（min 产物）
     fs.writeFileSync(path.join(ROOT, VARIANTS[0]), src, "utf8");
-    // 「优化前」：移除所有 preload；图标换回全量 lucide；补回同步 highlight + admin
-    const old = src
+    // ② 仅去掉 minify：结构完全相同，资源换回源码版
+    const unmin = src
+      .replace(/\/css\/([a-z]+)\.min\.css/g, "/css/$1.css")
+      .replace(/\/js\/([a-z]+)\.min\.js/g, "/js/$1.js");
+    fs.writeFileSync(path.join(ROOT, VARIANTS[2]), unmin, "utf8");
+    // ③ 「优化前」：移除所有 preload；图标换回全量 lucide；补回同步 highlight + admin
+    const old = unmin
       .replace(/[ \t]*<link rel="preload"[^>]*\/>\r?\n?/g, "")
       .replace('<script src="/js/icons.js"></script>', '<script src="/vendor/lucide/lucide.min.js"></script>')
       .replace(
@@ -139,6 +150,12 @@ const SETTLE = Number(arg("settle", 4000));
 const OUT = arg("out", "");
 const W = Number(arg("w", 1440));
 const H = Number(arg("h", 1000));
+// 可选网络限速：本地 dev 带宽无限，传输体积差异体现不出来；限速后才能量出弱网下的真实收益
+const THROTTLE = arg("throttle", "");
+const NET_PRESETS = {
+  fast3g: { latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8, connectionType: "cellular3g" },
+  slow3g: { latency: 400, downloadThroughput: (400 * 1024) / 8, uploadThroughput: (400 * 1024) / 8, connectionType: "cellular2g" },
+};
 const cases = arg("cases", "").split(",").filter(Boolean).map((s) => {
   const i = s.indexOf("=");
   return { name: s.slice(0, i), path: s.slice(i + 1) };
@@ -212,6 +229,10 @@ try {
   await send("Runtime.enable");
   await send("Network.enable");
   await send("Network.setCacheDisabled", { cacheDisabled: true });
+  if (NET_PRESETS[THROTTLE]) {
+    await send("Network.emulateNetworkConditions", { offline: false, ...NET_PRESETS[THROTTLE] });
+    console.log(`[网络限速] ${THROTTLE}: ${(NET_PRESETS[THROTTLE].downloadThroughput / 1024).toFixed(0)} KB/s, RTT ${NET_PRESETS[THROTTLE].latency}ms`);
+  }
   await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false });
   await send("Page.addScriptToEvaluateOnNewDocument", { source: PROBE });
 
@@ -278,7 +299,7 @@ try {
 
   if (OUT) {
     fs.writeFileSync(path.resolve(OUT), JSON.stringify({
-      meta: { base: BASE, runs: RUNS, settle: SETTLE, viewport: [W, H], coldCache: true, hotChrome: true, swDisabled: true },
+      meta: { base: BASE, runs: RUNS, settle: SETTLE, viewport: [W, H], coldCache: true, hotChrome: true, swDisabled: true, throttle: THROTTLE || "off" },
       runs: all, summary,
     }, null, 2), "utf8");
     console.log("\n已写入 " + OUT);

@@ -1887,8 +1887,8 @@ function route() {
   const hash = location.hash || "#/";
   if (!hash.startsWith("#/admin")) document.body.classList.remove("admin-mode");
   if (hash.startsWith("#/admin")) {
-    // 管理后台脚本（约 159KB）仅后台需要，首次进入时按需加载，不再随读者首屏下载。
-    window.loadScriptOnce("/js/admin.js")
+    // 管理后台脚本（压缩后约 116KB）仅后台需要，首次进入时按需加载，不再随读者首屏下载。
+    window.loadScriptOnce("/js/admin.min.js")
       .then(() => {
         // 加载期间用户可能已切走，仅当仍在后台路由时才渲染
         if (location.hash.startsWith("#/admin") && typeof window.renderAdmin === "function") window.renderAdmin();

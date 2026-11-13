@@ -1,12 +1,13 @@
 // Service Worker：缓存静态资源，支持离线访问与 SPA 回退
-const CACHE = "ai-agent-blog-v13";
-// 只预缓存首屏真正必需的资源。admin.js（后台）与 highlight.min.js（代码块）改为按需加载，
+const CACHE = "ai-agent-blog-v14";
+// 只预缓存首屏真正必需的资源（均为 tools/build-assets.mjs 产出的 .min.*）。
+// admin.min.js（后台）与 highlight.min.js（代码块）改为按需加载，
 // 首次用到时由下方 fetch 的「缓存优先 + 后台更新」逻辑自动纳入缓存，不再随首屏下载。
-// lucide.min.js 全量包已由轻量子集 /js/icons.js 取代，不再被页面引用。
+// lucide.min.js 全量包已由轻量子集 /js/icons.min.js 取代，不再被页面引用。
 const ASSETS = [
   "/", "/index.html",
-  "/css/style.css", "/css/depth.css",
-  "/js/icons.js", "/js/app.js", "/js/markdown.js",
+  "/css/style.min.css", "/css/depth.min.css",
+  "/js/icons.min.js", "/js/app.min.js", "/js/markdown.min.js",
 ];
 
 self.addEventListener("install", (event) => {

@@ -5,8 +5,9 @@
   "type": "module",
   "description": "AI Agent 博客平台 —— Cloudflare (Pages/Workers/D1/R2) 全栈实现，带图形界面",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "assets": "node tools/build-assets.mjs",
+    "dev": "npm run assets && wrangler dev",
+    "deploy": "npm run assets && wrangler deploy",
     "migrate:local": "wrangler d1 migrations apply ai-agent-blog --local",
     "migrate:remote": "wrangler d1 migrations apply ai-agent-blog --remote"
   },
