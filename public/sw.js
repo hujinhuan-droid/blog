@@ -1,9 +1,11 @@
 // Service Worker：缓存静态资源，支持离线访问与 SPA 回退
-const CACHE = "ai-agent-blog-v10";
+const CACHE = "ai-agent-blog-v11";
+// 只预缓存首屏真正必需的资源。admin.js（后台）与 highlight.min.js（代码块）改为按需加载，
+// 首次用到时由下方 fetch 的「缓存优先 + 后台更新」逻辑自动纳入缓存，不再随首屏下载。
 const ASSETS = [
   "/", "/index.html",
   "/css/style.css", "/css/depth.css",
-  "/js/app.js", "/js/admin.js", "/js/markdown.js",
+  "/js/app.js", "/js/markdown.js",
 ];
 
 self.addEventListener("install", (event) => {

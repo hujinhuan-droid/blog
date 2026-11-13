@@ -1,4 +1,23 @@
 // 轻量 Markdown 渲染器（零依赖：表格 + [TOC] 目录 + 代码高亮/行号/折叠钩子）
+
+// 通用按需脚本加载器：同一 URL 只插入一次 <script>，多处调用复用同一个 Promise。
+// 用于把首屏非必需的重型脚本（highlight.js / admin.js）延迟到真正需要时再下载。
+window.loadScriptOnce = (function () {
+  const cache = new Map();
+  return function (url) {
+    if (cache.has(url)) return cache.get(url);
+    const p = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = url;
+      s.onload = () => resolve(url);
+      s.onerror = () => { cache.delete(url); reject(new Error("加载失败: " + url)); };
+      document.head.appendChild(s);
+    });
+    cache.set(url, p);
+    return p;
+  };
+})();
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -249,15 +268,26 @@ window.scrollToAnchor = function (id) {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
-// 渲染后调用：语法高亮 + 行号（依赖 highlight.js，未加载则仅加行号）
+// 渲染后调用：语法高亮 + 行号。
+// highlight.js（约 123KB）不再随首屏同步加载：仅当页面真的出现代码块时才按需拉取，
+// 加载失败则降级为「仅加行号」，与原有容错一致。
 window.highlightCode = function (root) {
   if (!root) return;
-  root.querySelectorAll("pre code").forEach((b) => {
-    if (window.hljs) {
-      try { window.hljs.highlightElement(b); } catch (e) {}
-    }
-    addLineNumbers(b);
-  });
+  const blocks = root.querySelectorAll("pre code");
+  if (!blocks.length) return; // 无代码块：不触发任何下载
+  const apply = () => {
+    root.querySelectorAll("pre code").forEach((b) => {
+      if (window.hljs) {
+        try { window.hljs.highlightElement(b); } catch (e) {}
+      }
+      addLineNumbers(b);
+    });
+  };
+  if (window.hljs) { apply(); return; }
+  window
+    .loadScriptOnce("/vendor/highlightjs/highlight.min.js")
+    .then(() => { if (document.contains(root)) apply(); })
+    .catch(() => { blocks.forEach(addLineNumbers); });
 };
 function addLineNumbers(codeEl) {
   if (codeEl.dataset.ln) return;
