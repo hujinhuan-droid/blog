@@ -2266,7 +2266,8 @@ export default {
     // 确保每次都回到 Worker：爬虫 UA 才能拿到预渲染 HTML，而不是被缓存的 SPA 空壳误导搜索引擎。
     // 真实静态资源（/css、/js、/vendor、图片等带扩展名）不受影响，照常边缘缓存。
     const lastSeg = path[path.length - 1] || "";
-    const isDocRoute = !/\.[a-z0-9]+$/i.test(lastSeg);
+    // /index.html 也视为文档（SW 会预缓存它），否则离线回退拿到的是没有默认 OG 的旧外壳
+    const isDocRoute = !/\.[a-z0-9]+$/i.test(lastSeg) || lastSeg.toLowerCase() === "index.html";
     if (isDocRoute) {
       // 流量来源采集：仅记录来自外部/搜索引擎的访问（同站内部跳转不计），按天+域名聚合，写入 referer_daily
       try {
@@ -2282,14 +2283,45 @@ export default {
       const h = new Headers(assetResp.headers);
       h.set("Cache-Control", "no-store");
       for (const [k, v] of Object.entries(securityHeaders())) h.set(k, v);
+      // SPA shell 本身只有 title/canonical，OG 标签由前端 JS 动态生成；但微信 / QQ / 微博等
+      // 分享抓取器不执行 JS，必须在文档里直接给一组带绝对地址的默认标签。前端 applySeo /
+      // applyPostSeo 会按当前路由更新同一组 property 标签，不会产生重复。
+      const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
+      const siteTitle = docSettings.seo_title || docSettings.site_title || "AI Agent Blog";
+      const siteDesc = docSettings.seo_description || "记录 AI Agent 的探索、实践与思考";
+      const shareImage = absUrl(docSettings.og_image, base) || base + "/og-default.png";
+      // 路径式文章 / 标签入口（/post/slug、/tag/name）在未执行 JS 时也应指向自己的规范地址，
+      // 而不是笼统归到首页；hash 路由对服务端不可见，仍由前端按路由更新。
+      const safeSeg = (v: string) => { try { return encodeURIComponent(decodeURIComponent(v)); } catch { return encodeURIComponent(v); } };
+      const canonicalPath =
+        path.length === 0 || path[0] === "index.html" ? "/" :
+        path[0] === "post" && path.length === 2 ? "/post/" + safeSeg(path[1]) :
+        path[0] === "tag" && path.length === 2 ? "/tag/" + safeSeg(path[1]) : "/";
+      const canonicalUrl = base + canonicalPath;
+      const defaultOg = [
+        `<meta name="description" content="${escHtmlS(siteDesc)}" />`,
+        `<meta property="og:type" content="website" />`,
+        `<meta property="og:title" content="${escHtmlS(siteTitle)}" />`,
+        `<meta property="og:description" content="${escHtmlS(siteDesc)}" />`,
+        `<meta property="og:url" content="${escHtmlS(canonicalUrl)}" />`,
+        `<meta property="og:site_name" content="${escHtmlS(docSettings.site_title || siteTitle)}" />`,
+        `<meta property="og:image" content="${escHtmlS(shareImage)}" />`,
+        `<meta name="twitter:card" content="summary_large_image" />`,
+        `<meta name="twitter:title" content="${escHtmlS(siteTitle)}" />`,
+        `<meta name="twitter:description" content="${escHtmlS(siteDesc)}" />`,
+        `<meta name="twitter:image" content="${escHtmlS(shareImage)}" />`,
+      ].join("\n");
       // 注入自定义 CSS（设置页 ⑪ 高级自定义）：在 </head> 前插入，作用于前端 SPA 整站
       const customCss = docSettings.custom_css || "";
-      if (customCss) {
-        const txt = await assetResp.text();
-        const injected = txt.replace("</head>", `<style data-custom-css>\n${customCss}\n</style>\n</head>`);
-        return new Response(injected, { status: assetResp.status, headers: h });
-      }
-      return new Response(assetResp.body, { status: assetResp.status, headers: h });
+      const styleTag = customCss ? `<style data-custom-css>\n${customCss}\n</style>` : "";
+      const txt = await assetResp.text();
+      const injected = txt
+        .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escHtmlS(siteTitle)}</title>`)
+        .replace(/<link\s+rel="canonical"[^>]*>/i, `<link rel="canonical" href="${escHtmlS(canonicalUrl)}" />`)
+        .replace("</head>", `${defaultOg}\n${styleTag}\n</head>`);
+      // 文档已被改写，原 content-length 失效，交给运行时重算（否则可能被截断）
+      h.delete("content-length");
+      return new Response(injected, { status: assetResp.status, headers: h });
     }
     // 静态资源（带扩展名：/css、/js、/vendor、图片等）：按类型注入缓存与安全头
     const assetHeaders = new Headers(assetResp.headers);

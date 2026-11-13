@@ -9,6 +9,10 @@
 //   node tools/site-audit.mjs --base ... --mobile-only 1
 //   node tools/site-audit.mjs --base ... --mobile-only 1 --only-posts 1 --posts 10
 //     （批量巡检前 N 篇文章，统计横向溢出；--expr / --expr-file 可在渲染后跑自定义探针）
+//   node tools/site-audit.mjs --base ... --routes "#/timeline,#/feed,#/tags,#/friends,#/about" --only-routes 1
+//     （巡检任意 hash 路由；注意 MSYS 会把以 / 开头的参数值转成 Windows 路径，写成 #/xxx 由工具补 /）
+//   node tools/site-audit.mjs --base ... --only-posts 1 --posts 40 --offset 40
+//     （--offset 分批巡检全量文章，避免单次运行过长）
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 
@@ -34,10 +38,27 @@ const PROBE = `(() => {
   const noDim = imgs.filter((i) => !i.getAttribute("width") && !i.getAttribute("height") &&
     !i.style.width && !i.style.aspectRatio).length;
   const btns = q("button");
-  const btnNoLabel = btns.filter((b) => !txt(b) && !b.getAttribute("aria-label") && !b.title).length;
+  const badBtns = btns.filter((b) => !txt(b) && !b.getAttribute("aria-label") && !b.title);
+  const btnNoLabel = badBtns.length;
   const links = q("a[href]");
-  const linkNoLabel = links.filter((a) => !txt(a) && !a.getAttribute("aria-label") &&
-    !a.querySelector("img[alt]:not([alt='']),svg[aria-label]")).length;
+  const badLinks = links.filter((a) => !txt(a) && !a.getAttribute("aria-label") &&
+    !a.querySelector("img[alt]:not([alt='']),svg[aria-label]"));
+  const linkNoLabel = badLinks.length;
+  const badImgs = imgs.filter((i) => !i.hasAttribute("alt"));
+  // 移动端可点区域（WCAG 2.5.8 建议 >= 24px，Apple HIG 建议 44px）；只记录，判定留给人工
+  const tapSmall = q("a[href],button,input,select,textarea").filter((elx) => {
+    const s = getComputedStyle(elx), r = elx.getBoundingClientRect();
+    if (s.display === "none" || s.visibility === "hidden" || +s.opacity === 0) return false;
+    return r.width > 0 && r.height > 0 && (r.width < 24 || r.height < 24);
+  });
+  const brief = (elx) => ({
+    tag: elx.tagName.toLowerCase(),
+    cls: (typeof elx.className === "string" ? elx.className : "").slice(0, 50),
+    id: elx.id || "",
+    w: Math.round(elx.getBoundingClientRect().width),
+    h: Math.round(elx.getBoundingClientRect().height),
+    html: (elx.outerHTML || "").slice(0, 150),
+  });
   const inputsNoLabel = q("input,textarea,select").filter((el) => {
     if (el.type === "hidden" || el.type === "submit" || el.type === "button") return false;
     return !el.getAttribute("aria-label") && !el.getAttribute("placeholder") &&
@@ -122,6 +143,10 @@ const PROBE = `(() => {
     appTextLen: (document.getElementById("app") || { textContent: "" }).textContent.trim().length,
     imgTotal: imgs.length, imgNoAlt: noAlt, imgNoDim: noDim, brokenImgs: broken,
     btnTotal: btns.length, btnNoLabel, linkTotal: links.length, linkNoLabel, inputsNoLabel,
+    badBtns: badBtns.slice(0, 8).map(brief),
+    badLinks: badLinks.slice(0, 8).map(brief),
+    noAltSrcs: badImgs.slice(0, 8).map((i) => (i.currentSrc || i.src || "").slice(0, 140)),
+    tapSmall: tapSmall.length, tapSmallList: tapSmall.slice(0, 8).map(brief),
     overflowRoot, docSW, bodySW, spill, overflowChain: chain, wide, contentKids: kids,
     fonts: document.fonts ? document.fonts.status : "n/a",
     sw: !!navigator.serviceWorker?.controller,
@@ -131,11 +156,14 @@ const PROBE = `(() => {
 async function main() {
   // 取一篇真实文章和一个真实标签（本地 D1 只有少量文章，线上数据更全）
   let slug = "", tag = "", postList = [];
-  const postCount = Math.max(1, Math.min(20, Number(arg("posts", 1))));
+  const postCount = Math.max(1, Math.min(200, Number(arg("posts", 1))));
+  const postOffset = Math.max(0, Number(arg("offset", 0)));
   try {
-    const res = await fetch(BASE + "/api/posts?limit=" + Math.max(5, postCount));
+    // 一次取全量再切片：保证 --offset 分批对应同一份稳定顺序，不必依赖服务端分页
+    const res = await fetch(BASE + "/api/posts?limit=1000");
     const posts = await res.json();
-    postList = (Array.isArray(posts) ? posts : []).filter((p) => p && p.slug).slice(0, postCount);
+    postList = (Array.isArray(posts) ? posts : []).filter((p) => p && p.slug)
+      .slice(postOffset, postOffset + postCount);
     if (Array.isArray(posts) && posts.length) {
       slug = posts[0].slug || "";
       tag = (posts[0].tags || []).find?.((t) => typeof t === "string") || "";
@@ -153,18 +181,32 @@ async function main() {
   // --slugs a,b,c 指定要巡检的文章（逗号分隔），用于复测特定内容
   const slugsArg = arg("slugs", "");
   if (slugsArg) postList = slugsArg.split(",").filter(Boolean).map((s) => ({ slug: s }));
+  // 自定义 hash 路由：写成 "#/timeline,#/about"，工具补前导 /（避免 MSYS 路径转换）
+  const routesArg = arg("routes", "");
+  const extraRoutes = routesArg ? routesArg.split(",").filter(Boolean).map((p) => {
+    let raw = p.startsWith("/") ? p : "/" + p;
+    // Git Bash(MSYS) 偶尔把逗号列表的第一项 "/#/xxx" 转成 "/#C:/Program Files/..."，
+    // 规整回首页并记录，避免把被污染的 URL 当成真实路由得出错误结论。
+    if (/#[A-Za-z]:[\\/]/i.test(raw) || /Program Files|PortableGit/i.test(raw)) {
+      console.warn("[warn] 路由参数被 MSYS 路径转换污染，已规整为首页: " + raw.slice(0, 80));
+      raw = "/#/";
+    }
+    return { name: "路由:" + decodeURIComponent(raw).slice(0, 32), path: raw, settle: SETTLE, isRoute: true };
+  }) : [];
   let cases = [
     { name: "首页", path: "/#/", settle: SETTLE },
     ...postList.map((p, i) => ({
-      name: "文章页" + (postCount > 1 ? i + 1 : ""),
+      name: "文章页" + (postCount > 1 ? i + 1 + postOffset : ""),
       slug: p.slug,
       path: "/#/post/" + encodeURIComponent(p.slug),
       settle: SETTLE + 800,
     })),
     ...(tag ? [{ name: "标签页", path: "/#/tag/" + encodeURIComponent(tag), settle: SETTLE }] : []),
+    ...extraRoutes,
     { name: "后台入口", path: "/#/admin", settle: SETTLE + 600 },
   ];
   if (has("only-posts")) cases = cases.filter((c) => c.slug);
+  if (has("only-routes")) cases = extraRoutes;
   const viewports = has("mobile-only")
     ? [{ name: "mobile", w: 375, h: 812 }]
     : [{ name: "desktop", w: 1440, h: 900 }, { name: "mobile", w: 375, h: 812 }];
@@ -185,7 +227,10 @@ async function main() {
     ws.send(JSON.stringify({ id, method, params }));
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject });
-      setTimeout(() => { if (pending.has(id)) { pending.delete(id); reject(new Error("timeout " + method)); } }, 30000);
+      // 自定义探针（--expr-file）可能包含多次 SPA 路由切换与轮询，线上经代理时耗时较长，
+      // 单独放宽 Runtime.evaluate 的超时，避免误判为失败并丢掉整批结果。
+      setTimeout(() => { if (pending.has(id)) { pending.delete(id); reject(new Error("timeout " + method)); } },
+        method === "Runtime.evaluate" ? 90000 : 30000);
     });
   };
   let bucket = { errors: [], http: [], failed: [] };

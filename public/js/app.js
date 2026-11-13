@@ -1,5 +1,7 @@
 // 前端路由 + 读者端视图 + 导航 + 站点统计
 let CURRENT_USER = null;
+// 未执行 JS 时的基础标题（站点设置清空后也能从文章标题退回首页标题，避免残留）
+const BASE_TITLE = document.title;
 
 // 顶部主导航（可被站点设置中的自定义菜单覆盖；默认项带 i18n key）
 const DEFAULT_MENUS = [
@@ -573,12 +575,28 @@ function featuredHtml(p) {
 }
 
 // 写入 / 更新 <head> 中的 meta 标签（SEO 用）
+// Open Graph / article:* 必须用 property 属性（社交平台只认 property，不认 name）；
+// description / keywords / robots / twitter:* 等用 name 属性。
+// 早期版本统一写 name="og:*"，导致分享抓取器完全读不到动态 OG 信息。
 function setMeta(name, content) {
   if (!content) return;
-  let m = document.head.querySelector(`meta[name="${name}"]`);
+  const attr = /^(og:|article:)/.test(name) ? "property" : "name";
+  let m = document.head.querySelector(`meta[${attr}="${name}"]`);
   if (!m) {
     m = document.createElement("meta");
-    m.setAttribute("name", name);
+    m.setAttribute(attr, name);
+    document.head.appendChild(m);
+  }
+  m.setAttribute("content", content);
+}
+
+// 后台 / 搜索结果页不应被索引；离开这些页面时必须移除，否则会误伤文章页
+function setRobots(content) {
+  let m = document.head.querySelector('meta[name="robots"]');
+  if (!content) { if (m) m.remove(); return; }
+  if (!m) {
+    m = document.createElement("meta");
+    m.setAttribute("name", "robots");
     document.head.appendChild(m);
   }
   m.setAttribute("content", content);
@@ -656,14 +674,17 @@ function setJsonLd(id, obj) {
 }
 
 function applySeo(s) {
-  const title = s.seo_title || s.site_title || document.title;
+  const title = s.seo_title || s.site_title || BASE_TITLE;
   if (title) {
     document.title = title;
     setMeta("og:title", title);
+    setMeta("og:site_name", s.site_title || title);
+    setMeta("twitter:title", title);
   }
   if (s.seo_description) {
     setMeta("description", s.seo_description);
     setMeta("og:description", s.seo_description);
+    setMeta("twitter:description", s.seo_description);
   }
   if (s.seo_keywords) setMeta("keywords", s.seo_keywords);
   // 站点级 OG / Twitter 基础信息（文章页会再被 applyPostSeo 覆盖）
@@ -672,6 +693,7 @@ function applySeo(s) {
   setCanonical(location.origin + "/");
   setMeta("twitter:card", "summary_large_image");
   setMeta("og:image", absAsset(s.og_image) || location.origin + "/og-default.png");
+  setMeta("twitter:image", absAsset(s.og_image) || location.origin + "/og-default.png");
   // 离开文章页时移除面包屑结构化数据，避免首页残留旧的 BreadcrumbList
   const oldBc = document.getElementById("ld-breadcrumb");
   if (oldBc) oldBc.remove();
@@ -681,6 +703,8 @@ function applySeo(s) {
 function applyPostSeo(p) {
   const siteTitle = SITE_SETTINGS.site_title || "AI Agent 博客";
   document.title = `${p.title} - ${siteTitle}`;
+  // 从后台 / 搜索页切进文章时移除 noindex，避免文章被误判为不可索引
+  setRobots("");
   setMeta("og:type", "article");
   setMeta("og:title", p.title);
   setMeta("og:description", (p.excerpt || "").slice(0, 200));
@@ -688,8 +712,17 @@ function applyPostSeo(p) {
   setMeta("og:url", postUrl);
   setCanonical(postUrl);
   // 优先文章封面，其次站点默认分享图
-  setMeta("og:image", absAsset(p.cover) || absAsset(SITE_SETTINGS.og_image) || location.origin + "/og-default.png");
+  const shareImage = absAsset(p.cover) || absAsset(SITE_SETTINGS.og_image) || location.origin + "/og-default.png";
+  setMeta("og:image", shareImage);
   setMeta("twitter:card", "summary_large_image");
+  setMeta("twitter:title", p.title);
+  setMeta("twitter:description", (p.excerpt || "").slice(0, 200));
+  setMeta("twitter:image", shareImage);
+  // 与服务端预渲染页一致的 article:* 元信息（社交平台 / 部分阅读器会读）
+  const toIso = (v) => { const d = new Date(v); return isNaN(d.getTime()) ? "" : d.toISOString(); };
+  setMeta("article:published_time", toIso(p.created_at));
+  setMeta("article:modified_time", toIso(p.updated_at || p.created_at));
+  setMeta("article:section", parseTags(p.tags)[0] || "博客");
   // 面包屑结构化数据（BreadcrumbList）：首页 › 首个标签 › 文章，配合服务端预渲染一致
   const bc = [{ name: "首页", url: location.origin + "/" }];
   const ft = (parseTags(p.tags)[0]) || "";
@@ -700,6 +733,44 @@ function applyPostSeo(p) {
     "@type": "BreadcrumbList",
     itemListElement: bc.map((c, i) => ({ "@type": "ListItem", position: i + 1, name: c.name, item: c.url })),
   });
+}
+
+// 非文章路由的 SEO 状态机：每次切换先回到站点级（清掉上一篇文章残留的
+// og:type / canonical / BreadcrumbList），再按页面设置标题、描述、规范地址与索引策略。
+// 早期版本只有 renderHome 会重置，导致「文章 → 关于 / 标签 / 后台」后分享卡片仍是上一篇文章。
+function applyPageSeo(hash) {
+  applySeo(SITE_SETTINGS);
+  const site = SITE_SETTINGS.site_title || BASE_TITLE || "AI Agent 博客";
+  const desc = SITE_SETTINGS.seo_description || "记录 AI Agent 的探索、实践与思考";
+  let name = "", canonical = location.origin + "/", robots = "";
+  if (hash.startsWith("#/timeline")) name = "时间轴";
+  else if (hash.startsWith("#/feed")) name = "动态";
+  else if (hash.startsWith("#/tags")) name = "标签";
+  else if (hash.startsWith("#/friends")) name = "朋友们";
+  else if (hash.startsWith("#/about")) name = "关于";
+  else if (hash.startsWith("#/search")) { name = "搜索"; robots = "noindex,nofollow"; }
+  else if (hash.startsWith("#/admin")) { name = "管理后台"; robots = "noindex,nofollow"; }
+  // 标签筛选页与 sitemap 中的服务端预渲染页 /tag/<name> 对齐，避免权重分散
+  const tm = hash.match(/^#\/tags\/(.+)$/);
+  if (tm) {
+    let tag = tm[1];
+    try { tag = decodeURIComponent(tag); } catch {}
+    name = "标签：" + tag;
+    canonical = location.origin + "/tag/" + encodeURIComponent(tag);
+  }
+  if (name) {
+    const title = `${name} - ${site}`;
+    const pageDesc = `${name} · ${desc}`;
+    document.title = title;
+    setMeta("og:title", title);
+    setMeta("twitter:title", title);
+    setMeta("description", pageDesc);
+    setMeta("og:description", pageDesc);
+    setMeta("twitter:description", pageDesc);
+  }
+  setMeta("og:url", canonical);
+  setCanonical(canonical);
+  setRobots(robots);
 }
 
 function renderNav() {
@@ -1885,6 +1956,8 @@ function route() {
     return;
   }
   const hash = location.hash || "#/";
+  // 非文章路由统一重置 SEO 状态（避免上一篇的标题 / OG / canonical / 面包屑残留）
+  if (!hash.startsWith("#/post/")) applyPageSeo(hash);
   if (!hash.startsWith("#/admin")) document.body.classList.remove("admin-mode");
   if (hash.startsWith("#/admin")) {
     // 管理后台脚本（压缩后约 116KB）仅后台需要，首次进入时按需加载，不再随读者首屏下载。
