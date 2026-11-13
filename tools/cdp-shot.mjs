@@ -34,12 +34,15 @@ async function getJSON(path) {
   return res.json();
 }
 
+// 线上验证时若本地代理对 HTTPS 做了 MITM，Chrome 会报证书错误；
+// 传 --insecure 1 可忽略证书错误（仅本地调试用，默认关闭）。
 const chrome = spawn(CHROME, [
   "--headless=new",
   "--disable-gpu",
   "--hide-scrollbars",
   "--no-first-run",
   "--no-default-browser-check",
+  ...(arg("insecure", "") ? ["--ignore-certificate-errors"] : []),
   `--remote-debugging-port=${PORT}`,
   `--window-size=${W},${H}`,
   "--user-data-dir=" + (process.env.TEMP || "/tmp") + "/cdp-shot-" + Date.now(),
