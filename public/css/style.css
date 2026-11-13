@@ -306,7 +306,15 @@ body.dark .post-card.featured {
 .post-detail .post-views { font-size: 12.5px; color: var(--muted); margin-left: 2px; }
 
 /* 正文排版 */
-.post-detail .content { font-size: 16.5px; line-height: 1.9; color: var(--text-2); }
+/* 移动端横向溢出根治：技术正文里多个行内 <code> 被中文标点粘连，或出现长 URL /
+   无空格路径时，浏览器找不到断行机会，会把整段撑到文档之外（375px 视口实测
+   documentElement.scrollWidth 510px，整页可横向拖动）。overflow-wrap:anywhere
+   在放不下时允许任意字符间断行，并参与 min-content 计算，从根上消除横向滚动。
+   代码块 / 行号保留原有的 overflow-x:auto 横向滚动语义，不参与自动断行。 */
+.post-detail .content { font-size: 16.5px; line-height: 1.9; color: var(--text-2); overflow-wrap: anywhere; }
+.post-detail .content pre,
+.post-detail .content pre code,
+.post-detail .content .code-line .lc { overflow-wrap: normal; }
 .post-detail .content > p { margin: 1.15em 0; }
 .post-detail .content h2,
 .post-detail .content h3,
@@ -333,6 +341,10 @@ body.dark .post-card.featured {
   background: var(--surface-2); padding: 2px 6px; border-radius: 5px;
   color: var(--primary-dark); font-size: 0.9em;
   border: 1px solid var(--border);
+  /* 行内代码做成原子 inline-block：短代码整体换行不被劈成两半，
+     超长代码由 max-width + 继承的 overflow-wrap:anywhere 在盒内断行，不撑宽文档。
+     实测 375px 移动端：横向溢出 0，被拆行的行内代码 5→0（含 64 字符长代码）。 */
+  display: inline-block; max-width: 100%; white-space: normal; vertical-align: baseline;
 }
 .post-detail blockquote {
   border-left: 3px solid var(--primary); margin: 1.4em 0; padding: 12px 18px;

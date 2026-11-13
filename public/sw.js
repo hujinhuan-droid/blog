@@ -1,5 +1,5 @@
 // Service Worker：缓存静态资源，支持离线访问与 SPA 回退
-const CACHE = "ai-agent-blog-v14";
+const CACHE = "ai-agent-blog-v16";
 // 只预缓存首屏真正必需的资源（均为 tools/build-assets.mjs 产出的 .min.*）。
 // admin.min.js（后台）与 highlight.min.js（代码块）改为按需加载，
 // 首次用到时由下方 fetch 的「缓存优先 + 后台更新」逻辑自动纳入缓存，不再随首屏下载。

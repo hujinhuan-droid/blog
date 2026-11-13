@@ -109,8 +109,10 @@ try {
       features: [{ name: "prefers-reduced-motion", value: motion }],
     });
   }
+  // --mobile 1 开启真实移动设备模拟（会启用文本自动放大 / meta viewport 处理），
+  // 窄窗口桌面模拟不会放大文字，可能漏掉只在真机上出现的横向溢出。
   await send("Emulation.setDeviceMetricsOverride", {
-    width: W, height: H, deviceScaleFactor: 1, mobile: false,
+    width: W, height: H, deviceScaleFactor: 1, mobile: !!arg("mobile", ""),
   });
 
   await send("Page.navigate", { url: URL_ });
