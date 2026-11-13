@@ -119,13 +119,14 @@ button .lucide, .btn .lucide, .menu-link .lucide, .nav-toggle .lucide { margin-r
 
 /* 布局 */
 .container { max-width: var(--maxw); margin: 30px auto 0; padding: 0 24px; }
-/* CLS 修复：SPA 首屏 #app 为空（高度 0），页脚紧贴顶栏；异步内容插入后页脚被大幅推下，
-   实测造成 0.095~0.144 的布局偏移。预留接近一屏的高度，让页脚初始就落在视口底部附近。
-   291px = 顶栏 64 + 内容上边距 30 + 页脚上边距 76 + 页脚约 121 */
-#app.container { min-height: calc(100vh - 291px); }
+/* CLS 修复：SPA 首屏 #app 为空，页脚紧贴顶栏；异步内容插入后页脚被整段推走。
+   预留接近一屏的高度，让「空壳阶段」的页脚完全落在视口底边之外——视口外元素的位移不计入 CLS。
+   实测：291px 时首页 CLS 0.0178 / 文章页 0.0641；150px 时 0 / 0.0002。
+   内容渲染后 #app 实际高度普遍超过该 min-height，因此不改变最终布局（桌面首页文档高 1212 前后一致）。 */
+#app.container { min-height: calc(100vh - 150px); }
 /* 移动端地址栏会动态改变视口高度，用 dvh 避免收起/展开时页脚跳动 */
 @supports (height: 100dvh) {
-  #app.container { min-height: calc(100dvh - 291px); }
+  #app.container { min-height: calc(100dvh - 150px); }
 }
 
 /* 底部站点统计 */

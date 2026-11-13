@@ -1096,7 +1096,7 @@ async function renderPost(slug) {
       ${aiNotesHtml(p.ai_notes)}
       ${tagsHtml(p)}
       ${articleEndCardHtml(p)}
-      <nav class="post-neighbors" id="postNeighbors" aria-label="上一篇与下一篇"></nav>
+      <nav class="post-neighbors" id="postNeighbors" aria-label="上一篇与下一篇">${neighborsSkeletonHtml()}</nav>
     </div>
     <aside class="article-toc" id="articleToc" aria-label="文章目录与文章信息"></aside>`;
   app.innerHTML = "";
@@ -1399,6 +1399,15 @@ function startReadProgress() {
 }
 
 // ── 文末「上一篇 / 下一篇」导航 ─────────────────────────────────────────
+// 首屏骨架：结构与真实卡片一致（含 62px 缩略图占位），保证接口回填前后高度相同，不产生布局偏移。
+function neighborsSkeletonHtml() {
+  const cell = (kind) => `<span class="pn-card pn-skeleton pn-${kind}" aria-hidden="true">
+      <span class="pn-thumb"></span>
+      <span class="pn-body"><span class="pn-label">&nbsp;</span><strong>&nbsp;</strong><span class="pn-meta">&nbsp;</span></span>
+    </span>`;
+  return cell("prev") + cell("next");
+}
+
 async function loadNeighbors(slug) {
   const box = document.getElementById("postNeighbors");
   if (!box) return;
@@ -1410,7 +1419,8 @@ async function loadNeighbors(slug) {
   if (!box.isConnected) return;
   const prev = d && d.prev;
   const next = d && d.next;
-  if (!prev && !next) { box.remove(); return; }
+  // 无相邻文章时保留骨架高度（仅隐藏），避免容器被移除导致文末区块上移产生新的 CLS
+  if (!prev && !next) { box.classList.add("pn-hidden"); return; }
   const card = (p, kind) => {
     if (!p) return `<div class="pn-empty"></div>`;
     const cover = safeAvatar(p.cover);

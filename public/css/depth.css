@@ -878,6 +878,11 @@ body.dark .rail-about { color: #8ab4ff; }
   margin-top: 34px;
 }
 .post-neighbors:empty { display: none; }
+/* 首屏骨架：与真实 .pn-card 同构（同样有 62px 缩略图占位），接口回填时只换文字不换高度，
+   避免「上一篇/下一篇」异步插入把文末区块整体推下 139px（实测 CLS 0.014）。 */
+.pn-skeleton { background: var(--surface-2); border-color: transparent; box-shadow: none; pointer-events: none; }
+.pn-skeleton > * { visibility: hidden; }
+.post-neighbors.pn-hidden { visibility: hidden; }
 .pn-card {
   display: flex;
   align-items: center;
