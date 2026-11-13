@@ -12,7 +12,7 @@
     <!-- 首屏关键脚本：提前发起下载，避免等到 body 末尾才被发现 -->
     <link rel="preload" as="script" href="/js/markdown.js" />
     <link rel="preload" as="script" href="/js/app.js" />
-    <link rel="preload" as="script" href="/vendor/lucide/lucide.min.js" />
+    <link rel="preload" as="script" href="/js/icons.js" />
     <link rel="stylesheet" href="/css/style.css" />
   <link rel="stylesheet" href="/css/depth.css" />
     <link rel="stylesheet" href="/vendor/highlightjs/atom-one-dark.min.css" />
@@ -37,7 +37,9 @@
       </div>
     </footer>
 
-    <script src="/vendor/lucide/lucide.min.js"></script>
+    <!-- 轻量图标子集（仅本站用到的 47 个，12.7KB），替代 452KB 的 lucide.min.js 全量包。
+         由 tools/gen-icons.mjs 裁剪生成，保持 createIcons() API 兼容。 -->
+    <script src="/js/icons.js"></script>
     <script>
       // Lucide 图标：每次 DOM 变化（含 SPA 路由切换/动态插入）后自动渲染 data-lucide 元素
       (function () {
