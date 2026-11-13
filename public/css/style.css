@@ -119,11 +119,20 @@ button .lucide, .btn .lucide, .menu-link .lucide, .nav-toggle .lucide { margin-r
 
 /* 布局 */
 .container { max-width: var(--maxw); margin: 30px auto 0; padding: 0 24px; }
+/* CLS 修复：SPA 首屏 #app 为空（高度 0），页脚紧贴顶栏；异步内容插入后页脚被大幅推下，
+   实测造成 0.095~0.144 的布局偏移。预留接近一屏的高度，让页脚初始就落在视口底部附近。
+   291px = 顶栏 64 + 内容上边距 30 + 页脚上边距 76 + 页脚约 121 */
+#app.container { min-height: calc(100vh - 291px); }
+/* 移动端地址栏会动态改变视口高度，用 dvh 避免收起/展开时页脚跳动 */
+@supports (height: 100dvh) {
+  #app.container { min-height: calc(100dvh - 291px); }
+}
 
 /* 底部站点统计 */
 .footer { border-top: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 13px; margin-top: 76px; }
 .footer .wrap { padding: 26px 24px 40px; display: flex; flex-direction: column; gap: 10px; }
-.site-stats { display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); }
+/* 统计行由接口异步填充，空 -> 一行文字会改变页脚高度；预留行高避免跳动 */
+.site-stats { display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); min-height: 22px; }
 .site-stats span { color: var(--muted); }
 .copyright { color: var(--muted); }
 
