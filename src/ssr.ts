@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 import type { Env } from "./worker";
 import { listPosts, getPostBySlug, getSettings, parseTags } from "./db";
+import { getRelatedPosts } from "./ai";
 import { escHtmlS, absUrl, fmtDateS, cacheControlHeader, securityHeaders, parseLinkLines, escXml } from "./util";
 
 // 轻量 Markdown → HTML（服务端渲染用，对齐前端 markdown.js 的子集，供爬虫与分享卡片抓取正文）
@@ -293,6 +294,19 @@ export async function prerenderPost(env: Env, slug: string, req: Request): Promi
   const coverFig = row.cover
     ? `<figure class="article-cover"><img src="${escHtmlS(absUrl(row.cover, base))}" alt="${escHtmlS(row.title)}" loading="eager" fetchpriority="high" decoding="async" /></figure>`
     : "";
+  // 预渲染页（供爬虫 / 无 JS 抓取）同样展示语义相关文章：补全内部链接、提升抓取深度与内链权重
+  let relatedHtml = "";
+  try {
+    const rel = await getRelatedPosts(env.DB, slug, 3);
+    if (rel.length) {
+      relatedHtml =
+        `<section class="related" aria-label="相关文章">\n` +
+        `  <h2 class="related-title">相关文章</h2>\n` +
+        `  <ul class="related-list">\n` +
+        rel.map((r) => `    <li><a class="related-item" href="/post/${encodeURIComponent(r.slug)}">${escHtmlS(r.title)}</a></li>`).join("\n") +
+        `\n  </ul>\n</section>`;
+    }
+  } catch {}
   const body = `<div class="post-detail">
   <div class="article-stage">
     <div class="article-head">
@@ -302,6 +316,7 @@ export async function prerenderPost(env: Env, slug: string, req: Request): Promi
     ${coverFig}
     <div class="content">${content}</div>
   </div>
+  ${relatedHtml}
 </div>`;
   const branding = brandingHtml(settings, siteTitle);
   return new Response(htmlDoc({ title, description, head, body, base, image: cover, canonical: base + "/post/" + encodeURIComponent(row.slug), ogType: "article", rssTitle: siteTitle, customCss: settings.custom_css, brand: branding.brand, footerExtra: branding.footer, extraHead: settings.extra_head || "", stats: settings.stats_code || "" }), {

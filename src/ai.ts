@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/workers-types" />
 import type { Env } from "./worker";
-import { DB, incMeta, getSettings } from "./db";
+import { DB, incMeta, getSettings, listPosts, getPostBySlug, parseTags } from "./db";
 
 // ---------------- Gemini AI ----------------
 export const GEMINI_MODEL = "gemini-flash-latest";
@@ -297,6 +297,61 @@ export function cosine(a: number[], b: number[]): number {
   }
   if (na === 0 || nb === 0) return 0;
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+/**
+ * 语义相关文章（服务端 / SSR 复用，与 /api/related 对齐）：
+ * 基于当前文章向量 cosine 取 topN；若当前文章或候选文章无向量，则回退到标签重合度打分。
+ * - 不需要 env.AI：向量已全部落库（embedding 列），仅做内存余弦计算；
+ * - 优雅降级：当前文章无向量时按标签兜底，保证总能返回若干相关项。
+ */
+export async function getRelatedPosts(
+  db: DB,
+  slug: string,
+  n = 3
+): Promise<Array<{ slug: string; title: string; cover: string | null; tags: string | null; score: number }>> {
+  const cur = await getPostBySlug(db, slug, { admin: false });
+  if (!cur) return [];
+  const all = await listPosts(db, { admin: false });
+  const parseEmb = (s: string | null): number[] | null => {
+    if (!s) return null;
+    try {
+      const a = JSON.parse(s);
+      return Array.isArray(a) ? (a as number[]) : null;
+    } catch {
+      return null;
+    }
+  };
+  const curEmb = parseEmb(cur.embedding);
+  const candidates = all.filter((p: any) => p.slug !== cur.slug);
+  let scored: Array<{ p: any; score: number }>;
+  if (curEmb) {
+    scored = candidates
+      .map((p: any) => {
+        const e = parseEmb(p.embedding);
+        return { p, score: e ? cosine(curEmb, e) : 0 };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n);
+  } else {
+    const curTags = parseTags(cur.tags);
+    scored = candidates
+      .map((p: any) => ({
+        p,
+        score: curTags.filter((t: string) => parseTags(p.tags).includes(t)).length,
+      }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n);
+  }
+  return scored.map((x) => ({
+    slug: String(x.p.slug),
+    title: String(x.p.title),
+    cover: x.p.cover || null,
+    tags: x.p.tags || null,
+    score: x.score,
+  }));
 }
 
 export { callGemini };
