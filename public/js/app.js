@@ -838,20 +838,17 @@ function renderNav() {
 async function renderSiteStats() {
   const box = document.getElementById("site-stats");
   if (!box) return;
-  let count = 0;
-  let p = [];
-  try {
-    const r = await api("/posts?summary=1");
-    p = await r.json();
-    count = Array.isArray(p) ? p.length : 0;
-  } catch {}
+  // Worker 已把首页文章列表与标签内联进 HTML 时直接用，跳过两次接口往返
+  const inline = window.__INITIAL__ || {};
+  let p = Array.isArray(inline.posts) ? inline.posts : null;
+  if (!p) { try { const r = await api("/posts?summary=1"); p = await r.json(); } catch {} }
+  p = Array.isArray(p) ? p : [];
+  const count = p.length;
+  let tagCount = 0;
+  if (Array.isArray(inline.tags)) tagCount = inline.tags.length;
+  else { try { const t = await (await api("/tags")).json(); tagCount = Array.isArray(t) ? t.length : 0; } catch {} }
   const started = Date.parse("2026-08-13");
   const days = Math.max(1, Math.floor((Date.now() - started) / 86400000) + 1);
-  let tagCount = 0;
-  try {
-    const t = await (await api("/tags")).json();
-    tagCount = Array.isArray(t) ? t.length : 0;
-  } catch {}
   const totalViews = p.reduce((s, x) => s + (x.views || 0), 0);
   box.innerHTML =
     `<span>文章 ${count}</span>` +
@@ -871,8 +868,11 @@ async function renderHome() {
   // 回到首页时重置为站点级 OG（避免停留在上一篇文章的 article 元信息）
   applySeo(SITE_SETTINGS);
   if (!homeAll.length) {
-    const res = await api("/posts?summary=1");
-    homeAll = await res.json();
+    // Worker 已把首页文章列表内联进 HTML（window.__INITIAL__.posts）时直接用，跳过 /api/posts 往返；
+    // 这是首屏 LCP 的关键优化：hero（LCP 元素）不再等接口返回。
+    const inline2 = window.__INITIAL__ || {};
+    if (inline2.posts) homeAll = inline2.posts;
+    else { const res = await api("/posts?summary=1"); homeAll = await res.json(); }
   }
   if (!homeAll.length) {
     app.innerHTML = `<div class="empty">${t("empty_posts")}</div>`;
@@ -2089,23 +2089,43 @@ async function init() {
 
   // /auth/me 与 /settings 互不依赖：并行发出。
   // 线上冷启动时单个请求约 1~2.5s，串行会让首屏白屏时间翻倍。
+  // 若 Worker 已把站点设置内联进 HTML（window.__INITIAL__.settings），直接采用，跳过 /settings 往返。
+  const inline = window.__INITIAL__ || {};
+  if (inline.settings) applySettings(inline.settings);
   const meP = api("/auth/me").then((r) => r.json()).catch(() => null);
-  const setP = api("/settings").then((r) => r.json()).catch(() => null);
+  const setP = inline.settings ? Promise.resolve(inline.settings) : api("/settings").then((r) => r.json()).catch(() => null);
   // 站点统计用的数据与首页相同，提前并行发起，避免又串一个请求在后面等
   renderSiteStats();
 
-  const [meData, sd] = await Promise.all([meP, setP]);
-  CURRENT_USER = (meData && meData.user) || null;
-  renderNav();
-  bindNavToggle();
+  // 首屏渲染与登录态解耦：匿名用户占绝大多数，先拿设置（内联时即时）立刻渲染首屏，
+  // /auth/me 在后台回填；登录态只影响导航里的「后台」入口，不改变布局高度，无 CLS。
+  // 仅当首屏就是后台页时才必须等鉴权（否则会误判未登录）。
+  const initialHash = location.hash || "#/";
+  const sd = await setP;
   if (sd && typeof sd === "object") applySettings(sd);
   initTheme();
+  if (initialHash.startsWith("#/admin")) {
+    const meData = await meP;
+    CURRENT_USER = (meData && meData.user) || null;
+  }
+  renderNav();
+  bindNavToggle();
   window.addEventListener("hashchange", () => {
     try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch {}
     document.querySelector(".topbar")?.classList.remove("open");
     route();
   });
   route();
+  // 后台拉取真实登录态：匿名→保持；已登录→补渲染「后台」入口（不影响首屏 LCP）
+  meP.then((meData) => {
+    const u = (meData && meData.user) || null;
+    if (u && (!CURRENT_USER || u.role !== CURRENT_USER.role)) {
+      CURRENT_USER = u;
+      renderNav();
+    } else {
+      CURRENT_USER = u;
+    }
+  }).catch(() => {});
   buildAskBot();
   registerPWA();
   addFooterLinks();

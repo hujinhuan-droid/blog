@@ -2311,6 +2311,25 @@ export default {
         `<meta name="twitter:description" content="${escHtmlS(siteDesc)}" />`,
         `<meta name="twitter:image" content="${escHtmlS(shareImage)}" />`,
       ].join("\n");
+      // 首屏数据内联：把真实用户首屏所需的站点设置（及首页文章列表、标签）直接写进 HTML，
+      // 前端即可跳过 /api/settings、/api/posts、/api/tags 三次往返、立即渲染（首页 LCP 不再等接口）。
+      // 仅真实用户受益（爬虫已在上面返回预渲染页、不执行 JS，无需内联；这里不会执行到）。
+      let inlineData = "";
+      let preloadImg = "";
+      try {
+        if (docSettings && Object.keys(docSettings).length) {
+          const initData: Record<string, unknown> = { settings: docSettings };
+          if (path.length === 0 || path[0] === "index.html") {
+            const rows = await listPosts(env.DB, { admin: false });
+            initData.posts = rows.map(cardOf);
+            // 首篇即首页精选大卡封面，通常是 LCP 元素；提前预加载，与 HTML/CSS 并行下载，压缩首屏绘制时间
+            const cover = rows[0] && rows[0].cover;
+            if (cover) preloadImg = `<link rel="preload" as="image" href="${escHtmlS(absUrl(cover, base))}" />`;
+          }
+          initData.tags = await listTags(env.DB);
+          inlineData = `<script>window.__INITIAL__=${JSON.stringify(initData).replace(/</g, "\\u003c")}</script>`;
+        }
+      } catch (e) { inlineData = ""; }
       // 注入自定义 CSS（设置页 ⑪ 高级自定义）：在 </head> 前插入，作用于前端 SPA 整站
       const customCss = docSettings.custom_css || "";
       const styleTag = customCss ? `<style data-custom-css>\n${customCss}\n</style>` : "";
@@ -2318,7 +2337,7 @@ export default {
       const injected = txt
         .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escHtmlS(siteTitle)}</title>`)
         .replace(/<link\s+rel="canonical"[^>]*>/i, `<link rel="canonical" href="${escHtmlS(canonicalUrl)}" />`)
-        .replace("</head>", `${defaultOg}\n${styleTag}\n</head>`);
+        .replace("</head>", `${defaultOg}\n${styleTag}\n${preloadImg}\n${inlineData}\n</head>`);
       // 文档已被改写，原 content-length 失效，交给运行时重算（否则可能被截断）
       h.delete("content-length");
       return new Response(injected, { status: assetResp.status, headers: h });
