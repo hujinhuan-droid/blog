@@ -92,9 +92,12 @@ async function main() {
       bad = (d.results || []).filter((r) => (r.probe?.overflowRoot || 0) > 0 ||
         (r.errors || []).length || (r.httpErrors || []).length || !r.probe?.appTextLen).length;
     } catch {}
-    check("线上移动端抽检", audit.status === 0 && bad === 0 && total > 0,
-      `${total} 篇 / 异常 ${bad}`);
-    if (fs.existsSync(out)) fs.unlinkSync(out);
+    const auditOk = audit.status === 0 && bad === 0 && total > 0;
+    check("线上移动端抽检", auditOk, `${total} 篇 / 异常 ${bad}`);
+    // 失败时保留审计 JSON 供定位（含每篇 slug / appText / httpErrors / overflow），
+    // 成功时才清理，避免「有异常却查不到是哪篇」。
+    if (auditOk) { if (fs.existsSync(out)) fs.unlinkSync(out); }
+    else console.log(`  ↳ 异常明细已保留: ${out}`);
   }
 
   const failed = checks.filter((c) => !c.ok);
