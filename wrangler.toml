@@ -30,6 +30,13 @@ bucket_name = "ai-agent-blog-images"
 [ai]
 binding = "AI"
 
+# Vectorize 向量索引（语义检索加速）：D1 embedding 列仍为主存储，此索引为加速副本。
+# 双写：发文/更新时 upsert；查询：优先走索引，失败/无结果自动回退 D1 + JS cosine。
+# 索引维度必须与 bge-base-en-v1.5 一致（768），度量 cosine。删绑定不影响站点（回退路径完整）。
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "blog-embeddings"
+
 # 环境变量（密钥请用 `wrangler secret put` 设置，不要写进此文件）
 [vars]
 APP_URL = "https://hujinhuan.cc.cd"

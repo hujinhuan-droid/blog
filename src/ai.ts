@@ -286,6 +286,61 @@ export async function callAI(env: Env, system: string, userText: string): Promis
   return await callWorkersText(env, system, userText);
 }
 
+// ---------------- Vectorize 向量索引（语义检索加速层）----------------
+// 设计原则：D1 embedding 列仍是主存储；Vectorize 只是加速副本，任何异常都静默回退到 JS cosine。
+// 索引 id 用 slug（稳定、可读、便于与 D1 行关联），metadata 存 title/tags 供查询直接回包。
+const VECTOR_META = { title: "", tags: "", cover: "" };
+
+/** 把单篇文章向量写入/更新到 Vectorize；失败返回 false（不影响主流程）。 */
+export async function upsertVector(env: Env, slug: string, embedding: number[], meta?: { title?: string; tags?: string; cover?: string }): Promise<boolean> {
+  const idx = env.VECTORIZE;
+  if (!idx || !Array.isArray(embedding) || embedding.length !== 768 || !slug) return false;
+  try {
+    await idx.upsert([{
+      id: slug,
+      values: embedding,
+      metadata: {
+        title: String(meta?.title ?? VECTOR_META.title),
+        tags: String(meta?.tags ?? VECTOR_META.tags),
+        cover: String(meta?.cover ?? VECTOR_META.cover),
+      } as Record<string, string>,
+    }]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 从 Vectorize 检索与给定向量最相似的 slug 列表；失败或无索引返回 null（触发回退）。 */
+export async function queryVectors(
+  env: Env,
+  embedding: number[],
+  topK = 8
+): Promise<Array<{ slug: string; score: number; metadata?: Record<string, unknown> }> | null> {
+  const idx = env.VECTORIZE;
+  if (!idx || !Array.isArray(embedding) || embedding.length !== 768) return null;
+  try {
+    const res = await idx.query(embedding, { topK: Math.max(1, Math.min(50, topK)), returnMetadata: true });
+    const matches = (res && (res as any).matches) || [];
+    return matches
+      .filter((m: any) => m && m.id)
+      .map((m: any) => ({ slug: String(m.id), score: Number(m.score) || 0, metadata: m.metadata }));
+  } catch {
+    return null;
+  }
+}
+
+/** 解析 D1 中的 embedding 字符串为 number[]；非 768 维视为无效。 */
+export function parseEmbedding(raw: string | null | undefined): number[] | null {
+  if (!raw) return null;
+  try {
+    const a = JSON.parse(raw);
+    return Array.isArray(a) && a.length === 768 ? (a as number[]) : null;
+  } catch {
+    return null;
+  }
+}
+
 // 余弦相似度
 export function cosine(a: number[], b: number[]): number {
   if (!a || !b || a.length !== b.length) return 0;

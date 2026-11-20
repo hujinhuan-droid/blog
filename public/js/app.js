@@ -1053,13 +1053,24 @@ function renderHomeBody() {
 
 async function renderPost(slug) {
   const app = document.getElementById("app");
-  app.innerHTML = `<div class="empty">${t("loading")}</div>`;
-  const res = await api("/posts/" + encodeURIComponent(slug));
-  if (res.status === 404) {
-    app.innerHTML = `<div class="empty">${t("not_found")}</div>`;
-    return;
+  // Islands：首屏直达文章页时，Worker 已把正文内联进 window.__INITIAL__.post。
+  // 仅当 slug 精确匹配且未被消费过时使用，跳过一次 /api/posts/:slug 往返；
+  // SPA 内部路由跳转（内联缺失/slug 不符）自动回退到 API，行为完全保持。
+  let p = null;
+  const init = window.__INITIAL__;
+  if (init && init.post && init.post.slug === slug && !init.post.__consumed) {
+    p = init.post;
+    init.post.__consumed = true;
   }
-  const p = await res.json();
+  if (!p) {
+    app.innerHTML = `<div class="empty">${t("loading")}</div>`;
+    const res = await api("/posts/" + encodeURIComponent(slug));
+    if (res.status === 404) {
+      app.innerHTML = `<div class="empty">${t("not_found")}</div>`;
+      return;
+    }
+    p = await res.json();
+  }
   applyPostSeo(p);
   const cat = parseTags(p.tags)[0] || "";
   const read = calcReadTime(p);
@@ -1965,6 +1976,13 @@ function route() {
     renderPost(decodeURIComponent(pm[1]));
     return;
   }
+  // 路径式标签入口（/tag/<name>，与 SSR / sitemap 对齐）：人类直达时渲染对应标签文章列表
+  const tm = path.match(/^\/tag\/(.+)$/);
+  if (tm && !location.hash) {
+    applyPageSeo("#/tags/" + tm[1]);
+    renderTagPosts(decodeURIComponent(tm[1]));
+    return;
+  }
   const hash = location.hash || "#/";
   // 非文章路由统一重置 SEO 状态（避免上一篇的标题 / OG / canonical / 面包屑残留）
   if (!hash.startsWith("#/post/")) applyPageSeo(hash);
@@ -2110,12 +2128,24 @@ async function init() {
   }
   renderNav();
   bindNavToggle();
+  // View Transitions 渐进增强：支持的浏览器在 SPA 路由切换时获得原生交叉淡入，
+  // 不支持 / 用户偏好减少动画 / 任何异常时静默回退到普通 route()，零回归。
+  function routeVT() {
+    try {
+      const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (typeof document.startViewTransition === "function" && !reduce) {
+        document.startViewTransition(() => { route(); });
+        return;
+      }
+    } catch {}
+    route();
+  }
   window.addEventListener("hashchange", () => {
     try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch {}
     document.querySelector(".topbar")?.classList.remove("open");
-    route();
+    routeVT();
   });
-  route();
+  route(); // 首屏直接渲染（不套 View Transition，避免首次加载闪一下）
   // 后台拉取真实登录态：匿名→保持；已登录→补渲染「后台」入口（不影响首屏 LCP）
   meP.then((meData) => {
     const u = (meData && meData.user) || null;

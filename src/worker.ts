@@ -66,13 +66,16 @@ import {
 } from "./ssr";
 import {
   GEMINI_MODEL, callAI, callGemini, extractJsonArray, embedText, genCoverImage, buildCoverPrompt, cosine,
+  upsertVector, queryVectors, parseEmbedding,
   type AiAction,
 } from "./ai";
+import { cachedResponse, purgeEdgeCache } from "./cache";
 
 interface Env extends AuthEnv {
   DB: DB;
   BUCKET: R2Bucket;
   AI: any;
+  VECTORIZE?: VectorizeIndex;
   ASSETS: { fetch: (req: Request) => Promise<Response> };
   GEMINI_API_KEY?: string;
   GEMINI_BASE_URL?: string;
@@ -262,6 +265,10 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       tags: body.tags,
       embedding: emb || undefined,
     });
+    // Vectorize 双写：embedding 已在 D1，索引副本 best-effort（失败静默，回退路径完整）
+    if (emb && (row as any)?.slug) {
+      await upsertVector(env, (row as any).slug, emb, { title: (row as any).title, tags: (row as any).tags, cover: (row as any).cover });
+    }
     if ((body.status || "draft") === "published" && (row as any)?.slug) {
       await submitIndexNow(env, [`https://${SITE_HOST}/post/${(row as any).slug}`]);
       await fireWebhooks(env, row);
@@ -299,6 +306,10 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
         tags: body.tags,
         embedding: emb || undefined,
       });
+      // Vectorize 双写：仅当本次确实重算了 embedding
+      if (emb && row?.slug) {
+        await upsertVector(env, row.slug, emb, { title: row.title, tags: row.tags, cover: row.cover });
+      }
       if (row && row.status === "published") {
         await submitIndexNow(env, [`https://${SITE_HOST}/post/${row.slug}`]);
         await fireWebhooks(env, row);
@@ -777,6 +788,8 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
         const emb = await embedText(env, (p.title || "") + "\n" + (p.content || ""));
         if (emb) {
           await updatePost(env.DB, p.id, { embedding: JSON.stringify(emb) });
+          // 同步灌入 Vectorize 索引（best-effort）
+          await upsertVector(env, p.slug, emb, { title: p.title, tags: p.tags, cover: p.cover });
           ok++;
         } else fail++;
       } catch {
@@ -784,6 +797,22 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       }
     }
     return json({ ok, fail, total: posts.length });
+  }
+
+  // Vectorize 回填（管理员）：把 D1 已有 embedding 灌入向量索引，不重算、零 AI 消耗。
+  // 首次绑定索引后调用一次即可；重复调用幂等（upsert 按 slug 覆盖）。
+  if (method === "POST" && seg.length === 3 && seg[1] === "ai" && seg[2] === "vector-backfill") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    if (!env.VECTORIZE) return json({ error: "未绑定 VECTORIZE 索引" }, 503);
+    const posts = await listPosts(env.DB, { admin: true });
+    let ok = 0, skipped = 0, fail = 0;
+    for (const p of posts) {
+      const emb = parseEmbedding(p.embedding);
+      if (!emb) { skipped++; continue; }
+      const done = await upsertVector(env, p.slug, emb, { title: p.title, tags: p.tags, cover: p.cover });
+      if (done) ok++; else fail++;
+    }
+    return json({ ok, skipped, fail, total: posts.length });
   }
 
   // 阅读量上报（公开）
@@ -990,8 +1019,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     const results = all
       .map((p: any) => {
         const kwMatch = ((p.title || "") + " " + (p.content || "") + " " + (p.tags || "")).toLowerCase().includes(ql) ? 0.6 : 0;
-        let emb: number[] | null = null;
-        try { emb = p.embedding ? JSON.parse(p.embedding) : null; } catch {}
+        const emb = parseEmbedding(p.embedding);
         const vec = emb && qEmb ? cosine(qEmb, emb) : 0;
         const score = emb && qEmb ? Math.max(kwMatch, 0.4 + 0.6 * vec) : kwMatch;
         return { p, score };
@@ -1018,24 +1046,36 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     return json(await getNeighbors(env.DB, decodeURIComponent(slug)), 200, anonCache(user, 60));
   }
 
-  // 相关文章（公开）：基于当前文章向量，返回 top3
+  // 相关文章（公开）：优先走 Vectorize 加速；失败/无结果回退 D1 + JS cosine（行为保持）
   if (method === "GET" && seg.length === 2 && seg[1] === "related") {
     const slug = new URL(req.url).searchParams.get("slug") || "";
     if (!slug) return json({ results: [] });
     const cur = await getPostBySlug(env.DB, decodeURIComponent(slug), { admin: false });
     if (!cur) return json({ results: [] });
+    const curEmb = parseEmbedding(cur.embedding);
+    // 优先：向量索引检索（近 O(log n)），多取几条以便剔除自身与无效行
+    if (curEmb) {
+      const hits = await queryVectors(env, curEmb, 8);
+      if (hits && hits.length) {
+        const bySlug = new Map<string, any>();
+        for (const h of hits) if (h.slug !== cur.slug) bySlug.set(h.slug, h.score);
+        if (bySlug.size) {
+          const all = await listPosts(env.DB, { admin: false });
+          const picked = all
+            .filter((p: any) => bySlug.has(String(p.slug)))
+            .sort((a: any, b: any) => (bySlug.get(String(b.slug)) || 0) - (bySlug.get(String(a.slug)) || 0))
+            .slice(0, 3);
+          if (picked.length) return json({ results: picked.map((p: any) => cardOf(p)), source: "vectorize" });
+        }
+      }
+    }
+    // 回退：原 D1 全表 cosine / 标签兜底逻辑
     const all = await listPosts(env.DB, { admin: false });
-    let curEmb: number[] | null = null;
-    try { curEmb = cur.embedding ? JSON.parse(cur.embedding) : null; } catch {}
     let scored: { p: any; score: number }[];
     if (curEmb) {
       scored = all
         .filter((p: any) => p.slug !== cur.slug)
-        .map((p: any) => {
-          let emb: number[] | null = null;
-          try { emb = p.embedding ? JSON.parse(p.embedding) : null; } catch {}
-          return { p, score: emb ? cosine(curEmb!, emb) : 0 };
-        })
+        .map((p: any) => ({ p, score: (() => { const e = parseEmbedding(p.embedding); return e ? cosine(curEmb, e) : 0; })() }))
         .filter((x) => x.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, 3);
@@ -1048,7 +1088,7 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
         .sort((a, b) => b.score - a.score)
         .slice(0, 3);
     }
-    return json({ results: scored.map((x) => cardOf(x.p)) });
+    return json({ results: scored.map((x) => cardOf(x.p)), source: "fallback" });
   }
 
   // 媒体库（管理员）：列出 / 删除 R2 对象
@@ -1319,10 +1359,10 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname.split("/").filter(Boolean); // ['api', ...] 或 []
 
-    // 站点地图与 RSS（公开）
-    if (path[0] === "robots.txt") return await robotsTxt(env, req);
-    if (path[0] === "sitemap.xml") return await handleSitemap(env, req);
-    if (path[0] === "feed.xml") return await handleFeed(env, req);
+    // 站点地图与 RSS（公开）：读多写少，走边缘缓存；发布联动会主动失效
+    if (path[0] === "robots.txt") return await cachedResponse(req, "/robots.txt", 600, () => robotsTxt(env, req));
+    if (path[0] === "sitemap.xml") return await cachedResponse(req, "/sitemap.xml", 300, () => handleSitemap(env, req));
+    if (path[0] === "feed.xml") return await cachedResponse(req, url.search ? "/feed.xml" + url.search : "/feed.xml", 300, () => handleFeed(env, req));
 
     if (path[0] === "api") {
       // 兜底建表（幂等）：确保每日访问量表 / 登录失败锁定表存在，避免迁移未 apply 时接口失败
@@ -1352,7 +1392,13 @@ export default {
         );
       } catch {}
       try {
-        return await handleApi(req, env, path, req.method);
+        const resp = await handleApi(req, env, path, req.method);
+        // 边缘缓存失效：任何成功的写操作（发布/删除/设置/标签/导入）都可能改变公开内容，
+        // 统一 purge feed/sitemap/robots + 爬虫 SSR 缓存。宁可多失效，不可让缓存陈旧。
+        if (req.method !== "GET" && resp.status < 400) {
+          await purgeEdgeCache(req);
+        }
+        return resp;
       } catch (e: any) {
         return json({ error: e.message || "服务器错误" }, 500);
       }
@@ -1369,11 +1415,18 @@ export default {
       });
     }
 
-    // 爬虫 / 社交抓取：对内容路由返回服务端预渲染（含 title / 描述 / OG / JSON-LD / 正文），提升 SEO 与分享卡片
+    // 爬虫 / 社交抓取：对内容路由返回服务端预渲染（含 title / 描述 / OG / JSON-LD / 正文），提升 SEO 与分享卡片。
+    // 走边缘缓存（varyUA）：SSR 结果只由文章内容+设置决定，发布联动会 purge；缓存命中直接省掉 D1 查询。
     if (isCrawler(req.headers.get("user-agent") || "")) {
-      if (path.length === 0) return await prerenderHome(env, req);
-      if (path[0] === "post" && path.length === 2) return await prerenderPost(env, decodeURIComponent(path[1]), req);
-      if (path[0] === "tag" && path.length === 2) return await prerenderTag(env, decodeURIComponent(path[1]), req);
+      if (path.length === 0) return await cachedResponse(req, "/", 600, () => prerenderHome(env, req), true);
+      if (path[0] === "post" && path.length === 2) {
+        const slug = decodeURIComponent(path[1]);
+        return await cachedResponse(req, "/post/" + encodeURIComponent(slug), 600, () => prerenderPost(env, slug, req), true);
+      }
+      if (path[0] === "tag" && path.length === 2) {
+        const tag = decodeURIComponent(path[1]);
+        return await cachedResponse(req, "/tag/" + encodeURIComponent(tag), 600, () => prerenderTag(env, tag, req), true);
+      }
     }
 
     // 非 API 请求：交给静态资源（SPA 回退由 wrangler.toml 的 not_found_handling 处理）
@@ -1441,6 +1494,20 @@ export default {
             // 首篇即首页精选大卡封面，通常是 LCP 元素；提前预加载，与 HTML/CSS 并行下载，压缩首屏绘制时间
             const cover = rows[0] && rows[0].cover;
             if (cover) preloadImg = `<link rel="preload" as="image" href="${escHtmlS(absUrl(cover, base))}" />`;
+          }
+          // R21 Islands：文章路径直通首屏把正文随文档内联，前端 renderPost 免一次 /api/posts/:slug 往返。
+          // 剔除 embedding（768 维大数组）避免 HTML 膨胀；公开可见性由 admin:false 保证。
+          if (path[0] === "post" && path.length === 2) {
+            try {
+              const slugParam = decodeURIComponent(path[1]);
+              const postRow = await getPostBySlug(env.DB, slugParam, { admin: false });
+              if (postRow) {
+                const inlinePost: Record<string, unknown> = {};
+                for (const [k, v] of Object.entries(postRow)) if (k !== "embedding") inlinePost[k] = v;
+                initData.post = inlinePost;
+                if (postRow.cover) preloadImg = `<link rel="preload" as="image" href="${escHtmlS(absUrl(postRow.cover, base))}" />`;
+              }
+            } catch {}
           }
           initData.tags = await listTags(env.DB);
           inlineData = `<script>window.__INITIAL__=${JSON.stringify(initData).replace(/</g, "\\u003c")}</script>`;

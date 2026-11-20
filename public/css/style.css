@@ -1537,3 +1537,11 @@ body.dark .tf-dist { background: rgba(255, 255, 255, .035); }
 .tfc-search-toolbar .muted { font-size: 12.5px; }
 body.dark .tfc-tabs { border-bottom-color: #1f2a3d; }
 body.dark .tfc-tab.active { color: #8ab4ff; border-bottom-color: #8ab4ff; }
+
+/* ── View Transitions：SPA 路由切换的原生交叉淡入（渐进增强，不支持的浏览器自动忽略）─── */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) { animation: vt-fade-out .18s ease both; }
+  ::view-transition-new(root) { animation: vt-fade-in .22s ease both; }
+}
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } }
