@@ -291,15 +291,28 @@ export async function callAI(env: Env, system: string, userText: string): Promis
 // 索引 id 用 slug（稳定、可读、便于与 D1 行关联），metadata 存 title/tags 供查询直接回包。
 const VECTOR_META = { title: "", tags: "", cover: "" };
 
+// Vectorize 的 id 必须是 ≤64 字节的 ASCII 串；中文 slug 的 UTF-8 会超限（实测 70 字节被拒）。
+// 因此 id 用 slug 的 SHA-256 前 32 位 hex（固定 32 字节、稳定、碰撞可忽略），原 slug 存入 metadata。
+export async function vectorId(slug: string): Promise<string> {
+  try {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(slug));
+    return Array.from(new Uint8Array(buf)).slice(0, 16).map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    // 极端降级：无 crypto 时用纯 ASCII 兜底（slug 通常含中文，只对纯 ASCII slug 安全）
+    return "s" + slug.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60);
+  }
+}
+
 /** 把单篇文章向量写入/更新到 Vectorize；失败返回 false（不影响主流程）。 */
 export async function upsertVector(env: Env, slug: string, embedding: number[], meta?: { title?: string; tags?: string; cover?: string }): Promise<boolean> {
   const idx = env.VECTORIZE;
   if (!idx || !Array.isArray(embedding) || embedding.length !== 768 || !slug) return false;
   try {
     await idx.upsert([{
-      id: slug,
+      id: await vectorId(slug),
       values: embedding,
       metadata: {
+        slug: slug,
         title: String(meta?.title ?? VECTOR_META.title),
         tags: String(meta?.tags ?? VECTOR_META.tags),
         cover: String(meta?.cover ?? VECTOR_META.cover),
@@ -323,8 +336,8 @@ export async function queryVectors(
     const res = await idx.query(embedding, { topK: Math.max(1, Math.min(50, topK)), returnMetadata: true });
     const matches = (res && (res as any).matches) || [];
     return matches
-      .filter((m: any) => m && m.id)
-      .map((m: any) => ({ slug: String(m.id), score: Number(m.score) || 0, metadata: m.metadata }));
+      .filter((m: any) => m && m.metadata && m.metadata.slug)
+      .map((m: any) => ({ slug: String(m.metadata.slug), score: Number(m.score) || 0, metadata: m.metadata }));
   } catch {
     return null;
   }
