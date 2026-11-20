@@ -310,17 +310,6 @@ export async function upsertGithubUser(
   return (await db.prepare("SELECT * FROM users WHERE github_id = ?").bind(profile.github_id).first()) as UserRow;
 }
 
-export async function getOrCreatePasswordAdmin(db: DB, username = "admin"): Promise<UserRow> {
-  const existing = (await db.prepare("SELECT * FROM users WHERE username = ?").bind(username).first()) as UserRow | null;
-  if (existing) return existing;
-  const ts = now();
-  await db
-    .prepare("INSERT INTO users (username, role, created_at) VALUES (?, 'admin', ?)")
-    .bind(username, ts)
-    .run();
-  return (await db.prepare("SELECT * FROM users WHERE username = ?").bind(username).first()) as UserRow;
-}
-
 export async function getUserById(db: DB, id: number): Promise<UserRow | null> {
   return (await db.prepare("SELECT * FROM users WHERE id = ?").bind(id).first()) as UserRow | null;
 }
@@ -332,20 +321,6 @@ export async function createSession(db: DB, userId: number, expiresAt?: number):
     .bind(token, userId, now(), expiresAt ?? null)
     .run();
   return token;
-}
-
-export async function getUserBySession(db: DB, token: string | undefined): Promise<UserRow | null> {
-  if (!token) return null;
-  const s = (await db
-    .prepare("SELECT user_id FROM sessions WHERE token = ? AND (expires_at IS NULL OR expires_at > ?)")
-    .bind(token, now())
-    .first()) as { user_id: number } | null;
-  if (!s) return null;
-  return getUserById(db, s.user_id);
-}
-
-export async function deleteSession(db: DB, token: string): Promise<void> {
-  await db.prepare("DELETE FROM sessions WHERE token = ?").bind(token).run();
 }
 
 // ---------------- 站点设置（键值对） ----------------
@@ -918,14 +893,6 @@ export async function deleteTag(db: DB, name: string): Promise<{ ok: boolean; ms
   if (changed === 0) return { ok: false, msg: `没有文章使用「${a}」`, changed: 0 };
   await db.prepare("DELETE FROM tag_aliases WHERE alias = ?").bind(a).run();
   return { ok: true, msg: `已删除标签「${a}」，影响 ${changed} 篇文章`, changed };
-}
-
-/** 标签别名映射（前台访问旧标签时用于提示 / 跳转） */
-export async function getTagAliases(db: DB): Promise<Record<string, string>> {
-  const { results } = await db.prepare("SELECT alias, target FROM tag_aliases").all();
-  const map: Record<string, string> = {};
-  for (const r of (results || []) as any[]) map[r.alias] = r.target;
-  return map;
 }
 
 // ───────────────────────── 访问趋势分析 ─────────────────────────

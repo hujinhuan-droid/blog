@@ -153,7 +153,7 @@ ${stats}</body>
 }
 
 // 维护模式页面（公开访客可见；含内嵌管理员登录框，保证站长仍能进入后台）
-export function maintenancePage(settings: Record<string, string>, base: string): string {
+export function maintenancePage(settings: Record<string, string>): string {
   const title = settings.site_title || "AI Agent 博客";
   const text = settings.maintenance_text || "网站正在维护中，请稍后再访问。";
   return `<!doctype html>

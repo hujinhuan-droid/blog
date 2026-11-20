@@ -10,7 +10,6 @@ import {
   startSession,
   clearSessionCookie,
   parseCookies,
-  sessionCookie,
 } from "./auth";
 import {
   DB,
@@ -19,11 +18,9 @@ import {
   getPostById,
   createPost,
   updatePost,
-  deletePost,
   softDeletePost,
   restorePost,
   purgePost,
-  listTrash,
   getSettings,
   setSettings,
   listComments,
@@ -33,7 +30,6 @@ import {
   listTags,
   parseTags,
   getMeta,
-  incMeta,
   getReactionCounts,
   toggleReaction,
   getTotalViews,
@@ -59,7 +55,7 @@ import {
 } from "./db";
 import {
   json, anonCache, isAdmin, readJson, cardOf, escHtmlS, absUrl, isCrawler,
-  classifyDevice, classifySource, visitorHash, fmtDateS, cacheControlHeader, securityHeaders, assetCacheControl,
+  classifyDevice, classifySource, visitorHash, securityHeaders, assetCacheControl,
 } from "./util";
 import {
   prerenderHome, prerenderPost, prerenderTag, robotsTxt, handleFeed, handleSitemap, maintenancePage,
@@ -1409,8 +1405,7 @@ export default {
     let docSettings: Record<string, string> = {};
     try { docSettings = await getSettings(env.DB); } catch {}
     if (docSettings.maintenance_mode === "1" && !user) {
-      const base = (env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
-      return new Response(maintenancePage(docSettings, base), {
+      return new Response(maintenancePage(docSettings), {
         headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store", ...securityHeaders() },
       });
     }
