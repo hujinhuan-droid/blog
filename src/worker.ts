@@ -5,6 +5,7 @@ import {
   githubAuthorizeUrl,
   exchangeGithubCode,
   passwordLogin,
+  verifyPassword,
   ensureAdminAccount,
   changePassword,
   startSession,
@@ -29,6 +30,7 @@ import {
   createComment,
   listTags,
   parseTags,
+  stringifyTags,
   getMeta,
   getReactionCounts,
   toggleReaction,
@@ -62,10 +64,16 @@ import {
 } from "./ssr";
 import {
   GEMINI_MODEL, callAI, callGemini, extractJsonArray, embedText, genCoverImage, buildCoverPrompt, cosine,
-  upsertVector, queryVectors, parseEmbedding,
+  upsertVector, queryVectors, parseEmbedding, vectorStats,
   type AiAction,
 } from "./ai";
-import { cachedResponse, purgeEdgeCache } from "./cache";
+import { cachedResponse, purgeEdgeCache, purgeKey, cacheStats } from "./cache";
+import {
+  generateSecret, verifyTotp, otpauthUrl, generateBackupCodes, hashBackupCode,
+  consumeBackupCode, newChallenge,
+} from "./totp";
+
+let schema2faReady = false;
 
 interface Env extends AuthEnv {
   DB: DB;
@@ -546,6 +554,17 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
       if (lockOn && key) {
         try { await env.DB.prepare("DELETE FROM login_attempts WHERE key = ?").bind(key).run(); } catch {}
       }
+      // 两步验证：密码正确后先发挑战，校验动态码/备用码才建立会话
+      if ((u as any).totp_enabled) {
+        try {
+          const challenge = newChallenge();
+          await env.DB.prepare("INSERT INTO login_2fa_challenges (challenge, user_id, expires_at) VALUES (?, ?, ?)")
+            .bind(challenge, u.id, Date.now() + 10 * 60000).run();
+          return json({ need2fa: true, challenge });
+        } catch {
+          return json({ error: "两步验证暂时不可用，请稍后重试" }, 503);
+        }
+      }
       const s = await startSession(env, u);
       await logAudit(env.DB, { actor: u.username, action: "login", target: "password" });
       return json({ user: s.user }, 200, { "set-cookie": s.cookie });
@@ -571,6 +590,105 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     } catch (e: any) {
       return json({ error: e.message || "GitHub 登录失败" }, 400);
     }
+  }
+
+  // 两步验证：挑战 + 动态码 / 备用码完成登录
+  if (method === "POST" && seg.length === 4 && seg[1] === "auth" && seg[2] === "login" && seg[3] === "2fa") {
+    const body = await readJson(req);
+    const ch = String(body.challenge || "");
+    const code = String(body.code || "").trim().toUpperCase();
+    if (!ch || !code) return json({ error: "缺少挑战或验证码" }, 400);
+    let row: any = null;
+    try {
+      row = await env.DB.prepare("SELECT user_id, expires_at FROM login_2fa_challenges WHERE challenge = ?").bind(ch).first();
+    } catch { return json({ error: "两步验证表未就绪，请先执行迁移" }, 503); }
+    if (!row) return json({ error: "验证已过期，请重新登录" }, 401);
+    if (Number(row.expires_at) < Date.now()) {
+      try { await env.DB.prepare("DELETE FROM login_2fa_challenges WHERE challenge = ?").bind(ch).run(); } catch {}
+      return json({ error: "验证已过期，请重新登录" }, 401);
+    }
+    const urow = await env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(row.user_id).first() as any;
+    if (!urow || !urow.totp_enabled || !urow.totp_secret) return json({ error: "两步验证未启用" }, 400);
+    let ok = await verifyTotp(urow.totp_secret, code);
+    let via = "totp";
+    if (!ok) {
+      try {
+        const backups = JSON.parse(urow.totp_backups || "[]");
+        const next = await consumeBackupCode(code, backups);
+        if (next) {
+          await env.DB.prepare("UPDATE users SET totp_backups = ? WHERE id = ?").bind(JSON.stringify(next), row.user_id).run();
+          ok = true;
+          via = "backup";
+        }
+      } catch {}
+    }
+    if (!ok) return json({ error: "验证码或备用码不正确" }, 401);
+    try { await env.DB.prepare("DELETE FROM login_2fa_challenges WHERE challenge = ?").bind(ch).run(); } catch {}
+    const s = await startSession(env, urow);
+    await logAudit(env.DB, { actor: urow.username, action: "login", target: "2fa:" + via });
+    return json({ user: s.user }, 200, { "set-cookie": s.cookie });
+  }
+
+  // 两步验证状态（管理员）
+  if (method === "GET" && seg.length === 3 && seg[1] === "auth" && seg[2] === "2fa") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    let enabled = false, backups = 0;
+    try {
+      const r = await env.DB.prepare("SELECT totp_enabled, totp_backups FROM users WHERE id = ?").bind(user!.id).first() as any;
+      enabled = !!r?.totp_enabled;
+      backups = Array.isArray(JSON.parse(r?.totp_backups || "[]")) ? JSON.parse(r?.totp_backups || "[]").length : 0;
+    } catch {}
+    return json({ enabled, backups });
+  }
+
+  // 两步验证：生成密钥与备用码（仅展示一次，未启用前不入备份库）
+  if (method === "POST" && seg.length === 4 && seg[1] === "auth" && seg[2] === "2fa" && seg[3] === "setup") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const secret = generateSecret();
+    const codes = generateBackupCodes(8);
+    try {
+      await env.DB.prepare("UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?").bind(secret, user!.id).run();
+    } catch { return json({ error: "保存密钥失败" }, 500); }
+    return json({
+      secret,
+      uri: otpauthUrl(secret, "AI Agent Blog", user!.username),
+      backupCodes: codes,
+    });
+  }
+
+  // 两步验证：用验证器动态码确认启用（备用码以哈希落库）
+  if (method === "POST" && seg.length === 4 && seg[1] === "auth" && seg[2] === "2fa" && seg[3] === "enable") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const row = await env.DB.prepare("SELECT totp_secret FROM users WHERE id = ?").bind(user!.id).first() as any;
+    if (!row?.totp_secret) return json({ error: "请先生成密钥" }, 400);
+    if (!(await verifyTotp(row.totp_secret, String(body.code || "")))) return json({ error: "动态码不正确" }, 400);
+    const codes = Array.isArray(body.backupCodes) ? body.backupCodes.filter((x: any) => typeof x === "string") : [];
+    const hashes: string[] = [];
+    for (const c of codes) hashes.push(await hashBackupCode(c));
+    await env.DB.prepare("UPDATE users SET totp_enabled = 1, totp_backups = ? WHERE id = ?").bind(JSON.stringify(hashes), user!.id).run();
+    await logAudit(env.DB, { actor: user!.username, action: "2fa_enable", target: "totp" });
+    return json({ ok: true, backups: hashes.length });
+  }
+
+  // 两步验证：关闭（需当前密码 + 动态码或备用码）
+  if (method === "POST" && seg.length === 4 && seg[1] === "auth" && seg[2] === "2fa" && seg[3] === "disable") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const pw = await verifyPassword((await env.DB.prepare("SELECT password_hash FROM users WHERE id = ?").bind(user!.id).first() as any)?.password_hash, String(body.password || ""));
+    if (!pw) return json({ error: "当前密码不正确" }, 400);
+    const row = await env.DB.prepare("SELECT totp_secret, totp_backups FROM users WHERE id = ?").bind(user!.id).first() as any;
+    let ok = row?.totp_secret ? await verifyTotp(row.totp_secret, String(body.code || "")) : false;
+    if (!ok) {
+      try {
+        const next = await consumeBackupCode(String(body.code || ""), JSON.parse(row?.totp_backups || "[]"));
+        if (next) ok = true;
+      } catch {}
+    }
+    if (!ok) return json({ error: "动态码或备用码不正确" }, 400);
+    await env.DB.prepare("UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_backups = '[]' WHERE id = ?").bind(user!.id).run();
+    await logAudit(env.DB, { actor: user!.username, action: "2fa_disable", target: "totp" });
+    return json({ ok: true });
   }
 
   // 当前用户
@@ -1347,6 +1465,202 @@ async function handleApi(req: Request, env: Env, path: string[], method: string)
     return json({ ok: true, count: n });
   }
 
+  // ── 后台增强：全站 SEO 体检（复用单篇体检规则，扩展到存量文章） ──
+  if (method === "GET" && seg.length === 3 && seg[1] === "admin" && seg[2] === "insights") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const all = await env.DB.prepare(
+      "SELECT id, slug, title, excerpt, cover, tags, content, status FROM posts WHERE deleted_at IS NULL"
+    ).all() as any;
+    const posts: any[] = (all.results || []) as any[];
+    const titleCount = new Map<string, number>();
+    for (const p of posts) {
+      const t = String(p.title || "").trim().toLowerCase();
+      titleCount.set(t, (titleCount.get(t) || 0) + 1);
+    }
+    const issues: any[] = [];
+    const counter: Record<string, number> = { critical: 0, warning: 0, info: 0 };
+    for (const p of posts) {
+      const items: Array<{ level: string; label: string }> = [];
+      const add = (level: string, label: string) => { items.push({ level, label }); counter[level]++; };
+      const title = String(p.title || "").trim();
+      const excerpt = String(p.excerpt || "").trim();
+      const cover = String(p.cover || "").trim();
+      const tags = parseTags(p.tags);
+      const content = String(p.content || "");
+      const plain = content
+        .replace(/```[\s\S]*?```/g, "")
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+        .replace(/[#>*`_~\[\]()\-]/g, "")
+        .replace(/\s+/g, "");
+      if (title.length < 10 || title.length > 60) add("warning", `标题长度 ${title.length} 字（建议 10–60）`);
+      if (!excerpt) add("warning", "缺少摘要，影响列表与分享卡片");
+      if (!cover) add("warning", "缺少封面图");
+      if (!tags.length) add("info", "未设置标签");
+      if (plain.length < 300) add("warning", `正文约 ${plain.length} 字（建议 ≥300）`);
+      const noAlt = (content.match(/!\[\s*\]\(/g) || []).length;
+      if (noAlt) add("info", `${noAlt} 张图片缺少 alt 描述`);
+      if ((titleCount.get(title.toLowerCase()) || 0) > 1) add("critical", "标题与其他文章重复");
+      if (p.status === "published" && !p.slug) add("critical", "已发布文章缺少 slug");
+      if (items.length) issues.push({ id: p.id, slug: p.slug, title: p.title, status: p.status, items });
+    }
+    const weight: Record<string, number> = { critical: 2, warning: 1, info: 0 };
+    issues.sort((a, b) => {
+      const sa = Math.max(0, ...a.items.map((i: any) => weight[i.level] || 0));
+      const sb = Math.max(0, ...b.items.map((i: any) => weight[i.level] || 0));
+      return sb - sa || b.items.length - a.items.length;
+    });
+    return json({ total: posts.length, affected: issues.length, counter, issues, scannedAt: Date.now() });
+  }
+
+  // ── 后台增强：AI 批量补元数据（只出建议，不写库） ──
+  if (method === "POST" && seg.length === 3 && seg[1] === "admin" && seg[2] === "enrich") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const ids = (Array.isArray(body.ids) ? body.ids : [])
+      .map((x: any) => Number(x)).filter((n: number) => Number.isFinite(n)).slice(0, 20);
+    if (!ids.length) return json({ error: "请先选择文章（单次最多 20 篇）" }, 400);
+    const rows = await env.DB.prepare(
+      `SELECT id, slug, title, tags, content FROM posts WHERE id IN (${ids.map(() => "?").join(",")})`
+    ).bind(...ids).all() as any;
+    const suggestions: any[] = [];
+    const failures: string[] = [];
+    for (const p of (rows.results || []) as any[]) {
+      try {
+        const raw = await callAI(
+          env,
+          '你是中文技术博客的编辑。根据标题和正文输出严格 JSON：{"excerpt":"60-110字摘要","tags":["标签1","标签2","标签3"]}。只输出 JSON，不要其它文字。',
+          `标题：${p.title}\n正文节选：${String(p.content || "").slice(0, 2500)}\n现有标签：${p.tags || ""}`
+        );
+        const m = String(raw || "").match(/\{[\s\S]*\}/);
+        if (!m) { failures.push(String(raw || "").slice(0, 160) || "AI 返回为空"); continue; }
+        const parsed = JSON.parse(m[0]);
+        const excerpt = String(parsed.excerpt || parsed.summary || parsed.description || "").trim().slice(0, 200);
+        const tags = Array.isArray(parsed.tags)
+          ? parsed.tags.map((x: any) => String(x).trim()).filter(Boolean).slice(0, 6) : [];
+        if (!excerpt && !tags.length) { failures.push("AI 返回缺少 excerpt/tags 字段"); continue; }
+        suggestions.push({ id: p.id, title: p.title, slug: p.slug, excerpt, tags });
+      } catch (e: any) {
+        failures.push((e && e.message) || "解析失败");
+      }
+    }
+    return json({ suggestions, count: suggestions.length, failures });
+  }
+
+  // ── 后台增强：人工确认后批量应用元数据 ──
+  if (method === "POST" && seg.length === 4 && seg[1] === "admin" && seg[2] === "enrich" && seg[3] === "apply") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const items = Array.isArray(body.items) ? body.items : [];
+    let n = 0;
+    for (const it of items) {
+      const id = Number(it?.id);
+      if (!Number.isFinite(id)) continue;
+      const sets: string[] = [];
+      const vals: any[] = [];
+      if (typeof it.excerpt === "string" && it.excerpt.trim()) {
+        sets.push("excerpt = ?"); vals.push(it.excerpt.trim().slice(0, 300));
+      }
+      if (Array.isArray(it.tags) && it.tags.length) {
+        sets.push("tags = ?"); vals.push(stringifyTags(it.tags.map(String)));
+      }
+      if (!sets.length) continue;
+      sets.push("updated_at = ?");
+      vals.push(Date.now(), id);
+      await env.DB.prepare(`UPDATE posts SET ${sets.join(", ")} WHERE id = ?`).bind(...vals).run();
+      n++;
+    }
+    await logAudit(env.DB, { actor: user!.username, action: "ai_enrich_apply", target: `${n} 篇` });
+    await purgeEdgeCache(req);
+    return json({ ok: true, count: n });
+  }
+
+  // ── 后台增强：缓存 / 向量运维面板 ──
+  if (method === "GET" && seg.length === 3 && seg[1] === "admin" && seg[2] === "ops") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    let vector = { available: false, count: 0, dimensions: 0, metric: "" };
+    try {
+      if (env.VECTORIZE) {
+        const d: any = await env.VECTORIZE.describe();
+        vector = {
+          available: true,
+          count: Number(d.vectorCount || d.count) || 0,
+          dimensions: Number(d.dimensions) || 0,
+          metric: String(d.metric || ""),
+        };
+      }
+    } catch {}
+    let total = 0, embedded = 0;
+    try {
+      const a: any = await env.DB.prepare("SELECT COUNT(*) n FROM posts WHERE deleted_at IS NULL").first();
+      const b: any = await env.DB.prepare("SELECT COUNT(*) n FROM posts WHERE deleted_at IS NULL AND embedding IS NOT NULL AND embedding != ''").first();
+      total = Number(a?.n) || 0;
+      embedded = Number(b?.n) || 0;
+    } catch {}
+    return json({
+      cache: cacheStats(),
+      vector,
+      coverage: { total, embedded, percent: total ? Math.round((embedded / total) * 100) : 0 },
+      vectorRuntime: { ...vectorStats },
+      now: Date.now(),
+    });
+  }
+
+  // ── 后台增强：手动清除缓存（单个 key 或全部动态缓存） ──
+  if (method === "POST" && seg.length === 4 && seg[1] === "admin" && seg[2] === "ops" && seg[3] === "purge") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const key = String(body.key || "").trim();
+    if (key) await purgeKey(req, key);
+    else await purgeEdgeCache(req);
+    await logAudit(env.DB, { actor: user!.username, action: "cache_purge", target: key || "all" });
+    return json({ ok: true, scope: key || "all" });
+  }
+
+  // ── 后台增强：发布前全量预检（死链 / 图片 alt / 字数 / 禁用词） ──
+  if (method === "POST" && seg.length === 3 && seg[1] === "admin" && seg[2] === "preflight") {
+    if (!isAdmin(user)) return json({ error: "需要管理员权限" }, 401);
+    const body = await readJson(req);
+    const id = Number(body.id);
+    let p: any = null;
+    if (Number.isFinite(id) && id > 0) p = await getPostById(env.DB, id);
+    else if (body.slug) p = await getPostBySlug(env.DB, String(body.slug));
+    if (!p) return json({ error: "文章不存在" }, 404);
+    const content = String(p.content || "");
+    const checks: Array<{ ok: boolean; label: string; detail?: string }> = [];
+    const title = String(p.title || "").trim();
+    const plain = content.replace(/```[\s\S]*?```/g, "").replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\s+/g, "");
+    checks.push({ ok: title.length >= 10 && title.length <= 60, label: "标题长度", detail: `${title.length} 字（建议 10–60）` });
+    checks.push({ ok: !!String(p.excerpt || "").trim(), label: "摘要完整", detail: String(p.excerpt || "").trim() ? "已填写" : "缺少摘要" });
+    checks.push({ ok: !!String(p.cover || "").trim(), label: "封面图", detail: String(p.cover || "").trim() ? "已设置" : "缺少封面" });
+    checks.push({ ok: plain.length >= 300, label: "正文字数", detail: `约 ${plain.length} 字（建议 ≥300）` });
+    const noAlt = (content.match(/!\[\s*\]\(/g) || []).length;
+    checks.push({ ok: noAlt === 0, label: "图片替代文本", detail: noAlt ? `${noAlt} 张图片无 alt` : "全部有 alt" });
+    let dead: string[] = [];
+    try {
+      const allSlugs = await env.DB.prepare("SELECT slug FROM posts WHERE deleted_at IS NULL").all() as any;
+      const set = new Set((allSlugs.results || []).map((r: any) => String(r.slug)));
+      const links = [...content.matchAll(/\/post\/([^\s"')\]]+)/g)].map((m) => {
+        try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+      });
+      dead = [...new Set(links)].filter((s) => s && !set.has(s));
+    } catch {}
+    checks.push({ ok: dead.length === 0, label: "站内链接有效", detail: dead.length ? `失效：${dead.slice(0, 5).join("、")}` : "无死链" });
+    let hit: string[] = [];
+    try {
+      const st = await getSettings(env.DB);
+      const banned = String(st.banned_words || "").split(/[,，\n]/).map((x) => x.trim()).filter(Boolean);
+      const hay = title + content;
+      hit = banned.filter((w) => hay.includes(w));
+    } catch {}
+    checks.push({ ok: hit.length === 0, label: "敏感词", detail: hit.length ? `命中：${hit.slice(0, 5).join("、")}` : "未命中" });
+    const passed = checks.filter((c) => c.ok).length;
+    const score = Math.round((passed / checks.length) * 100);
+    await logAudit(env.DB, { actor: user!.username, action: "preflight", target: String(p.slug || p.id), detail: `score=${score}` });
+    return json({ ok: score >= 80, score, checks, title: p.title, slug: p.slug });
+  }
+
   return json({ error: "Not Found" }, 404);
 }
 
@@ -1361,6 +1675,18 @@ export default {
     if (path[0] === "feed.xml") return await cachedResponse(req, url.search ? "/feed.xml" + url.search : "/feed.xml", 300, () => handleFeed(env, req));
 
     if (path[0] === "api") {
+      // 兜底：两步验证表/列（幂等）。迁移已 apply 时跳过检测，避免每请求重复 PRAGMA。
+      if (!schema2faReady) {
+        try {
+          const cols = await env.DB.prepare("PRAGMA table_info(users)").all() as any;
+          const names = new Set((cols.results || []).map((c: any) => String(c.name)));
+          if (!names.has("totp_secret")) await env.DB.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT");
+          if (!names.has("totp_enabled")) await env.DB.exec("ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0");
+          if (!names.has("totp_backups")) await env.DB.exec("ALTER TABLE users ADD COLUMN totp_backups TEXT NOT NULL DEFAULT '[]'");
+          await env.DB.exec("CREATE TABLE IF NOT EXISTS login_2fa_challenges (challenge TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_2fa_exp ON login_2fa_challenges (expires_at);");
+          schema2faReady = true;
+        } catch {}
+      }
       // 兜底建表（幂等）：确保每日访问量表 / 登录失败锁定表存在，避免迁移未 apply 时接口失败
       try {
         await env.DB.exec("CREATE TABLE IF NOT EXISTS views_daily (day TEXT PRIMARY KEY, views INTEGER NOT NULL DEFAULT 0)");

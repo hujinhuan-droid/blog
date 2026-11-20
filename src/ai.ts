@@ -157,13 +157,20 @@ async function callWorkersText(env: Env, system: string, userText: string): Prom
     max_tokens: 1200,
     temperature: 0.7,
   });
-  let gen = "";
-  if (typeof out === "string") gen = out;
-  else if (out && out.response) gen = out.response;
-  else if (out && out.result && typeof out.result.response === "string") gen = out.result.response;
-  else if (out && typeof out.result === "string") gen = out.result;
-  else if (out && out.text) gen = out.text;
-  return (gen || "").trim();
+  // 模型返回结构随版本变化（string / {response} / {result:{response}} / {content:[{text}]}），
+  // 递归取首个非空文本，避免把对象当字符串调用 .trim() 导致整条 AI 链路失败。
+  const textOf = (v: any): string => {
+    if (typeof v === "string") return v;
+    if (Array.isArray(v)) return v.map(textOf).join("");
+    if (v && typeof v === "object") {
+      for (const k of ["response", "text", "content", "result", "answer", "output_text"]) {
+        const s = textOf(v[k]);
+        if (s) return s;
+      }
+    }
+    return "";
+  };
+  return textOf(out).trim();
 }
 
 // 用 DeepSeek 文本模型生成文本（聊天补全 API）。优先于 Workers AI，失败自动回退。
@@ -318,11 +325,15 @@ export async function upsertVector(env: Env, slug: string, embedding: number[], 
         cover: String(meta?.cover ?? VECTOR_META.cover),
       } as Record<string, string>,
     }]);
+    vectorStats.upserts++;
     return true;
   } catch {
     return false;
   }
 }
+
+/** 实例内向量检索统计（供后台运维面板展示，零 D1 开销） */
+export const vectorStats = { queries: 0, hits: 0, fallbacks: 0, upserts: 0 };
 
 /** 从 Vectorize 检索与给定向量最相似的 slug 列表；失败或无索引返回 null（触发回退）。 */
 export async function queryVectors(
@@ -331,14 +342,17 @@ export async function queryVectors(
   topK = 8
 ): Promise<Array<{ slug: string; score: number; metadata?: Record<string, unknown> }> | null> {
   const idx = env.VECTORIZE;
-  if (!idx || !Array.isArray(embedding) || embedding.length !== 768) return null;
+  vectorStats.queries++;
+  if (!idx || !Array.isArray(embedding) || embedding.length !== 768) { vectorStats.fallbacks++; return null; }
   try {
     const res = await idx.query(embedding, { topK: Math.max(1, Math.min(50, topK)), returnMetadata: true });
     const matches = (res && (res as any).matches) || [];
+    vectorStats.hits++;
     return matches
       .filter((m: any) => m && m.metadata && m.metadata.slug)
       .map((m: any) => ({ slug: String(m.metadata.slug), score: Number(m.score) || 0, metadata: m.metadata }));
   } catch {
+    vectorStats.fallbacks++;
     return null;
   }
 }

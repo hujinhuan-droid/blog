@@ -10,6 +10,12 @@
 
 const CACHE_NAME = "blog-edge-v1";
 
+// 实例内轻量统计（Worker 隔离，展示为「当前实例」而非全站聚合；零 D1 开销）
+const stats = { hits: 0, misses: 0, purges: 0, byKey: {} as Record<string, number> };
+export function cacheStats() {
+  return { hits: stats.hits, misses: stats.misses, purges: stats.purges, byKey: { ...stats.byKey } };
+}
+
 function enabled(): CacheStorage | null {
   try {
     return typeof caches !== "undefined" && (caches as any).default ? (caches as CacheStorage) : null;
@@ -37,6 +43,8 @@ export async function cachedResponse(
   varyUA = false
 ): Promise<Response> {
   const cs = enabled();
+  stats.misses++;
+  stats.byKey[key] = (stats.byKey[key] || 0) + 1;
   if (!cs) return await producer();
   try {
     const origin = new URL(req.url).origin;
@@ -45,7 +53,11 @@ export async function cachedResponse(
     if (varyUA) cacheKey.headers.set("X-Blog-Vary", "crawler");
     const cache = await cs.open(CACHE_NAME);
     const hit = await cache.match(cacheKey);
-    if (hit) return hit;
+    if (hit) {
+      stats.hits++;
+      stats.misses--;
+      return hit;
+    }
     const resp = await producer();
     if (resp && resp.status === 200 && ttlSeconds > 0) {
       // 写一份副本进缓存，原响应原样返回（避免 clone 影响 body 消费）
@@ -59,6 +71,12 @@ export async function cachedResponse(
   } catch {
     return await producer();
   }
+}
+
+/** 后台手动清除单个 key（best-effort）。 */
+export async function purgeKey(req: Request, key: string): Promise<void> {
+  stats.purges++;
+  try { await deleteKey(new URL(req.url).origin, key.startsWith("/") ? key : "/" + key); } catch {}
 }
 
 /** 失效指定 key（best-effort）。 */
@@ -80,6 +98,7 @@ async function deleteKey(origin: string, key: string): Promise<void> {
  * 文章列表变化会影响 feed / sitemap / 爬虫首页与相关标签页，故全部失效。
  */
 export async function purgeEdgeCache(req: Request): Promise<void> {
+  stats.purges++;
   const cs = enabled();
   if (!cs) return;
   try {

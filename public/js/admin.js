@@ -16,6 +16,11 @@ function buildAdminShell() {
   if (app.querySelector(".admin-shell")) return;
   const u = CURRENT_USER || {};
   const uname = escHtml(u.username || "admin");
+  // 后台独立主题：与前台 data-theme 解耦，只作用于 body.admin-mode
+  document.documentElement.dataset.adminTheme = "violet";
+  try {
+    if (localStorage.getItem("admin-collapsed") === "1") document.body.classList.add("admin-collapsed");
+  } catch {}
   app.innerHTML = `
     <div class="admin-shell">
       <aside class="admin-sidebar">
@@ -25,6 +30,7 @@ function buildAdminShell() {
             <div class="admin-brand-name">AI Agent</div>
             <div class="admin-brand-sub">管理后台</div>
           </div>
+          <button type="button" class="admin-collapse-btn" id="adminCollapseBtn" title="收起侧栏"><i data-lucide="panel-left-close"></i></button>
           <span class="caret brand-caret">▾</span>
           <div class="admin-brand-menu" id="adminBrandMenu" role="menu">
             <button type="button" class="admin-menu-item" id="btnChangePw2"><i data-lucide="key-round"></i> 修改密码</button>
@@ -32,17 +38,31 @@ function buildAdminShell() {
           </div>
         </div>
         <nav class="admin-nav">
-          <a class="admin-nav-item" href="#/admin" data-nav="overview"><span class="ico"><i data-lucide="layout-dashboard"></i></span><span>概览</span></a>
-          <a class="admin-nav-item" href="#/admin/posts" data-nav="posts"><span class="ico"><i data-lucide="file-text"></i></span><span>文章</span></a>
-          <a class="admin-nav-item" href="#/admin/comments" data-nav="comments"><span class="ico"><i data-lucide="message-square"></i></span><span>评论审核</span></a>
-          <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico"><i data-lucide="images"></i></span><span>媒体库</span></a>
-          <a class="admin-nav-item" href="#/admin/trash" data-nav="trash"><span class="ico"><i data-lucide="trash-2"></i></span><span>回收站</span></a>
-          <a class="admin-nav-item" href="#/admin/traffic" data-nav="traffic"><span class="ico"><i data-lucide="bar-chart-2"></i></span><span>流量中心</span></a>
-          <a class="admin-nav-item" href="#/admin/tags" data-nav="tags"><span class="ico"><i data-lucide="tags"></i></span><span>标签管理</span></a>
-          <a class="admin-nav-item" href="#/admin/scheduled" data-nav="scheduled"><span class="ico"><i data-lucide="calendar-clock"></i></span><span>定时发布</span></a>
-          <a class="admin-nav-item" href="#/admin/audit" data-nav="audit"><span class="ico"><i data-lucide="shield"></i></span><span>审计日志</span></a>
-          <a class="admin-nav-item" href="#/admin/system" data-nav="system"><span class="ico"><i data-lucide="activity"></i></span><span>系统状态</span></a>
-          <a class="admin-nav-item" href="#/admin/settings" data-nav="settings"><span class="ico"><i data-lucide="settings"></i></span><span>设置</span></a>
+          <div class="admin-nav-group">
+            <div class="admin-nav-label">内容</div>
+            <a class="admin-nav-item" href="#/admin" data-nav="overview"><span class="ico"><i data-lucide="layout-dashboard"></i></span><span>概览</span></a>
+            <a class="admin-nav-item" href="#/admin/posts" data-nav="posts"><span class="ico"><i data-lucide="file-text"></i></span><span>文章</span></a>
+            <a class="admin-nav-item" href="#/admin/media" data-nav="media"><span class="ico"><i data-lucide="images"></i></span><span>媒体库</span></a>
+            <a class="admin-nav-item" href="#/admin/trash" data-nav="trash"><span class="ico"><i data-lucide="trash-2"></i></span><span>回收站</span></a>
+          </div>
+          <div class="admin-nav-group">
+            <div class="admin-nav-label">运营</div>
+            <a class="admin-nav-item" href="#/admin/comments" data-nav="comments"><span class="ico"><i data-lucide="message-square"></i></span><span>评论审核</span></a>
+            <a class="admin-nav-item" href="#/admin/traffic" data-nav="traffic"><span class="ico"><i data-lucide="bar-chart-2"></i></span><span>流量中心</span></a>
+            <a class="admin-nav-item" href="#/admin/tags" data-nav="tags"><span class="ico"><i data-lucide="tags"></i></span><span>标签管理</span></a>
+            <a class="admin-nav-item" href="#/admin/scheduled" data-nav="scheduled"><span class="ico"><i data-lucide="calendar-clock"></i></span><span>定时发布</span></a>
+            <a class="admin-nav-item" href="#/admin/insights" data-nav="insights"><span class="ico"><i data-lucide="scan-search"></i></span><span>SEO 体检</span></a>
+            <a class="admin-nav-item" href="#/admin/enrich" data-nav="enrich"><span class="ico"><i data-lucide="wand-sparkles"></i></span><span>AI 补全</span></a>
+            <a class="admin-nav-item" href="#/admin/preflight" data-nav="preflight"><span class="ico"><i data-lucide="shield-check"></i></span><span>发布预检</span></a>
+          </div>
+          <div class="admin-nav-group">
+            <div class="admin-nav-label">系统</div>
+            <a class="admin-nav-item" href="#/admin/audit" data-nav="audit"><span class="ico"><i data-lucide="shield"></i></span><span>审计日志</span></a>
+            <a class="admin-nav-item" href="#/admin/system" data-nav="system"><span class="ico"><i data-lucide="activity"></i></span><span>系统状态</span></a>
+            <a class="admin-nav-item" href="#/admin/ops" data-nav="ops"><span class="ico"><i data-lucide="gauge"></i></span><span>运维面板</span></a>
+            <a class="admin-nav-item" href="#/admin/2fa" data-nav="2fa"><span class="ico"><i data-lucide="key-round"></i></span><span>两步验证</span></a>
+            <a class="admin-nav-item" href="#/admin/settings" data-nav="settings"><span class="ico"><i data-lucide="settings"></i></span><span>设置</span></a>
+          </div>
         </nav>
         <div class="admin-side-foot">
           <button type="button" class="admin-user" id="adminUserBtn" aria-haspopup="true" aria-expanded="false">
@@ -62,12 +82,140 @@ function buildAdminShell() {
       <div class="admin-content">
         <header class="admin-topbar">
           <span class="admin-top-title" id="admin-top-title">概览</span>
+          <button type="button" class="admin-cmd-trigger" id="adminCmdBtn"><i data-lucide="search"></i><span>搜索文章、标签或执行操作…</span><kbd>Ctrl K</kbd></button>
           <a class="admin-home-btn" href="#/" title="返回网站首页"><i data-lucide="home"></i> 返回首页</a>
         </header>
         <div class="admin-main" id="admin-main"></div>
       </div>
     </div>`;
   bindAdminUserMenu();
+  bindAdminShellExtras();
+}
+
+// 侧栏折叠 + 全局命令面板入口
+function bindAdminShellExtras() {
+  const btn = document.getElementById("adminCollapseBtn");
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = "1";
+    btn.onclick = () => {
+      const collapsed = document.body.classList.toggle("admin-collapsed");
+      try { localStorage.setItem("admin-collapsed", collapsed ? "1" : "0"); } catch {}
+      btn.title = collapsed ? "展开侧栏" : "收起侧栏";
+    };
+  }
+  const cmdBtn = document.getElementById("adminCmdBtn");
+  if (cmdBtn) cmdBtn.onclick = openCommandPalette;
+  if (!window.__adminCmdBound) {
+    window.__adminCmdBound = true;
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key || "").toLowerCase() === "k" && document.body.classList.contains("admin-mode")) {
+        e.preventDefault();
+        openCommandPalette();
+      }
+    });
+  }
+}
+
+// 命令面板：搜索文章/标签 + 快速跳转；数据按需加载并缓存于本次会话
+let CMD_CACHE = null;
+async function openCommandPalette() {
+  if (document.querySelector(".cmd-overlay")) return;
+  const ov = el(`<div class="cmd-overlay"><div class="cmd-panel">
+    <div class="cmd-input-wrap"><i data-lucide="search"></i><input id="cmdInput" type="text" placeholder="搜索文章、标签或输入操作…" autocomplete="off" /><kbd>ESC</kbd></div>
+    <div class="cmd-results" id="cmdResults"><div class="cmd-hint">正在索引…</div></div>
+  </div></div>`);
+  document.body.appendChild(ov);
+  try { window.lucide && window.lucide.createIcons({ root: ov }); } catch {}
+  const input = ov.querySelector("#cmdInput");
+  const results = ov.querySelector("#cmdResults");
+  let active = 0, items = [];
+
+  const actions = [
+    { kind: "action", label: "新建文章", hint: "写文章", run: () => { location.hash = "#/admin/new"; } },
+    { kind: "action", label: "SEO 体检", hint: "全站扫描", run: () => { location.hash = "#/admin/insights"; } },
+    { kind: "action", label: "AI 补全元数据", hint: "批量生成摘要与标签", run: () => { location.hash = "#/admin/enrich"; } },
+    { kind: "action", label: "发布前预检", hint: "死链/敏感词检查", run: () => { location.hash = "#/admin/preflight"; } },
+    { kind: "action", label: "运维面板", hint: "缓存与向量", run: () => { location.hash = "#/admin/ops"; } },
+    { kind: "action", label: "定时发布", hint: "内容日历", run: () => { location.hash = "#/admin/scheduled"; } },
+    { kind: "action", label: "流量中心", hint: "数据分析", run: () => { location.hash = "#/admin/traffic"; } },
+    { kind: "action", label: "设置", hint: "站点配置", run: () => { location.hash = "#/admin/settings"; } },
+  ];
+
+  if (!CMD_CACHE) {
+    CMD_CACHE = { posts: [], tags: [] };
+    try {
+      const r = await api("/posts?summary=1");
+      if (r.ok) {
+        const d = await r.json();
+        CMD_CACHE.posts = Array.isArray(d) ? d : (d.posts || []);
+      }
+    } catch {}
+    try {
+      const r = await api("/tags");
+      if (r.ok) {
+        const d = await r.json();
+        CMD_CACHE.tags = Array.isArray(d) ? d : (d.tags || []);
+      }
+    } catch {}
+  }
+
+  const paint = () => {
+    const q = (input.value || "").trim().toLowerCase();
+    items = [];
+    if (!q) {
+      items.push(...actions.slice(0, 5));
+    } else {
+      for (const a of actions) if ((a.label + a.hint).toLowerCase().includes(q)) items.push(a);
+      for (const p of CMD_CACHE.posts) {
+        if ((String(p.title || "") + String(p.slug || "")).toLowerCase().includes(q)) {
+          items.push({ kind: "post", label: String(p.title || p.slug), hint: "编辑文章", post: p,
+            run: () => { location.hash = "#/admin/edit/" + encodeURIComponent(p.slug); } });
+        }
+      }
+      for (const t of CMD_CACHE.tags) {
+        const name = typeof t === "string" ? t : String(t.name || t.tag || "");
+        if (name && name.toLowerCase().includes(q)) {
+          items.push({ kind: "tag", label: name, hint: "查看标签文章",
+            run: () => { location.hash = "#/tag/" + encodeURIComponent(name); } });
+        }
+      }
+    }
+    items = items.slice(0, 12);
+    active = Math.min(active, Math.max(0, items.length - 1));
+    if (!items.length) {
+      results.innerHTML = `<div class="cmd-hint">没有匹配结果</div>`;
+      return;
+    }
+    results.innerHTML = items.map((it, i) => `
+      <button type="button" class="cmd-item ${i === active ? "active" : ""}" data-i="${i}">
+        <span class="cmd-kind">${it.kind === "post" ? "文章" : it.kind === "tag" ? "标签" : "操作"}</span>
+        <span class="cmd-label">${escHtml(it.label)}</span>
+        <span class="cmd-hint">${escHtml(it.hint || "")}</span>
+      </button>`).join("");
+    results.querySelectorAll(".cmd-item").forEach((b) => {
+      b.onclick = () => choose(Number(b.dataset.i));
+      b.onmouseenter = () => { active = Number(b.dataset.i); paintActive(); };
+    });
+  };
+  const paintActive = () => results.querySelectorAll(".cmd-item").forEach((b, i) => b.classList.toggle("active", i === active));
+  const choose = (i) => {
+    const it = items[i];
+    if (!it) return;
+    ov.remove();
+    document.removeEventListener("keydown", onKey, true);
+    it.run();
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") { ov.remove(); document.removeEventListener("keydown", onKey, true); return; }
+    if (e.key === "ArrowDown") { e.preventDefault(); active = Math.min(items.length - 1, active + 1); paintActive(); }
+    if (e.key === "ArrowUp") { e.preventDefault(); active = Math.max(0, active - 1); paintActive(); }
+    if (e.key === "Enter") { e.preventDefault(); choose(active); }
+  };
+  document.addEventListener("keydown", onKey, true);
+  ov.addEventListener("click", (e) => { if (e.target === ov) ov.remove(); });
+  input.addEventListener("input", () => { active = 0; paint(); });
+  paint();
+  input.focus();
 }
 
 // 绑定侧边栏左下角「管理员」按钮：下拉展示「修改密码 / 登出」，点击外部自动收起
@@ -221,6 +369,11 @@ function setAdminActive() {
     [/^#\/admin\/system/, "system"],
     [/^#\/admin\/audit/, "audit"],
     [/^#\/admin\/media/, "media"],
+    [/^#\/admin\/insights/, "insights"],
+    [/^#\/admin\/enrich/, "enrich"],
+    [/^#\/admin\/preflight/, "preflight"],
+    [/^#\/admin\/ops/, "ops"],
+    [/^#\/admin\/2fa/, "2fa"],
     [/^#\/admin\/settings/, "settings"],
     [/^#\/admin(\/)?$/, "overview"],
   ];
@@ -260,7 +413,19 @@ function setTitle(t) {
   if (elx) elx.textContent = t;
 }
 
+// 后台路由切换套用 View Transitions（首屏无 admin-mode，不套动画避免闪一下）
 function renderAdmin() {
+  try {
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (document.body.classList.contains("admin-mode") && typeof document.startViewTransition === "function" && !reduce) {
+      document.startViewTransition(() => { renderAdminInner(); });
+      return;
+    }
+  } catch {}
+  renderAdminInner();
+}
+
+function renderAdminInner() {
   if (!CURRENT_USER || CURRENT_USER.role !== "admin") {
     document.body.classList.remove("admin-mode");
     renderLogin();
@@ -330,6 +495,26 @@ function renderAdmin() {
     renderSystemStatus();
     return;
   }
+  if (hash.startsWith("#/admin/insights")) {
+    renderInsights();
+    return;
+  }
+  if (hash.startsWith("#/admin/enrich")) {
+    renderEnrich();
+    return;
+  }
+  if (hash.startsWith("#/admin/preflight")) {
+    renderPreflight();
+    return;
+  }
+  if (hash.startsWith("#/admin/ops")) {
+    renderOps();
+    return;
+  }
+  if (hash.startsWith("#/admin/2fa")) {
+    render2FA();
+    return;
+  }
   if (hash.startsWith("#/admin/drill/")) {
     openDrill(decodeURIComponent(hash.slice("#/admin/drill/".length)) || "all");
     return;
@@ -371,6 +556,38 @@ function renderLogin() {
         toast(data.error || "登录失败");
         return;
       }
+      if (data.need2fa) {
+        const step = el(`<div class="login-card form">
+          <h2>两步验证</h2>
+          <p class="muted">密码正确，请输入验证器动态码或备用码</p>
+          <label>动态码 / 备用码</label>
+          <input type="text" id="twoFaLoginCode" placeholder="6 位动态码或备用码" autocomplete="one-time-code" />
+          <button class="btn btn-primary" id="twoFaLoginBtn" style="margin-top:14px;width:100%">验证并进入</button>
+          <button class="btn" id="twoFaBack" style="margin-top:8px;width:100%">返回</button>
+        </div>`);
+        app.innerHTML = "";
+        app.appendChild(step);
+        const submit2fa = async () => {
+          const code = (document.getElementById("twoFaLoginCode").value || "").trim();
+          if (!code) { toast("请输入验证码"); return; }
+          const b = document.getElementById("twoFaLoginBtn");
+          b.disabled = true; b.textContent = "验证中…";
+          try {
+            const rr = await api("/auth/login/2fa", { method: "POST", body: JSON.stringify({ challenge: data.challenge, code }) });
+            const jj = await rr.json().catch(() => ({}));
+            if (!rr.ok) { toast(jj.error || "验证失败"); return; }
+            CURRENT_USER = jj.user;
+            renderNav();
+            renderAdmin();
+          } catch { toast("验证请求失败"); }
+          finally { if (b.isConnected) { b.disabled = false; b.textContent = "验证并进入"; } }
+        };
+        step.querySelector("#twoFaLoginBtn").onclick = submit2fa;
+        step.querySelector("#twoFaBack").onclick = renderLogin;
+        step.querySelector("#twoFaLoginCode").addEventListener("keydown", (e) => { if (e.key === "Enter") submit2fa(); });
+        step.querySelector("#twoFaLoginCode").focus();
+        return;
+      }
       CURRENT_USER = data.user;
       renderNav();
       renderAdmin();
@@ -389,9 +606,35 @@ function renderLogin() {
   );
 }
 
+// 统一加载骨架与空状态（后台质感：不用裸「加载中」打断视觉）
+function adminSkeleton(rows = 4) {
+  return `<div class="skeleton-wrap"><div class="sk sk-title"></div>
+    <div class="sk-grid">${Array.from({ length: 4 }, () => '<div class="sk sk-card"></div>').join("")}</div>
+    ${Array.from({ length: rows }, () => '<div class="sk sk-row"></div>').join("")}</div>`;
+}
+function adminEmpty(icon, title, desc, actionHtml = "") {
+  return `<div class="empty-state"><div class="empty-ico"><i data-lucide="${escHtml(icon || "file-text")}"></i></div>
+    <div class="empty-title">${escHtml(title || "暂无数据")}</div>
+    <div class="empty-desc">${escHtml(desc || "")}</div>${actionHtml}</div>`;
+}
+
+// 纯 SVG 迷你趋势（无第三方图表库；数值全为整数，避免 NaN 路径）
+function sparkline(values, w = 88, h = 26) {
+  const a = (Array.isArray(values) ? values : []).map((n) => Number(n) || 0);
+  if (!a.length) return "";
+  const max = Math.max(1, ...a), min = Math.min(...a);
+  const span = Math.max(1, max - min);
+  const pts = a.map((v, i) => {
+    const x = a.length === 1 ? w / 2 : (i / (a.length - 1)) * (w - 4) + 2;
+    const y = h - 3 - ((v - min) / span) * (h - 8);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 async function renderDashboard() {
   const app = adminMain();
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
   const res = await api("/posts");
   const posts = await res.json();
   DASH_POSTS = Array.isArray(posts) ? posts : [];
@@ -414,20 +657,27 @@ async function renderDashboard() {
     const bars = stats.recent7
       .map((d) => `<div class="bar" title="${d.date}: ${d.count} 篇" style="height:${Math.round((d.count / maxc) * 60) + 4}px"><span>${d.count}</span></div>`)
       .join("");
+    const counts = stats.recent7.map((d) => Number(d.count) || 0);
+    const sum7 = counts.reduce((s, n) => s + n, 0);
     const panel = el(`<div class="stats-panel"></div>`);
     panel.innerHTML = `
-      <div class="stat-card clickable" data-drill="all" title="点击查看全部文章"><div class="stat-num">${stats.total}</div><div class="stat-lbl">文章</div></div>
-      <div class="stat-card clickable" data-drill="public" title="点击查看公开文章"><div class="stat-num">${stats.public}</div><div class="stat-lbl">公开</div></div>
-      <div class="stat-card clickable" data-drill="private" title="点击查看私密文章"><div class="stat-num">${stats.private}</div><div class="stat-lbl">私密</div></div>
-      <div class="stat-card clickable" data-drill="comments" title="点击查看有评论的文章"><div class="stat-num">${stats.comments}</div><div class="stat-lbl">评论</div></div>
-      <div class="stat-card clickable" data-drill="tags" title="点击查看已打标签的文章"><div class="stat-num">${stats.tags}</div><div class="stat-lbl">标签</div></div>
-      <div class="stat-card clickable" data-drill="ai" title="点击查看使用过 AI 的文章"><div class="stat-num">${stats.aiUsage}</div><div class="stat-lbl">AI 调用</div></div>
-      <div class="stat-card"><div class="stat-num">${stats.todayViews || 0}</div><div class="stat-lbl">当天访问量</div></div>
-      <div class="stat-card"><div class="stat-num">${stats.totalViews || 0}</div><div class="stat-lbl">全部访问量</div></div>
+      <div class="kpi-grid">
+        <div class="kpi-card clickable" data-drill="all"><div class="kpi-top"><span class="kpi-label">文章总数</span><span class="kpi-ico"><i data-lucide="file-text"></i></span></div><div class="kpi-num">${stats.total}</div><div class="kpi-foot"><span>近 7 天 ${sum7} 篇</span>${sparkline(counts)}</div></div>
+        <div class="kpi-card clickable" data-drill="public"><div class="kpi-top"><span class="kpi-label">公开文章</span><span class="kpi-ico"><i data-lucide="globe"></i></span></div><div class="kpi-num">${stats.public}</div><div class="kpi-foot"><span>占总数 ${stats.total ? Math.round((stats.public / stats.total) * 100) : 0}%</span>${sparkline(counts)}</div></div>
+        <div class="kpi-card clickable" data-drill="comments"><div class="kpi-top"><span class="kpi-label">评论互动</span><span class="kpi-ico"><i data-lucide="message-square"></i></span></div><div class="kpi-num">${stats.comments}</div><div class="kpi-foot"><span>有评论的文章</span>${sparkline(counts)}</div></div>
+        <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">今日访问</span><span class="kpi-ico"><i data-lucide="eye"></i></span></div><div class="kpi-num">${stats.todayViews || 0}</div><div class="kpi-foot"><span>累计 ${stats.totalViews || 0}</span>${sparkline(counts)}</div></div>
+      </div>
+      <div class="stat-mini-row">
+        <div class="stat-mini clickable" data-drill="private">私密 <b>${stats.private}</b></div>
+        <div class="stat-mini clickable" data-drill="tags">已打标签 <b>${stats.tags}</b></div>
+        <div class="stat-mini clickable" data-drill="ai">AI 调用 <b>${stats.aiUsage}</b></div>
+        <div class="stat-mini"><a href="#/admin/insights">SEO 体检 <b>去扫描 →</b></a></div>
+      </div>
       <div class="stat-chart"><div class="stat-chart-title">近 7 天发布</div><div class="bars">${bars}</div></div>`;
     wrap.appendChild(panel);
+    try { window.lucide && window.lucide.createIcons({ root: wrap }); } catch {}
     // 统计卡片点击下钻到文章标题列表（走正式路由，保证返回/导航按钮可用）
-    panel.querySelectorAll(".stat-card.clickable").forEach((card) => {
+    panel.querySelectorAll("[data-drill].clickable").forEach((card) => {
       card.onclick = () => {
         location.hash = "#/admin/drill/" + card.getAttribute("data-drill");
       };
@@ -464,7 +714,7 @@ async function renderDashboard() {
 // 文章管理：列表 + 勾选批量 AI + 重建索引
 async function renderPostsTable() {
   const app = adminMain();
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
   const res = await api("/posts");
   const posts = await res.json();
   DASH_POSTS = Array.isArray(posts) ? posts : [];
@@ -635,7 +885,7 @@ async function renderPostsTable() {
 // 媒体库整页（增强：统计 / 批量删 / 孤儿清理 / 大图预览）
 async function renderMediaPage() {
   const app = adminMain();
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
   const wrap = el(`<div class="dash"></div>`);
   wrap.innerHTML = `<div class="dash-head"><div>
       <h1 class="dash-title">媒体库</h1>
@@ -793,7 +1043,7 @@ async function openDrill(type) {
   else if (type === "tags") list = list.filter((p) => parseTags(p.tags).length > 0);
   else if (type === "ai") list = list.filter((p) => p.ai_notes && String(p.ai_notes).trim());
   else if (type === "comments") {
-    app.innerHTML = `<div class="empty">加载中…</div>`;
+    app.innerHTML = adminSkeleton();
     if (!DASH_COMMENTED) {
       try {
         const cr = await api("/comments");
@@ -841,7 +1091,7 @@ async function renderEditor(slug) {
   const app = adminMain();
   let post = null;
   if (slug) {
-    app.innerHTML = `<div class="empty">加载中…</div>`;
+    app.innerHTML = adminSkeleton();
     const res = await api("/posts/" + encodeURIComponent(slug));
     if (res.ok) post = await res.json();
     else {
@@ -1821,7 +2071,7 @@ function colorVal(hex) {
 
 async function renderSettings() {
   const app = adminMain();
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
   let s = {};
   try {
     s = await (await api("/settings")).json();
@@ -2365,7 +2615,7 @@ async function renderSettings() {
 async function renderCommentsModeration() {
   const app = adminMain();
   setTitle("评论审核");
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
   let moderationOn = true;
   try {
     const s = await (await api("/settings")).json();
@@ -2447,7 +2697,7 @@ async function renderCommentsModeration() {
 async function renderTrash() {
   const app = adminMain();
   setTitle("回收站");
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
   const res = await api("/posts?trash=1&summary=1");
   const posts = await res.json();
   const wrap = el(`<div class="dash"></div>`);
@@ -2752,7 +3002,7 @@ async function renderTrafficCenter(tab) {
   const app = adminMain();
   setTitle("流量中心");
   const active = TRAFFIC_TABS.some((x) => x.key === tab) ? tab : "trend";
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
   const [tRes, sRes, aRes] = await Promise.all([
     api("/admin/traffic?" + trafficQuery()),
     api("/admin/search-stats?days=" + SEARCH_STATE.days),
@@ -2815,7 +3065,7 @@ const AUDIT_LABELS = {
 async function renderAudit() {
   const app = adminMain();
   setTitle("审计日志");
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
   const logs = await (await api("/audit")).json();
   const wrap = el(`<div class="dash"></div>`);
   wrap.innerHTML = `<div class="dash-head"><div><h1 class="dash-title">审计日志</h1>
@@ -2865,7 +3115,7 @@ let TAG_SELECTED = new Set();
 async function renderTagManager() {
   const app = adminMain();
   setTitle("标签管理");
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
 
   let list = [];
   try {
@@ -2994,7 +3244,7 @@ function fmtTimeLeft(ts) {
 async function renderScheduled() {
   const app = adminMain();
   setTitle("定时发布");
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
 
   let posts = [];
   try {
@@ -3031,8 +3281,13 @@ async function renderScheduled() {
 
   const wrap = plusShell(
     "定时发布",
-    "到点后前台自动可见（无需等待任何任务），这里可以提前发布、改时间或取消",
-    body
+    "到点后前台自动可见（无需等待任何任务）；月历里可直接把文章拖到另一天",
+    `<div class="cal-toolbar">
+      <div class="cal-nav"><button type="button" class="btn btn-sm" id="calPrev">‹ 上月</button><b id="calTitle"></b><button type="button" class="btn btn-sm" id="calNext">下月 ›</button></div>
+      <div class="cal-views"><button type="button" class="cal-tab active" data-view="calendar">月历</button><button type="button" class="cal-tab" data-view="list">列表</button></div>
+    </div>
+    <section class="plus-card" id="calBox"></section>
+    <div id="schedList" style="display:none;margin-top:18px">${body}</div>`
   );
   app.innerHTML = "";
   app.appendChild(wrap);
@@ -3047,6 +3302,72 @@ async function renderScheduled() {
       toast(j.error || "操作失败");
     }
   };
+
+  // 月历：按本地时区绘制，拖拽文章到另一天即改 scheduled_at（保留原小时分钟）
+  let calCursor = new Date();
+  calCursor = new Date(calCursor.getFullYear(), calCursor.getMonth(), 1);
+  const calBox = wrap.querySelector("#calBox");
+  const byDay = new Map();
+  for (const p of pending) {
+    const d = new Date(Number(p.scheduled_at));
+    const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    if (!byDay.has(k)) byDay.set(k, []);
+    byDay.get(k).push(p);
+  }
+  const paintCal = () => {
+    const y = calCursor.getFullYear(), m = calCursor.getMonth();
+    wrap.querySelector("#calTitle").textContent = `${y} 年 ${m + 1} 月`;
+    const first = new Date(y, m, 1);
+    const start = (first.getDay() + 6) % 7; // 周一开头
+    const days = new Date(y, m + 1, 0).getDate();
+    const cells = [];
+    for (let i = 0; i < start; i++) cells.push(`<div class="cal-cell out"></div>`);
+    for (let d = 1; d <= days; d++) {
+      const key = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+      const list = byDay.get(key) || [];
+      const isToday = new Date().toDateString() === new Date(y, m, d).toDateString();
+      cells.push(`<div class="cal-cell ${isToday ? "today" : ""}" data-date="${key}">
+        <div class="cal-day">${d}</div>
+        ${list.map((p) => `<a class="cal-chip" draggable="true" data-id="${p.id}" href="#/admin/edit/${encodeURIComponent(p.slug)}" title="${escHtml(p.title)}">${escHtml(String(p.title).slice(0, 12))}</a>`).join("")}
+      </div>`);
+    }
+    calBox.innerHTML = `<div class="cal-grid">${["一", "二", "三", "四", "五", "六", "日"].map((w) => `<div class="cal-head">${w}</div>`).join("")}${cells.join("")}</div>`;
+    calBox.querySelectorAll(".cal-chip").forEach((chip) => {
+      chip.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", chip.dataset.id);
+        e.dataTransfer.effectAllowed = "move";
+      });
+    });
+    calBox.querySelectorAll(".cal-cell[data-date]").forEach((cell) => {
+      cell.addEventListener("dragover", (e) => { e.preventDefault(); cell.classList.add("dragover"); });
+      cell.addEventListener("dragleave", () => cell.classList.remove("dragover"));
+      cell.addEventListener("drop", (e) => {
+        e.preventDefault();
+        cell.classList.remove("dragover");
+        const id = Number(e.dataTransfer.getData("text/plain"));
+        const p = (posts || []).find((x) => Number(x.id) === id);
+        if (!p) return;
+        const old = new Date(Number(p.scheduled_at));
+        const [yy, mm, dd] = cell.dataset.date.split("-").map(Number);
+        const next = new Date(yy, mm - 1, dd, old.getHours(), old.getMinutes(), 0, 0).getTime();
+        if (next === Number(p.scheduled_at)) return;
+        if (confirm(`把「${p.title}」改到 ${cell.dataset.date} ${String(old.getHours()).padStart(2, "0")}:${String(old.getMinutes()).padStart(2, "0")}？`)) {
+          patch(id, { scheduled_at: next }, "排期已更新");
+        }
+      });
+    });
+  };
+  paintCal();
+  wrap.querySelector("#calPrev").onclick = () => { calCursor = new Date(calCursor.getFullYear(), calCursor.getMonth() - 1, 1); paintCal(); };
+  wrap.querySelector("#calNext").onclick = () => { calCursor = new Date(calCursor.getFullYear(), calCursor.getMonth() + 1, 1); paintCal(); };
+  wrap.querySelectorAll(".cal-tab").forEach((tab) => {
+    tab.onclick = () => {
+      wrap.querySelectorAll(".cal-tab").forEach((t) => t.classList.toggle("active", t === tab));
+      const isCal = tab.dataset.view === "calendar";
+      calBox.style.display = isCal ? "" : "none";
+      wrap.querySelector("#schedList").style.display = isCal ? "none" : "";
+    };
+  });
 
   wrap.querySelectorAll(".sched-now").forEach((b) => {
     b.onclick = () => patch(b.dataset.id, { status: "published", scheduled_at: null }, "已立即发布");
@@ -3095,7 +3416,7 @@ function fmtBytes(n) {
 async function renderSystemStatus() {
   const app = adminMain();
   setTitle("系统状态");
-  app.innerHTML = `<div class="empty">加载中…</div>`;
+  app.innerHTML = adminSkeleton();
 
   let d = null;
   try {
@@ -3246,4 +3567,321 @@ async function openRevisionPanel(post, afterRestore) {
   };
 
   renderList();
+}
+
+/* ── 全站 SEO 体检 ─────────────────────────────────────────────────────── */
+async function renderInsights() {
+  const app = adminMain();
+  setTitle("SEO 体检");
+  app.innerHTML = adminSkeleton(6);
+  let d = null;
+  try {
+    const r = await api("/admin/insights");
+    if (r.ok) d = await r.json();
+    else { const j = await r.json().catch(() => ({})); toast(j.error || "扫描失败"); }
+  } catch { toast("扫描请求失败"); }
+  if (!d) { app.innerHTML = adminEmpty("shield-alert", "扫描失败", "请稍后重试"); return; }
+
+  const wrap = plusShell("全站 SEO 体检", `已扫描 ${d.total} 篇文章 · ${new Date(d.scannedAt).toLocaleString()}`,
+    `<div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">已扫描</span></div><div class="kpi-num">${d.total}</div><div class="kpi-foot">全部未删除文章</div></div>
+      <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">待优化</span></div><div class="kpi-num">${d.affected}</div><div class="kpi-foot">至少命中一项问题</div></div>
+      <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">严重</span></div><div class="kpi-num">${d.counter.critical || 0}</div><div class="kpi-foot">重复标题 / 缺 slug</div></div>
+      <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">警告</span></div><div class="kpi-num">${d.counter.warning || 0}</div><div class="kpi-foot">摘要 / 封面 / 字数</div></div>
+    </div>
+    <div id="insightList" style="margin-top:18px"></div>`);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+  const list = wrap.querySelector("#insightList");
+
+  if (!d.issues || !d.issues.length) {
+    list.innerHTML = adminEmpty("square-check", "全部通过", "没有发现需要优化的项，保持得很好。",
+      `<div style="margin-top:16px"><a class="btn btn-primary" href="#/admin/posts">查看文章</a></div>`);
+  } else {
+    list.innerHTML = d.issues.map((it) => `
+      <section class="insight-card">
+        <div class="insight-head">
+          <div><div class="insight-title">${escHtml(it.title || "未命名")}</div>
+            <div class="insight-slug">/${escHtml(it.slug || "")} · ${escHtml(it.status || "")}</div></div>
+          <a class="btn btn-sm" href="#/admin/edit/${encodeURIComponent(it.slug || "")}">去编辑 →</a>
+        </div>
+        <div class="insight-items">${it.items.map((x) => `
+          <span class="issue-chip ${escHtml(x.level)}">${escHtml(x.label)}</span>`).join("")}</div>
+      </section>`).join("");
+  }
+  try { window.lucide && window.lucide.createIcons({ root: wrap }); } catch {}
+}
+
+/* ── AI 批量补全元数据（只出建议，人工确认后写入） ───────────────────── */
+async function renderEnrich() {
+  const app = adminMain();
+  setTitle("AI 补全");
+  app.innerHTML = adminSkeleton(5);
+  let posts = [];
+  try {
+    const r = await api("/posts?summary=1");
+    if (r.ok) { const d = await r.json(); posts = Array.isArray(d) ? d : (d.posts || []); }
+  } catch {}
+  const candidates = posts.filter((p) => !String(p.excerpt || "").trim() || !(p.tags || []).length || (Array.isArray(p.tags) && !p.tags.length));
+  const pool = candidates.length ? candidates : posts;
+
+  const wrap = plusShell("AI 批量补全元数据", "为缺少摘要或标签的文章生成建议 —— 生成后逐条确认，点「应用选中」才会写入数据库",
+    `<section class="plus-card">
+      <div class="enrich-toolbar">
+        <div><b>${pool.length}</b> 篇候选${candidates.length ? "（缺摘要/标签）" : "（全部文章均已完整，可重新生成）"}</div>
+        <div class="enrich-actions">
+          <button type="button" class="btn btn-sm" id="enrichAll">全选</button>
+          <button type="button" class="btn btn-sm" id="enrichNone">全不选</button>
+          <button type="button" class="btn btn-primary" id="enrichGen"><i data-lucide="wand-sparkles"></i> 生成建议</button>
+        </div>
+      </div>
+      <div class="enrich-list" id="enrichList">${pool.slice(0, 60).map((p) => `
+        <label class="enrich-row"><input type="checkbox" class="enrich-sel" value="${p.id}" />
+          <span class="enrich-name">${escHtml(p.title || p.slug)}</span>
+          <span class="enrich-flag">${!String(p.excerpt || "").trim() ? "缺摘要" : ""}${!(p.tags || []).length ? " 缺标签" : ""}</span>
+        </label>`).join("")}</div>
+      <div class="muted" style="margin-top:10px">单次最多处理 20 篇。生成结果只展示，不会自动覆盖现有内容。</div>
+    </section>
+    <div id="enrichResult" style="margin-top:18px"></div>`);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+  try { window.lucide && window.lucide.createIcons({ root: wrap }); } catch {}
+
+  const sels = () => [...wrap.querySelectorAll(".enrich-sel:checked")].map((x) => Number(x.value));
+  wrap.querySelector("#enrichAll").onclick = () => wrap.querySelectorAll(".enrich-sel").forEach((x, i) => { x.checked = i < 20; });
+  wrap.querySelector("#enrichNone").onclick = () => wrap.querySelectorAll(".enrich-sel").forEach((x) => { x.checked = false; });
+  const result = wrap.querySelector("#enrichResult");
+
+  wrap.querySelector("#enrichGen").onclick = async () => {
+    const ids = sels();
+    if (!ids.length) { toast("请先勾选文章"); return; }
+    const btn = wrap.querySelector("#enrichGen");
+    btn.disabled = true; btn.textContent = "生成中…";
+    result.innerHTML = adminSkeleton(3);
+    try {
+      const r = await api("/admin/enrich", { method: "POST", body: JSON.stringify({ ids }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error || "生成失败"); result.innerHTML = ""; return; }
+      if (!j.suggestions || !j.suggestions.length) {
+        const why = (j.failures && j.failures[0]) || "AI 未返回有效结果";
+        result.innerHTML = adminEmpty("bot", "没有生成建议", `${why} —— 请到「设置 → AI 模型」检查服务商与密钥配置。`);
+        return;
+      }
+      result.innerHTML = `
+        <section class="plus-card">
+          <div class="enrich-toolbar"><div><b>${j.suggestions.length}</b> 条建议待确认</div>
+            <button type="button" class="btn btn-primary" id="enrichApply"><i data-lucide="check"></i> 应用选中</button></div>
+          ${j.suggestions.map((s, i) => `
+            <div class="suggest-card">
+              <label class="suggest-head"><input type="checkbox" class="sug-sel" data-i="${i}" checked />
+                <b>${escHtml(s.title)}</b></label>
+              <div class="suggest-field"><span>新摘要</span><textarea class="sug-excerpt" data-i="${i}" rows="2">${escHtml(s.excerpt || "")}</textarea></div>
+              <div class="suggest-field"><span>新标签</span><input class="sug-tags" data-i="${i}" value="${escHtml((s.tags || []).join(", "))}" /></div>
+            </div>`).join("")}
+        </section>`;
+      try { window.lucide && window.lucide.createIcons({ root: result }); } catch {}
+      result.querySelector("#enrichApply").onclick = async () => {
+        const items = [...result.querySelectorAll(".sug-sel:checked")].map((cb) => {
+          const i = Number(cb.dataset.i);
+          const tags = (result.querySelector(`.sug-tags[data-i="${i}"]`).value || "").split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+          return { id: j.suggestions[i].id, excerpt: result.querySelector(`.sug-excerpt[data-i="${i}"]`).value, tags };
+        });
+        if (!items.length) { toast("请先勾选要应用的建议"); return; }
+        if (!confirm(`确认把 ${items.length} 篇的摘要与标签更新为上方内容？此操作会覆盖原值。`)) return;
+        const res = await api("/admin/enrich/apply", { method: "POST", body: JSON.stringify({ items }) });
+        const rr = await res.json().catch(() => ({}));
+        if (res.ok) { toast(`已更新 ${rr.count} 篇`); renderEnrich(); }
+        else toast(rr.error || "应用失败");
+      };
+    } catch { toast("生成请求失败"); result.innerHTML = ""; }
+    finally { btn.disabled = false; btn.textContent = "生成建议"; }
+  };
+}
+
+/* ── 发布前全量预检 ───────────────────────────────────────────────────── */
+async function renderPreflight() {
+  const app = adminMain();
+  setTitle("发布预检");
+  app.innerHTML = adminSkeleton(4);
+  let posts = [];
+  try {
+    const r = await api("/posts?summary=1");
+    if (r.ok) { const d = await r.json(); posts = Array.isArray(d) ? d : (d.posts || []); }
+  } catch {}
+  const wrap = plusShell("发布前全量预检", "一次检查标题、摘要、封面、正文字数、图片 alt、站内死链与敏感词",
+    `<section class="plus-card">
+      <div class="enrich-toolbar">
+        <select id="pfPost" class="pf-select"><option value="">选择一篇文章…</option>
+          ${posts.map((p) => `<option value="${p.id}">${escHtml(p.title || p.slug)}</option>`).join("")}
+        </select>
+        <button type="button" class="btn btn-primary" id="pfRun"><i data-lucide="shield-check"></i> 开始预检</button>
+      </div>
+    </section>
+    <div id="pfResult" style="margin-top:18px"></div>`);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+  try { window.lucide && window.lucide.createIcons({ root: wrap }); } catch {}
+  const result = wrap.querySelector("#pfResult");
+  wrap.querySelector("#pfRun").onclick = async () => {
+    const id = Number(wrap.querySelector("#pfPost").value);
+    if (!id) { toast("请先选择文章"); return; }
+    const btn = wrap.querySelector("#pfRun");
+    btn.disabled = true; btn.textContent = "检查中…";
+    result.innerHTML = adminSkeleton(4);
+    try {
+      const r = await api("/admin/preflight", { method: "POST", body: JSON.stringify({ id }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error || "预检失败"); result.innerHTML = ""; return; }
+      const good = j.checks.filter((c) => c.ok).length;
+      result.innerHTML = `
+        <section class="plus-card">
+          <div class="pf-score ${j.ok ? "pass" : "fail"}">
+            <div class="pf-score-num">${j.score}<small>分</small></div>
+            <div><div class="pf-score-title">${escHtml(j.title || "")}</div>
+              <div class="muted">${good}/${j.checks.length} 项通过 · ${j.ok ? "可以发布" : "建议先修复未通过项"}</div></div>
+          </div>
+          <div class="pf-checks">${j.checks.map((c) => `
+            <div class="pf-check ${c.ok ? "ok" : "bad"}">
+              <span class="pf-mark">${c.ok ? "✓" : "!"}</span>
+              <span class="pf-label">${escHtml(c.label)}</span>
+              <span class="pf-detail">${escHtml(c.detail || "")}</span>
+            </div>`).join("")}</div>
+          <div style="margin-top:14px"><a class="btn btn-sm" href="#/admin/edit/${encodeURIComponent(j.slug || "")}">前往编辑 →</a></div>
+        </section>`;
+    } catch { toast("预检请求失败"); result.innerHTML = ""; }
+    finally { btn.disabled = false; btn.textContent = "开始预检"; }
+  };
+}
+
+/* ── 缓存 / 向量运维面板 ───────────────────────────────────────────────── */
+async function renderOps() {
+  const app = adminMain();
+  setTitle("运维面板");
+  app.innerHTML = adminSkeleton(5);
+  let d = null;
+  try {
+    const r = await api("/admin/ops");
+    if (r.ok) d = await r.json();
+    else { const j = await r.json().catch(() => ({})); toast(j.error || "加载失败"); }
+  } catch {}
+  if (!d) { app.innerHTML = adminEmpty("activity", "加载失败", "请稍后重试"); return; }
+  const hitRate = d.cache.hits + d.cache.misses ? Math.round((d.cache.hits / (d.cache.hits + d.cache.misses)) * 100) : 0;
+  const vTotal = d.vectorRuntime.queries || 0;
+  const vRate = vTotal ? Math.round((d.vectorRuntime.hits / vTotal) * 100) : 0;
+  const keys = Object.entries(d.cache.byKey || {}).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const wrap = plusShell("运维面板", "边缘缓存与向量索引的实时状态 · 数据为当前 Worker 实例（非全站聚合）",
+    `<div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">缓存命中率</span><span class="kpi-ico"><i data-lucide="zap"></i></span></div><div class="kpi-num">${hitRate}%</div><div class="kpi-foot">${d.cache.hits} 命中 / ${d.cache.misses} 未命中</div></div>
+      <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">向量索引</span><span class="kpi-ico"><i data-lucide="box"></i></span></div><div class="kpi-num">${d.vector.count}</div><div class="kpi-foot">${d.vector.available ? `${d.vector.dimensions} 维 · ${escHtml(d.vector.metric || "")}` : "未配置索引"}</div></div>
+      <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">向量覆盖率</span><span class="kpi-ico"><i data-lucide="database"></i></span></div><div class="kpi-num">${d.coverage.percent}%</div><div class="kpi-foot">${d.coverage.embedded}/${d.coverage.total} 篇已生成</div></div>
+      <div class="kpi-card"><div class="kpi-top"><span class="kpi-label">语义检索命中</span><span class="kpi-ico"><i data-lucide="scan-search"></i></span></div><div class="kpi-num">${vRate}%</div><div class="kpi-foot">${d.vectorRuntime.hits}/${vTotal} 次 · 回退 ${d.vectorRuntime.fallbacks}</div></div>
+    </div>
+    <section class="plus-card" style="margin-top:18px">
+      <div class="enrich-toolbar"><div><b>缓存管理</b> <span class="muted">已主动清除 ${d.cache.purges} 次</span></div>
+        <div class="enrich-actions">
+          <input type="text" id="opsKey" class="ops-key" placeholder="/feed.xml（留空=全部）" />
+          <button type="button" class="btn btn-sm" id="opsPurgeKey">清除指定</button>
+          <button type="button" class="btn btn-sm btn-primary" id="opsPurgeAll"><i data-lucide="trash-2"></i> 清除全部</button>
+          <button type="button" class="btn btn-sm" id="opsBackfill">回填向量</button>
+        </div>
+      </div>
+      <div class="ops-keys">${keys.length ? keys.map(([k, n]) => `<div><code>${escHtml(k)}</code><b>${n}</b></div>`).join("") : `<div class="muted">暂无缓存访问记录</div>`}</div>
+    </section>`);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+  try { window.lucide && window.lucide.createIcons({ root: wrap }); } catch {}
+
+  const purge = async (key) => {
+    if (!confirm(key ? `清除缓存 ${key}？` : "清除全部动态缓存（feed / sitemap / 爬虫页面）？")) return;
+    const r = await api("/admin/ops/purge", { method: "POST", body: JSON.stringify({ key }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) { toast("缓存已清除"); renderOps(); }
+    else toast(j.error || "清除失败");
+  };
+  wrap.querySelector("#opsPurgeAll").onclick = () => purge("");
+  wrap.querySelector("#opsPurgeKey").onclick = () => {
+    const k = (wrap.querySelector("#opsKey").value || "").trim();
+    if (!k) { toast("请输入要清除的路径"); return; }
+    purge(k);
+  };
+  wrap.querySelector("#opsBackfill").onclick = async () => {
+    if (!confirm("为所有文章补建向量索引？已存在的会被覆盖，耗时可能较长。")) return;
+    const r = await api("/ai/vector-backfill", { method: "POST", body: "{}" });
+    const j = await r.json().catch(() => ({}));
+    toast(r.ok ? `已处理 ${j.count ?? j.updated ?? 0} 篇` : (j.error || "回填失败"));
+    renderOps();
+  };
+}
+
+/* ── 两步验证设置 ─────────────────────────────────────────────────────── */
+async function render2FA() {
+  const app = adminMain();
+  setTitle("两步验证");
+  app.innerHTML = adminSkeleton(3);
+  let st = { enabled: false, backups: 0 };
+  try {
+    const r = await api("/auth/2fa");
+    if (r.ok) st = await r.json();
+  } catch {}
+  const wrap = plusShell("两步验证", "密码之外再加一层动态码；GitHub OAuth 登录本身视为第二因子，不强制 TOTP", `<div id="twoFaBody"></div>`);
+  app.innerHTML = "";
+  app.appendChild(wrap);
+  const body = wrap.querySelector("#twoFaBody");
+  const paint = (extra = "") => {
+    body.innerHTML = `
+      <section class="plus-card">
+        <div class="twofa-state ${st.enabled ? "on" : "off"}">
+          <span class="twofa-dot"></span>
+          <div><b>${st.enabled ? "已启用" : "未启用"}</b><div class="muted">${st.enabled ? `剩余备用码 ${st.backups} 个` : "启用后，密码登录需额外输入验证器动态码"}</div></div>
+        </div>
+        ${st.enabled ? `
+          <div class="twofa-field"><label>关闭验证</label><input type="password" id="twoFaPw" placeholder="当前密码" />
+            <input type="text" id="twoFaCode" placeholder="动态码或备用码" /></div>
+          <div style="margin-top:12px"><button type="button" class="btn" id="twoFaDisable">关闭两步验证</button></div>
+        ` : `<div style="margin-top:12px"><button type="button" class="btn btn-primary" id="twoFaStart"><i data-lucide="key-round"></i> 开始设置</button></div>`}
+      </section>${extra}`;
+    try { window.lucide && window.lucide.createIcons({ root: body }); } catch {}
+    const start = body.querySelector("#twoFaStart");
+    if (start) start.onclick = async () => {
+      const r = await api("/auth/2fa/setup", { method: "POST", body: "{}" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error || "生成密钥失败"); return; }
+      const extra = `
+        <section class="plus-card twofa-setup" style="margin-top:16px">
+          <b>1. 用验证器 App 添加密钥</b>
+          <div class="twofa-secret">${escHtml(j.secret)}</div>
+          <div class="muted">在 Google Authenticator / 1Password / Microsoft Authenticator 中手动输入上面的密钥（SHA1 / 6 位 / 30 秒）。</div>
+          <div class="twofa-uri">${escHtml(j.uri)} <button type="button" class="btn btn-sm" id="twoFaCopy">复制链接</button></div>
+          <b style="display:block;margin-top:18px">2. 保存备用码（仅显示这一次）</b>
+          <div class="twofa-codes">${(j.backupCodes || []).map((c) => `<code>${escHtml(c)}</code>`).join("")}</div>
+          <b style="display:block;margin-top:18px">3. 输入动态码确认启用</b>
+          <div class="twofa-field"><input type="text" id="twoFaEnableCode" placeholder="6 位动态码" maxlength="6" />
+            <button type="button" class="btn btn-primary" id="twoFaEnable">确认启用</button></div>
+        </section>`;
+      paint(extra);
+      body.querySelector("#twoFaCopy").onclick = () => {
+        try { navigator.clipboard.writeText(j.uri); toast("链接已复制"); } catch { toast("复制失败，请手动选择"); }
+      };
+      body.querySelector("#twoFaEnable").onclick = async () => {
+        const code = (body.querySelector("#twoFaEnableCode").value || "").trim();
+        if (!/^\d{6}$/.test(code)) { toast("请输入 6 位动态码"); return; }
+        const rr = await api("/auth/2fa/enable", { method: "POST", body: JSON.stringify({ code, backupCodes: j.backupCodes }) });
+        const jj = await rr.json().catch(() => ({}));
+        if (rr.ok) { toast("两步验证已启用"); st = { enabled: true, backups: jj.backups }; paint(); }
+        else toast(jj.error || "启用失败");
+      };
+    };
+    const disable = body.querySelector("#twoFaDisable");
+    if (disable) disable.onclick = async () => {
+      const password = (body.querySelector("#twoFaPw").value || "").trim();
+      const code = (body.querySelector("#twoFaCode").value || "").trim();
+      if (!password || !code) { toast("请填写密码和动态码"); return; }
+      if (!confirm("关闭后，密码登录将不再要求动态码。确定吗？")) return;
+      const r = await api("/auth/2fa/disable", { method: "POST", body: JSON.stringify({ password, code }) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok) { toast("已关闭两步验证"); st = { enabled: false, backups: 0 }; paint(); }
+      else toast(j.error || "关闭失败");
+    };
+  };
+  paint();
 }
